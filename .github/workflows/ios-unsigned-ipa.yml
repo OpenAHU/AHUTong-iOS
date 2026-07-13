@@ -1,0 +1,97 @@
+name: Build unsigned IPA
+
+run-name: "Unsigned IPA #${{ github.run_number }}"
+
+on:
+  push:
+    branches:
+      - "codex/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-unsigned-ipa:
+    name: Build unsigned device IPA
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Show Apple toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen --version
+          xcodegen generate --spec project.yml
+
+      - name: Build unsigned app for iPhone
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcodebuild \
+            -project AHUTong.xcodeproj \
+            -scheme AHUTong \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+
+      - name: Package unsigned IPA
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          products_dir="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos"
+          app_path="$(find "$products_dir" -maxdepth 1 -type d -name '*.app' -print -quit)"
+
+          if [[ -z "$app_path" ]]; then
+            echo "No .app bundle was produced in $products_dir" >&2
+            exit 1
+          fi
+
+          package_dir="$RUNNER_TEMP/AHUTong-unsigned"
+          ipa_path="$RUNNER_TEMP/AHUTong-unsigned.ipa"
+          checksum_path="$RUNNER_TEMP/AHUTong-unsigned.ipa.sha256"
+
+          mkdir -p "$package_dir/Payload"
+          ditto "$app_path" "$package_dir/Payload/$(basename "$app_path")"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$package_dir/Payload" \
+            "$ipa_path"
+
+          shasum -a 256 "$ipa_path" > "$checksum_path"
+          unzip -t "$ipa_path"
+          unzip -l "$ipa_path"
+
+          echo "ipa_path=$ipa_path" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$checksum_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AHUTong-unsigned-ipa-${{ github.run_number }}
+          path: |
+            ${{ steps.package.outputs.ipa_path }}
+            ${{ steps.package.outputs.checksum_path }}
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,21 @@
+.DS_Store
+
+# Xcode user and build state
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+
+# Generated project (project.yml is the source of truth)
+/AHUTong.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+
+# Local configuration and signing material
+*.mobileprovision
+*.p12
+*.cer
+*.key
+*.xcconfig.local
