@@ -8,9 +8,9 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P0/P1：工程基线与 App Shell |
-| 当前焦点 | SwiftUI 四入口与统一页面状态已实现；macOS 26 Release 真机构建、未签名 IPA 打包和 Artifact 上传已验证，Simulator 测试仍在运行 |
-| 下一步 | 在 iPhone 13 Pro 上用 Personal Team 完成首次 7 天签名安装并回写结果；确认 Simulator 测试后建立 Networking/Auth/Persistence 协议边界和 User/Course 模型 |
-| 用户/平台功能进度 | 0 / 23 个切片已完成 |
+| 当前焦点 | APP-01 已完成；macOS 26 Simulator 测试、Release 真机构建、未签名 IPA 打包和 Artifact 上传均已验证 |
+| 下一步 | 在 iPhone 13 Pro 上用 Personal Team 完成首次 7 天签名安装并回写结果；随后建立 Networking/Auth/Persistence 协议边界和 User/Course 模型 |
+| 用户/平台功能进度 | 1 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
 
@@ -177,7 +177,7 @@ iOS/
 | D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 待调研 | P0 按需浅拉 `sdk`、`GuiXu-Rust` 后做 spike；不得预设可直接复用 |
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 待调研 | 首选直接 FFI；loopback 服务需额外评估生命周期与审核风险 |
 | D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞支付 | 完成安全整改前禁止进入支付上线验收 |
-| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 未签名 IPA workflow 已通过，Simulator 测试运行中 | `.github/workflows/ios-ci.yml` 使用 macOS 26 动态选择可用 iOS Simulator；`.github/workflows/ios-unsigned-ipa.yml` 的 run `29275491141` 已成功上传产物；真机验证由用户在 iPhone 13 Pro 上执行 |
+| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | Simulator CI 与未签名 IPA workflow 均已通过 | `.github/workflows/ios-ci.yml` 的 run `29275491048` 已通过；`.github/workflows/ios-unsigned-ipa.yml` 的 run `29275491141` 已成功上传产物；真机验证由用户在 iPhone 13 Pro 上执行 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 待确认 | 必须先完成隐私清单、数据用途和 App Store 合规评估 |
 
@@ -200,7 +200,7 @@ iOS/
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 待验证 | 已实现主页/课表/小工具/设置顺序、`NavigationStack`/`TabView`、统一 idle/loading/loaded/empty/failed 状态和 Dynamic Type 友好占位页 | Windows 静态检查通过；macOS 26/Xcode 26.5 Release 真机构建成功并产出 IPA（run `29275491141`）；2 组单元测试和 1 条 UI smoke 的 Simulator run `29275491048` 仍在运行；Commit `80d9494` | 2026-07-14 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 已实现主页/课表/小工具/设置顺序、`NavigationStack`/`TabView`、统一 idle/loading/loaded/empty/failed 状态和 Dynamic Type 友好占位页 | Windows 静态检查通过；macOS 26/Xcode 26.5 Release 真机构建及 IPA run `29275491141` 通过；2 组单元测试和 1 条 UI smoke 的 Simulator run `29275491048` 通过；Commit `80d9494` | 2026-07-14 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 未开始 | 协议可读、同意状态持久化；拒绝与再次查看路径明确；不复制遗留 `Setup` 路由 | — | 2026-07-14 |
 | AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 未开始 | 首次登录、冷启动恢复、并发刷新去重、过期重登、退出清理、多账号隔离；密码/Token/Cookie 仅进 Keychain | — | 2026-07-14 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 未开始 | golden fixture 可解析；单双周/跨学期/当前周测试；缓存按用户隔离；无网可读 | — | 2026-07-14 |
@@ -222,7 +222,7 @@ iOS/
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 未开始 | 重登、清缓存、主题、首页/课表/提醒偏好均真实生效；第三方许可证清单完整可追溯 | — | 2026-07-14 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 未开始 | 小/中/大尺寸按目标范围展示；共享快照、时间线、未登录/过期状态和点击跳转完整 | — | 2026-07-14 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 未开始 | 通知授权、提前 10 分钟提醒、课表变化后重排、时区/重启场景完整；Live Activity 独立验收 | — | 2026-07-14 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/FeatureFlags/`、`.github/workflows/` | P0→P7 | 实现中 | macOS build/test、脱敏日志、崩溃/灰度策略、辅助功能、隐私清单、Archive 和发布清单完整 | macOS 26/Xcode 26.5 未签名设备 IPA workflow 已通过并上传 Artifact；Simulator 测试和 iPhone 13 Pro 安装待完成；Commit `80d9494` | 2026-07-14 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/FeatureFlags/`、`.github/workflows/` | P0→P7 | 实现中 | macOS build/test、脱敏日志、崩溃/灰度策略、辅助功能、隐私清单、Archive 和发布清单完整 | macOS 26/Xcode 26.5 Simulator 测试及未签名设备 IPA workflow 均已通过；Artifact 已上传，iPhone 13 Pro 安装待完成；Commit `80d9494` | 2026-07-14 |
 
 ## 9. 平台差异与已知 Android 缺口
 
@@ -285,7 +285,7 @@ iOS/
 | R-002 | 登录依赖多个校园系统、Cookie 同步、验证码/OCR 与页面解析 | 高 | 先固化脱敏 fixture/契约，建立统一 AuthSession 和可观测错误 | 开放 |
 | R-003 | 客户端存在凭据、支付签名与敏感日志风险 | 严重 | 轮换、服务端化、日志审计完成前阻塞支付 | 阻塞支付 |
 | R-004 | 支付缺少稳定沙箱，真实验证可能涉及资金 | 严重 | 授权测试账号、小额边界、幂等和结果对账方案齐备 | 阻塞支付 |
-| R-005 | 当前 Windows 环境无法运行 Xcode | 高 | macOS 26/Xcode 26.5 Release 真机构建已通过；继续完成 Simulator 测试和 Personal Team 真机安装 | 缓解中 |
+| R-005 | 当前 Windows 环境无法运行 Xcode | 高 | macOS 26/Xcode 26.5 Simulator 测试和 Release 真机构建已通过；继续完成 Personal Team 真机安装 | 缓解中 |
 | R-006 | Android UI 截图较旧，不能作为唯一验收规格 | 中 | 以固定 SHA 的代码行为、API 契约和产品确认共同验收 | 开放 |
 | R-007 | 核心 Android 业务缺少自动化测试 | 高 | iOS 迁移先补 fixture、解析、周次、会话和支付状态机测试 | 开放 |
 | R-008 | 外部校园页面、第三方 API 与 App Store 政策可能变化 | 高 | 域隔离、契约监控、失败降级、隐私/审核复查 | 开放 |
@@ -302,7 +302,7 @@ iOS/
 - [ ] 为 User、Course 和统一错误建立第一批模型与脱敏 fixtures。
 - [x] 配置 macOS 26 CI，并动态选择可用 iOS Simulator。
 - [x] 配置手动未签名 IPA workflow，供本机 Personal Team 7 天签名安装。
-- [ ] 运行首次 macOS build/test，并把 Xcode、Simulator 与结果证据回写 APP-01。
+- [x] 运行首次 macOS build/test，并把 Xcode、Simulator 与结果证据回写 APP-01。
 - [x] 运行首次未签名 IPA 构建并上传 Artifact。
 - [ ] 在 iPhone 13 Pro 上完成 Personal Team 安装/启动验证。
 
@@ -320,4 +320,5 @@ iOS/
 | 2026-07-14 | INIT-001 | 建立 Android → iOS 长期路线图；固定三仓基线；完成 Android 功能、架构、安全风险和 iOS 空仓现状盘点；尚未迁移功能 | 只读源码审查；Android/iOS/AIO `git status` 均在改动前干净；未初始化 Android 嵌套子模块 | — |
 | 2026-07-14 | APP-001 | 建立 XcodeGen 工程基线、SwiftUI 四入口、统一页面状态、单元/UI 测试骨架及 macOS CI；APP-01 进入待验证 | Windows：`project.yml`/workflow YAML 与 asset JSON 解析通过；14 个 Swift 文件分隔符和全仓空白检查通过；当前环境无 `xcodebuild`，未执行编译 | — |
 | 2026-07-14 | OPS-001 | 新增 `codex/**` 推送及手动触发的 macOS 26 未签名设备 IPA workflow，产出 IPA 与 SHA-256 并保留 7 天；明确 Personal Team 本地签名边界 | Windows：PyYAML 6.0.3 解析成功，job/产物路径断言及 `git diff --check` 通过；当前环境无 `xcodebuild`，GitHub Actions 和 iPhone 13 Pro 安装待验证 | — |
-| 2026-07-14 | OPS-002 | 首次 Runner 构建因尚无 `AppIcon` 资产失败；开发期关闭占位 AppIcon 要求后，Release 真机构建、IPA 打包、校验和生成及 Artifact 上传全部成功；正式品牌资产迁移时恢复 AppIcon | 失败：Unsigned IPA `29275282513`、iOS CI `29275282471`；修复后成功：Unsigned IPA `29275491141`，Artifact `AHUTong-unsigned-ipa-2`、51,762 bytes、保留至 2026-07-20；Simulator run `29275491048` 记录时仍在运行 | `80d9494` |
+| 2026-07-14 | OPS-002 | 首次 Runner 构建因尚无 `AppIcon` 资产失败；开发期关闭占位 AppIcon 要求后，Simulator 测试、Release 真机构建、IPA 打包、校验和生成及 Artifact 上传全部成功；正式品牌资产迁移时恢复 AppIcon | 失败：Unsigned IPA `29275282513`、iOS CI `29275282471`；修复后成功：Unsigned IPA `29275491141`，Artifact `AHUTong-unsigned-ipa-2`、51,762 bytes、保留至 2026-07-20；Simulator `29275491048` 通过 | `80d9494` |
+| 2026-07-14 | APP-002 | macOS 26/Xcode 26.5 首次完整验证通过，APP-01 达到完成定义 | iOS CI run `29275491048`：2 组单元测试与 1 条 UI smoke 通过；Unsigned IPA run `29275491141`：Release iphoneos 构建、打包和上传通过 | `80d9494` |
