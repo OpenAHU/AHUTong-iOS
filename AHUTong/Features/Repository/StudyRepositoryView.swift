@@ -247,7 +247,7 @@ private struct RepositoryContentRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: item.isDirectory ? "folder.fill" : fileIcon(item.name))
-                .foregroundStyle(item.isDirectory ? .yellow : .accent)
+                .foregroundStyle(item.isDirectory ? Color.yellow : Color.accentColor)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.name)
@@ -326,7 +326,7 @@ struct RepositoryDownloadsView: View {
                                 }
                             }
                             Image(systemName: fileIcon(file.name))
-                                .foregroundStyle(.accent)
+                                .foregroundStyle(Color.accentColor)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(file.name).lineLimit(2)
                                 Text("\(formatByteCount(file.size)) · \(file.path)")
@@ -352,8 +352,11 @@ struct RepositoryDownloadsView: View {
                             else { previewURL = file.localURL }
                         }
                         .swipeActions {
-                            Button("删除", role: .destructive) {
-                                Task { await delete(ids: [file.id]) }
+                            Button(role: .destructive) {
+                                let ids = Set([file.id])
+                                Task { await delete(ids: ids) }
+                            } label: {
+                                Label("删除", systemImage: "trash")
                             }
                         }
                     }
