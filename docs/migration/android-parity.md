@@ -8,9 +8,9 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P0/P1：工程基线与 App Shell |
-| 当前焦点 | AUTH-01 首启协议流程、AUTH-02 Keychain 凭据边界、SCH-01 本地优先 Repository 与磁盘缓存已实现，等待 macOS CI 验证 |
+| 当前焦点 | AUTH-01 已完成；AUTH-02 Keychain 凭据边界、SCH-01 本地优先 Repository 与磁盘缓存已通过 macOS CI，继续接入真实数据源 |
 | 下一步 | 接入真实登录状态机和教务课表 RemoteDataSource/golden fixture；同时在 iPhone 13 Pro 上验证 7 天签名安装 |
-| 用户/平台功能进度 | 1 / 23 个切片已完成 |
+| 用户/平台功能进度 | 2 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
 
@@ -177,7 +177,7 @@ iOS/
 | D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 待调研 | P0 按需浅拉 `sdk`、`GuiXu-Rust` 后做 spike；不得预设可直接复用 |
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 待调研 | 首选直接 FFI；loopback 服务需额外评估生命周期与审核风险 |
 | D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞支付 | 完成安全整改前禁止进入支付上线验收 |
-| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | Simulator CI 与未签名 IPA workflow 均已通过 | `.github/workflows/ios-ci.yml` 的 run `29275491048` 已通过；`.github/workflows/ios-unsigned-ipa.yml` 的 run `29275491141` 已成功上传产物；真机验证由用户在 iPhone 13 Pro 上执行 |
+| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | Simulator CI 与未签名 IPA workflow 均已通过 | Simulator CI 使用 Xcode 本地 ad-hoc 签名以验证 Keychain，不需要开发者账号；run `29279242413` 已通过。设备 workflow 仍禁用签名，run `29279242104` 已上传产物；真机验证由用户在 iPhone 13 Pro 上执行 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 待确认 | 必须先完成隐私清单、数据用途和 App Store 合规评估 |
 | D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
@@ -202,9 +202,9 @@ iOS/
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 已实现主页/课表/小工具/设置顺序、`NavigationStack`/`TabView`、统一 idle/loading/loaded/empty/failed 状态和 Dynamic Type 友好占位页 | Windows 静态检查通过；macOS 26/Xcode 26.5 Release 真机构建及 IPA run `29275491141` 通过；2 组单元测试和 1 条 UI smoke 的 Simulator run `29275491048` 通过；Commit `80d9494` | 2026-07-14 |
-| AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 待验证 | 协议可读、同意状态持久化；拒绝与再次查看路径明确；不复制遗留 `Setup` 路由 | 已实现版本化必要同意、拒绝说明、设置内再次查看/撤回及社区说明可选语义；3 个状态测试和首启→四入口 UI smoke 已写，待 macOS CI；Commit — | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 实现中 | 首次登录、冷启动恢复、并发刷新去重、过期重登、退出清理、多账号隔离；密码/Token/Cookie 仅进 Keychain | 已实现 `WhenUnlockedThisDeviceOnly` Keychain adapter、按学号隔离的 CredentialStore、增删查及真实 Simulator Keychain fixture 测试；尚未接真实登录/Cookie/Token；待 macOS CI；Commit — | 2026-07-14 |
-| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 实现中 | golden fixture 可解析；单双周/跨学期/当前周测试；缓存按用户隔离；无网可读 | 新增 cache-first/refresh/stale-cache Repository、SHA-256 文件键、原子写入、损坏缓存恢复及账号隔离测试；真实教务 RemoteDataSource/golden fixture 未接入；待 macOS CI；Commit — | 2026-07-14 |
+| AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | 协议可读、同意状态持久化；拒绝与再次查看路径明确；不复制遗留 `Setup` 路由 | 版本化必要同意、拒绝不落盘、设置内再次查看/撤回及社区说明可选语义已实现；3 个状态测试和“拒绝→确认→四入口”UI smoke 在 CI `29279242413` 通过；Commit `0abca32` | 2026-07-14 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 实现中 | 首次登录、冷启动恢复、并发刷新去重、过期重登、退出清理、多账号隔离；密码/Token/Cookie 仅进 Keychain | `WhenUnlockedThisDeviceOnly` Keychain adapter、按学号隔离 CredentialStore 和显式删除已实现；4 个凭据测试（含真实 Simulator Keychain）在 CI `29279242413` 通过；真实登录/Cookie/Token 未接；Commit `0abca32` | 2026-07-14 |
+| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 实现中 | golden fixture 可解析；单双周/跨学期/当前周测试；缓存按用户隔离；无网可读 | cache-first/refresh/stale-cache Repository、SHA-256 文件键、原子写入、损坏恢复与账号隔离已实现；5 个 Repository/磁盘测试在 CI `29279242413` 通过；真实教务 RemoteDataSource/golden fixture 未接；Commit `0abca32` | 2026-07-14 |
 | SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 未开始 | 20 周切换、日期、单双周、刷新、总览、课程详情、显示全部课程、下学期预览对齐 | — | 2026-07-14 |
 | HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 未开始 | 今日课程、天气、余额/付款码入口、快捷工具槽位和编辑状态可用；灰度状态可注入 | — | 2026-07-14 |
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 未开始 | 多学籍/微专业、学期筛选、搜索、绩点和排名契约对齐；解析有 fixture 测试 | — | 2026-07-14 |
@@ -223,7 +223,7 @@ iOS/
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 未开始 | 重登、清缓存、主题、首页/课表/提醒偏好均真实生效；第三方许可证清单完整可追溯 | — | 2026-07-14 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 未开始 | 小/中/大尺寸按目标范围展示；共享快照、时间线、未登录/过期状态和点击跳转完整 | — | 2026-07-14 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 未开始 | 通知授权、提前 10 分钟提醒、课表变化后重排、时区/重启场景完整；Live Activity 独立验收 | — | 2026-07-14 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/FeatureFlags/`、`.github/workflows/` | P0→P7 | 实现中 | macOS build/test、脱敏日志、崩溃/灰度策略、辅助功能、隐私清单、Archive 和发布清单完整 | macOS 26/Xcode 26.5 CI `29277758473` 通过累计 17 个单元测试及 UI smoke；IPA run `29277758474` 成功上传 Artifact；iPhone 13 Pro 安装待完成；Commit `6b776b4` | 2026-07-14 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/FeatureFlags/`、`.github/workflows/` | P0→P7 | 实现中 | macOS build/test、脱敏日志、崩溃/灰度策略、辅助功能、隐私清单、Archive 和发布清单完整 | macOS 26/Xcode 26.5 CI `29279242413` 使用本地 ad-hoc Simulator 签名并通过 29 个单元测试及 UI smoke；未签名 IPA `29279242104` 上传成功；iPhone 13 Pro 安装待完成；Commit `c1a1630` | 2026-07-14 |
 
 ## 9. 平台差异与已知 Android 缺口
 
@@ -335,3 +335,6 @@ iOS/
 | 2026-07-14 | AUTH-004 | 实现 Security.framework Keychain adapter 与按学号隔离的 CredentialStore；拒绝空凭据，支持显式删除 | Windows：敏感材料审计待执行；4 个凭据测试（含 Simulator Keychain 非生产 fixture）待 macOS CI | — |
 | 2026-07-14 | SCH-002 | 实现 cache-first/refresh/stale-cache ScheduleRepository、SHA-256 文件键和原子磁盘缓存；损坏缓存自动清理，账号之间不可回退复用 | Windows：文件结构与并发边界静态检查待执行；5 个 Repository/FileDataStore 测试待 macOS CI | — |
 | 2026-07-14 | OPS-003 | 首轮多目标 CI 中 28/29 个单元测试及首启 UI smoke 通过；真实 Keychain fixture 因 Simulator 测试宿主被显式禁用签名而返回 `errSecMissingEntitlement (-34018)`；移除 Simulator CI 的禁签名覆盖以使用无需开发者账号的本地 ad-hoc 签名，设备 IPA 仍保持未签名 | iOS CI `29278831447`：仅 Keychain adapter runtime test 失败，其他协议/凭据/文件/Repository 测试和“拒绝→确认→四入口”UI smoke 通过；Unsigned IPA `29278831072` 通过 | `0abca32`（首轮） |
+| 2026-07-14 | AUTH-005 | AUTH-01 达到完成定义；Keychain/CredentialStore 作为 AUTH-02 安全基础通过真实 Simulator 验证 | iOS CI `29279242413`：协议 3 测试、凭据 4 测试（含 Security.framework Keychain）及“拒绝→确认→四入口”UI smoke 通过 | `0abca32`、`c1a1630` |
+| 2026-07-14 | SCH-003 | SCH-01 的本地优先 Repository 与磁盘缓存子目标完成验证，真实远端适配仍待实现 | iOS CI `29279242413`：Repository 3 测试、FileDataStore 2 测试通过；总计 29 个单元测试及 1 条 UI smoke 全部通过 | `0abca32`、`c1a1630` |
+| 2026-07-14 | OPS-004 | Simulator CI 改用无需 Apple 开发者账号的本地 ad-hoc 签名后，Keychain runtime test 与全套测试通过；设备 IPA 保持未签名 | iOS CI `29279242413` 成功；Unsigned IPA `29279242104` 成功，Artifact `AHUTong-unsigned-ipa-5`、150,911 bytes、保留至 2026-07-20 | `c1a1630` |
