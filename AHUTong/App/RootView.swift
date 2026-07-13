@@ -2,19 +2,45 @@ import SwiftUI
 
 struct RootView: View {
     @State private var selectedTab: AppTab = .home
+    @StateObject private var onboardingModel: OnboardingViewModel
+
+    init(
+        consentStore: any AgreementConsentStoring = AgreementConsentStore(
+            store: UserDefaultsDataStore()
+        )
+    ) {
+        _onboardingModel = StateObject(
+            wrappedValue: OnboardingViewModel(store: consentStore)
+        )
+    }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ForEach(AppTab.allCases) { tab in
+        Group {
+            if !onboardingModel.isLoaded {
+                ProgressView("正在读取协议状态")
+            } else if !onboardingModel.consent.isComplete {
                 NavigationStack {
-                    destination(for: tab)
+                    OnboardingView(model: onboardingModel)
                 }
-                .tabItem {
-                    Label(tab.title, systemImage: tab.systemImage)
-                        .accessibilityIdentifier("tab.\(tab.rawValue)")
+            } else {
+                TabView(selection: $selectedTab) {
+                    ForEach(AppTab.allCases) { tab in
+                        NavigationStack {
+                            destination(for: tab)
+                        }
+                        .tabItem {
+                            Label(tab.title, systemImage: tab.systemImage)
+                                .accessibilityIdentifier("tab.\(tab.rawValue)")
+                        }
+                        .tag(tab)
+                    }
                 }
-                .tag(tab)
             }
+        }
+        .task {
+            await onboardingModel.load(
+                resetForUITesting: ProcessInfo.processInfo.arguments.contains("--reset-onboarding")
+            )
         }
     }
 
@@ -28,7 +54,7 @@ struct RootView: View {
         case .tools:
             ToolsView()
         case .settings:
-            SettingsView()
+            SettingsView(onboardingModel: onboardingModel)
         }
     }
 }

@@ -8,8 +8,8 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P0/P1：工程基线与 App Shell |
-| 当前焦点 | Networking/Auth/Persistence 协议边界、测试替身及 User/Course/Semester/周次模型已通过 macOS CI；AUTH-02、SCH-01 持续实现中 |
-| 下一步 | 完成 Keychain 会话存储、Schedule Repository 与脱敏响应 fixture；同时在 iPhone 13 Pro 上验证 7 天签名安装 |
+| 当前焦点 | AUTH-01 首启协议流程、AUTH-02 Keychain 凭据边界、SCH-01 本地优先 Repository 与磁盘缓存已实现，等待 macOS CI 验证 |
+| 下一步 | 接入真实登录状态机和教务课表 RemoteDataSource/golden fixture；同时在 iPhone 13 Pro 上验证 7 天签名安装 |
 | 用户/平台功能进度 | 1 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
@@ -180,6 +180,7 @@ iOS/
 | D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | Simulator CI 与未签名 IPA workflow 均已通过 | `.github/workflows/ios-ci.yml` 的 run `29275491048` 已通过；`.github/workflows/ios-unsigned-ipa.yml` 的 run `29275491141` 已成功上传产物；真机验证由用户在 iPhone 13 Pro 上执行 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 待确认 | 必须先完成隐私清单、数据用途和 App Store 合规评估 |
+| D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
 
 ## 7. 里程碑
 
@@ -201,9 +202,9 @@ iOS/
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 已实现主页/课表/小工具/设置顺序、`NavigationStack`/`TabView`、统一 idle/loading/loaded/empty/failed 状态和 Dynamic Type 友好占位页 | Windows 静态检查通过；macOS 26/Xcode 26.5 Release 真机构建及 IPA run `29275491141` 通过；2 组单元测试和 1 条 UI smoke 的 Simulator run `29275491048` 通过；Commit `80d9494` | 2026-07-14 |
-| AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 未开始 | 协议可读、同意状态持久化；拒绝与再次查看路径明确；不复制遗留 `Setup` 路由 | — | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 实现中 | 首次登录、冷启动恢复、并发刷新去重、过期重登、退出清理、多账号隔离；密码/Token/Cookie 仅进 Keychain | 已建立 `AuthSessionProtocol`、显式 signed-out/authenticated 状态与 actor 测试替身；相关状态/隔离测试在 CI `29277758473` 通过；未实现真实凭据和 Keychain；Commit `6b776b4` | 2026-07-14 |
-| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 实现中 | golden fixture 可解析；单双周/跨学期/当前周测试；缓存按用户隔离；无网可读 | 已实现 Android 字符串/整数兼容 Course、精确周索引、Semester/当前周解析、用户隔离 JSON Store；模型/日期/缓存测试在 CI `29277758473` 通过；真实 API/磁盘缓存未接入；Commit `6b776b4` | 2026-07-14 |
+| AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 待验证 | 协议可读、同意状态持久化；拒绝与再次查看路径明确；不复制遗留 `Setup` 路由 | 已实现版本化必要同意、拒绝说明、设置内再次查看/撤回及社区说明可选语义；3 个状态测试和首启→四入口 UI smoke 已写，待 macOS CI；Commit — | 2026-07-14 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 实现中 | 首次登录、冷启动恢复、并发刷新去重、过期重登、退出清理、多账号隔离；密码/Token/Cookie 仅进 Keychain | 已实现 `WhenUnlockedThisDeviceOnly` Keychain adapter、按学号隔离的 CredentialStore、增删查及真实 Simulator Keychain fixture 测试；尚未接真实登录/Cookie/Token；待 macOS CI；Commit — | 2026-07-14 |
+| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 实现中 | golden fixture 可解析；单双周/跨学期/当前周测试；缓存按用户隔离；无网可读 | 新增 cache-first/refresh/stale-cache Repository、SHA-256 文件键、原子写入、损坏缓存恢复及账号隔离测试；真实教务 RemoteDataSource/golden fixture 未接入；待 macOS CI；Commit — | 2026-07-14 |
 | SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 未开始 | 20 周切换、日期、单双周、刷新、总览、课程详情、显示全部课程、下学期预览对齐 | — | 2026-07-14 |
 | HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 未开始 | 今日课程、天气、余额/付款码入口、快捷工具槽位和编辑状态可用；灰度状态可注入 | — | 2026-07-14 |
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 未开始 | 多学籍/微专业、学期筛选、搜索、绩点和排名契约对齐；解析有 fixture 测试 | — | 2026-07-14 |
@@ -228,8 +229,9 @@ iOS/
 
 | 项目 | Android 现状 | iOS 迁移决策 |
 | --- | --- | --- |
-| 首登流程 | `Setup.kt` 的登录路由已注释但仍导航，主登录当前直接进入 Home，`Info.kt` 非正常必经链路 | 先确认产品流程，再用单一状态机实现，不翻译遗留导航 |
-| 密码与会话 | 密码、Rust Cookie、业务数据会进入 MMKV/Rust KV；Cookie 另有持久化副本 | 密码、Token、Cookie 使用 Keychain；普通偏好与结构缓存分离并按用户隔离 |
+| 首登流程 | `Setup.kt` 的登录路由已注释但仍导航，主登录当前直接进入 Home，`Info.kt` 非正常必经链路 | Root 使用单一版本化协议 gate；必要说明确认后才进入 App Shell；拒绝保持在当前页，设置中可再次查看和撤回，不翻译遗留导航 |
+| 首启商业弹窗 | Android 将“商业合作”与两份必要说明同等处理，拒绝即退出 | iOS 将其作为自愿阅读的社区说明，不保存强制同意，也不阻塞核心功能 |
+| 密码与会话 | 密码、Rust Cookie、业务数据会进入 MMKV/Rust KV；Cookie 另有持久化副本 | `CredentialStore` 已将密码限定到 ThisDeviceOnly Keychain 并按学号隔离；普通偏好和结构缓存使用独立 DataStore；Cookie/Token 接入仍是 AUTH-02 后续工作 |
 | Rust 复用 | Android 使用 `.so`、JNI 和本地 HTTP 服务 | 先验证 Apple targets 与 XCFramework；优先直接 FFI，不假定 loopback server 可照搬 |
 | 会话续期 | 302 检测、全局状态、同步锁及本地密码重登 | 使用 `AuthSession` actor 统一刷新、并发去重、过期通知与显式重新认证 |
 | 网络安全 | 存在全局明文流量配置 | 默认严格 ATS；仅对经论证的本地通信做最小例外 |
@@ -302,6 +304,9 @@ iOS/
 - [x] 创建 SwiftUI App、Unit Test、UI Test Targets 和四入口空壳。
 - [x] 建立 `Core/Networking`、`Core/Auth`、`Core/Persistence` 的协议边界与测试替身。
 - [x] 为 User、Course 和统一错误建立第一批模型与脱敏 inline fixtures。
+- [x] 建立版本化首启协议 gate、拒绝/撤回/再次查看路径和 UI smoke。
+- [x] 建立 Keychain SecureStore/CredentialStore，并以非生产 fixture 验证增删查和账号隔离。
+- [x] 建立课表 cache-first/refresh/stale-cache Repository 与 SHA-256 文件缓存。
 - [x] 配置 macOS 26 CI，并动态选择可用 iOS Simulator。
 - [x] 配置手动未签名 IPA workflow，供本机 Personal Team 7 天签名安装。
 - [x] 运行首次 macOS build/test，并把 Xcode、Simulator 与结果证据回写 APP-01。
@@ -326,3 +331,6 @@ iOS/
 | 2026-07-14 | APP-002 | macOS 26/Xcode 26.5 首次完整验证通过，APP-01 达到完成定义 | iOS CI run `29275491048`：2 组单元测试与 1 条 UI smoke 通过；Unsigned IPA run `29275491141`：Release iphoneos 构建、打包和上传通过 | `80d9494` |
 | 2026-07-14 | CORE-001 | 建立可注入 APIClient/NetworkTransport、AuthSession 状态边界、用户隔离 DataStore/JSONStore；迁移 User、Course、Semester 和当前周纯模型，并为 Android 新旧 JSON 兼容、账号隔离及日期边界补测试 | Windows：新增 Swift 文件静态检查待执行；计划由 macOS CI 运行累计 17 个单元测试和 1 条 UI smoke | — |
 | 2026-07-14 | CORE-002 | CORE-001 完成 macOS 编译测试验证；AUTH-02、SCH-01 保持实现中，下一步接 Keychain、真实 Schedule Repository 和磁盘缓存 | iOS CI `29277758473`：macOS 26/Xcode 26.5、iOS 26.4 Simulator、17 个单元测试及 1 条 UI smoke 通过；Unsigned IPA `29277758474`：Release iphoneos 编译、打包、校验和及上传通过，Artifact `AHUTong-unsigned-ipa-3`、64,576 bytes、保留至 2026-07-20 | `6b776b4` |
+| 2026-07-14 | AUTH-003 | 实现版本化首启协议 gate：免责声明/隐私说明必要确认、社区说明自愿阅读、拒绝不落盘、设置内再次查看与撤回 | Windows：协议状态/导航/UI 标识静态检查待执行；3 个新增状态测试和更新后的 UI smoke 待 macOS CI | — |
+| 2026-07-14 | AUTH-004 | 实现 Security.framework Keychain adapter 与按学号隔离的 CredentialStore；拒绝空凭据，支持显式删除 | Windows：敏感材料审计待执行；4 个凭据测试（含 Simulator Keychain 非生产 fixture）待 macOS CI | — |
+| 2026-07-14 | SCH-002 | 实现 cache-first/refresh/stale-cache ScheduleRepository、SHA-256 文件键和原子磁盘缓存；损坏缓存自动清理，账号之间不可回退复用 | Windows：文件结构与并发边界静态检查待执行；5 个 Repository/FileDataStore 测试待 macOS CI | — |

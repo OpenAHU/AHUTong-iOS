@@ -8,7 +8,23 @@ final class AppShellUITests: XCTestCase {
     @MainActor
     func testPrimaryTabsAreReachable() {
         let app = XCUIApplication()
+        app.launchArguments.append("--reset-onboarding")
         app.launch()
+
+        XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 5))
+        app.buttons["onboarding.decline"].tap()
+        XCTAssertTrue(app.alerts["需要你的同意"].waitForExistence(timeout: 2))
+        app.alerts.buttons["继续查看"].tap()
+
+        app.buttons["agreement.toggle.disclaimer"].tap()
+        app.buttons["agreement.toggle.privacy"].tap()
+        let continueButton = app.buttons["onboarding.continue"]
+        expectation(
+            for: NSPredicate(format: "isEnabled == true"),
+            evaluatedWith: continueButton
+        )
+        waitForExpectations(timeout: 2)
+        continueButton.tap()
 
         XCTAssertTrue(app.navigationBars["主页"].waitForExistence(timeout: 5))
 
