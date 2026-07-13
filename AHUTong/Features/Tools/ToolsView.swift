@@ -2,10 +2,37 @@ import SwiftUI
 
 struct ToolsView: View {
     var body: some View {
-        FeatureLandingView(
-            title: "小工具",
-            systemImage: "square.grid.2x2",
-            description: "成绩、考试、空闲教室和校园服务将按迁移路线图逐项加入。"
-        )
+        List {
+            Section("校园信息") {
+                NavigationLink {
+                    PhoneBookView()
+                } label: {
+                    Label("校园电话本", systemImage: "phone")
+                }
+                .accessibilityIdentifier("tools.phone-book")
+
+                NavigationLink {
+                    SchoolCalendarView()
+                } label: {
+                    Label("校历", systemImage: "calendar")
+                }
+                .accessibilityIdentifier("tools.school-calendar")
+            }
+
+            Section("学习") {
+                NavigationLink {
+                    StudyRepositoryView()
+                } label: {
+                    Label("学习资料", systemImage: "books.vertical")
+                }
+                .accessibilityIdentifier("tools.study-repository")
+            }
+
+            Section("继续迁移") {
+                Text("成绩、考试、空闲教室和校园服务将按路线图继续接入。")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("小工具")
     }
 }

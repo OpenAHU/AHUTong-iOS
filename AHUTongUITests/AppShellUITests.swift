@@ -34,5 +34,18 @@ final class AppShellUITests: XCTestCase {
             tab.tap()
             XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 2))
         }
+
+        app.tabBars.buttons["小工具"].tap()
+        for route in [
+            ("tools.phone-book", "校园电话本"),
+            ("tools.school-calendar", "校历"),
+            ("tools.study-repository", "学习资料")
+        ] {
+            let link = app.buttons[route.0]
+            XCTAssertTrue(link.waitForExistence(timeout: 2))
+            link.tap()
+            XCTAssertTrue(app.navigationBars[route.1].waitForExistence(timeout: 3))
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
     }
 }

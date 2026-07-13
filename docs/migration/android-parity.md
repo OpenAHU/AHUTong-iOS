@@ -8,8 +8,8 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P0/P1：工程基线与 App Shell |
-| 当前焦点 | AUTH-01 已完成；AUTH-02 Keychain 凭据边界、SCH-01 本地优先 Repository 与磁盘缓存已通过 macOS CI，继续接入真实数据源 |
-| 下一步 | 接入真实登录状态机和教务课表 RemoteDataSource/golden fixture；同时在 iPhone 13 Pro 上验证 7 天签名安装 |
+| 当前焦点 | INFO-01 校历、INFO-02 电话本、CONTENT-03 学习资料已形成独立功能闭环，等待本轮 macOS CI 最终验证 |
+| 下一步 | 推送三个切片并完成 macOS 26/Xcode 26.5 的单元/UI 测试与 Release iphoneos 构建；成功后将三个切片更新为已完成 |
 | 用户/平台功能进度 | 2 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
@@ -214,12 +214,12 @@ iOS/
 | PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/CardRecharge/` | P5 / CARD-01、D-005 | 未开始 | 金额校验、支付状态机、校内银行卡和支付宝跳转/降级、回到 App 后结果核验完整 | — | 2026-07-14 |
 | PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/Bathroom/` | P5 / CARD-01、D-005 | 未开始 | 手机号查询、浴室选择、金额和六位支付密码流程完整；失败不提前提示成功 | — | 2026-07-14 |
 | PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/Electricity/` | P5 / CARD-01、D-005 | 未开始 | 校区→楼栋→楼层→房间、余额、历史选择、金额/密码、结果核验完整；无敏感请求日志 | — | 2026-07-14 |
-| INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 未开始 | 下载、缓存、缩放、Quick Look/分享或保存相册及权限降级完整 | — | 2026-07-14 |
-| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 未开始 | 本地分类、搜索、校区号码和拨号确认完整；静态数据来源可追溯 | — | 2026-07-14 |
+| INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 待验证 | 下载、缓存、缩放、Quick Look/分享或保存相册及权限降级完整 | 已接 `openahu.org/download/xiaoli.jpg`，实现 JPEG/PNG 校验、原子缓存、损坏恢复、离线回退、1–5 倍缩放、Quick Look/ShareLink 和刷新错误态；4 个 Repository/文件缓存测试及 UI smoke 待 macOS CI；Commit 待推送 | 2026-07-14 |
+| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 待验证 | 本地分类、搜索、校区号码和拨号确认完整；静态数据来源可追溯 | 已迁移 9 类 57 个部门/服务点，支持部门/分类/号码搜索、磬苑/龙河标注、0551 号码规范化和拨号前确认；来源说明写入页面；4 个模型/检索/拨号测试及 UI smoke 待 macOS CI；Commit 待推送 | 2026-07-14 |
 | INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 未开始 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；设置项必须真实生效 | — | 2026-07-14 |
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 未开始 | 双列表、校区/类型/全文筛选、分页、详情与图片浏览完整 | — | 2026-07-14 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 未开始 | 仅在服务端确认后提示成功；“我的帖子”由可靠数据源生成；图片能力按已确认 API 范围实现 | — | 2026-07-14 |
-| CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 未开始 | 仓库/目录浏览、缓存、进度、Quick Look/分享、单个和批量删除完整 | — | 2026-07-14 |
+| CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 待验证 | 仓库/目录浏览、缓存、进度、Quick Look/分享、单个和批量删除完整 | 已接 Android 同源 6 个公开 GitHub 仓库，实现目录导航/排序、按仓库和路径缓存、离线回退、CDN→Raw 下载降级、64 KiB 流式进度、哈希本地文件名、Quick Look/ShareLink、单删/批删；6 个契约/缓存/下载测试及 UI smoke 待 macOS CI；Commit 待推送 | 2026-07-14 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 未开始 | 重登、清缓存、主题、首页/课表/提醒偏好均真实生效；第三方许可证清单完整可追溯 | — | 2026-07-14 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 未开始 | 小/中/大尺寸按目标范围展示；共享快照、时间线、未登录/过期状态和点击跳转完整 | — | 2026-07-14 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 未开始 | 通知授权、提前 10 分钟提醒、课表变化后重排、时区/重启场景完整；Live Activity 独立验收 | — | 2026-07-14 |
@@ -239,6 +239,9 @@ iOS/
 | 课表 | 主要功能成熟；当前时间指示线有显式 TODO | 先完成行为对齐；时间线作为独立增强项，不阻塞首个课表切片 |
 | 课程数据格式 | 旧 `Course` 缓存把 weekday/周次/节次保存为字符串，新教务 Activity 使用整数和 `weekIndexes`；空 weekIndexes 的 Activity 会被丢弃 | iOS `Course` 解码同时接受字符串和整数；存在 `weekIndexes` 时以去重排序后的精确周为准，否则兼容旧起止周范围；畸形数据不触发强制转换崩溃 |
 | 课表缓存隔离 | 大部分当前学期缓存带用户前缀，但 `next.schedule` 仍是共享键 | iOS 持久化协议从入口要求 `UserScopedStore`，当前/下一学期均不得绕过用户命名空间 |
+| 电话本 | Android 使用 `ACTION_DIAL`，双校区号码先弹窗选择；号码注释来自 2025 新生手册并含 2026 年 3 月更新 | iOS 保留 9 类 57 个条目及来源说明，统一补 0551 区号；所有号码（含单号码）先由确认菜单选择，再交给系统电话应用，不申请通讯录权限 |
+| 校历 | Android 下载 `openahu.org/download/xiaoli.jpg` 到应用目录，支持手势缩放并可申请权限保存相册 | iOS 校验图片签名并原子缓存，损坏缓存自动清理、刷新失败显示旧缓存；使用 1–5 倍原生手势、Quick Look 和 ShareLink，不写相册，因此无需照片权限且拒绝权限时无功能损失 |
+| 学习资料 | Android 通过 GitHub Contents API 浏览 6 个学院仓库，jsDelivr/Raw 下载到外部应用目录，再以 Intent 打开 | iOS 保持同一仓库清单和分支，目录按仓库/路径缓存；文件流式下载到 Application Support、文件名哈希化，使用 Quick Look/ShareLink；公开 GitHub 限流或断网时回退已访问目录和已下载文件 |
 | 失物招领 | 图片上传未实现；发布/删除可能提前提示成功；“我的帖子”只过滤当前已加载数据 | 不复制缺陷；服务端确认后更新 UI，“我的帖子”使用可靠查询/分页语义 |
 | 天气偏好 | 多个显示开关只改内存或未被首页读取，只有 `showOnHome` 持久化生效 | 只提供能真实生效并有测试的开关 |
 | 许可证 | Android 列表标有 TODO，可能不完整 | 从 iOS 实际依赖生成/维护完整清单 |
@@ -338,3 +341,6 @@ iOS/
 | 2026-07-14 | AUTH-005 | AUTH-01 达到完成定义；Keychain/CredentialStore 作为 AUTH-02 安全基础通过真实 Simulator 验证 | iOS CI `29279242413`：协议 3 测试、凭据 4 测试（含 Security.framework Keychain）及“拒绝→确认→四入口”UI smoke 通过 | `0abca32`、`c1a1630` |
 | 2026-07-14 | SCH-003 | SCH-01 的本地优先 Repository 与磁盘缓存子目标完成验证，真实远端适配仍待实现 | iOS CI `29279242413`：Repository 3 测试、FileDataStore 2 测试通过；总计 29 个单元测试及 1 条 UI smoke 全部通过 | `0abca32`、`c1a1630` |
 | 2026-07-14 | OPS-004 | Simulator CI 改用无需 Apple 开发者账号的本地 ad-hoc 签名后，Keychain runtime test 与全套测试通过；设备 IPA 保持未签名 | iOS CI `29279242413` 成功；Unsigned IPA `29279242104` 成功，Artifact `AHUTong-unsigned-ipa-5`、150,911 bytes、保留至 2026-07-20 | `c1a1630` |
+| 2026-07-14 | INFO-001 | 迁移校历真实下载、文件签名校验/缓存/损坏恢复、离线回退、缩放、Quick Look/分享和刷新错误态；INFO-01 进入待验证 | Android 固定 SHA 源码对照；公开图片端点 GET 200；Windows `git diff --check` 与 Swift 文件结构审计通过；4 个新增测试及 UI 路径待 macOS CI | 待推送 |
+| 2026-07-14 | INFO-002 | 迁移 9 类 57 个校园电话条目、分类/全文搜索、双校区号码、0551 规范化、拨号确认和页面内来源说明；INFO-02 进入待验证 | Android 固定 SHA 的 `TelDirectoryViewModel.kt`/`PhoneBook.kt` 对照；Windows `git diff --check` 与 4 个模型测试静态审计通过；UI 路径待 macOS CI | 待推送 |
+| 2026-07-14 | CONTENT-001 | 迁移 6 个公开学习资料仓库的目录浏览/缓存、离线回退、流式进度、双源下载、Quick Look/分享、单删/批删；CONTENT-03 进入待验证 | 六个 GitHub Contents 端点 GET 200；Windows `git diff --check` 与 Swift 文件结构审计通过；6 个新增契约/缓存/下载测试及 UI 路径待 macOS CI | 待推送 |
