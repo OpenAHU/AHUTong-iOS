@@ -8,8 +8,8 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P0/P1：工程基线与 App Shell |
-| 当前焦点 | SwiftUI 四入口与统一页面状态已实现；macOS CI 与手动未签名 IPA 构建已配置，等待首次运行验证 |
-| 下一步 | 运行 macOS CI 和未签名 IPA workflow，在 iPhone 13 Pro 上用 Personal Team 完成首次 7 天签名安装；随后建立 Networking/Auth/Persistence 协议边界和 User/Course 模型 |
+| 当前焦点 | SwiftUI 四入口与统一页面状态已实现；首次 macOS CI 已定位缺失 AppIcon，开发期基线已关闭占位图标要求，等待复跑验证 |
+| 下一步 | 复跑 macOS CI 和未签名 IPA workflow，在 iPhone 13 Pro 上用 Personal Team 完成首次 7 天签名安装；随后建立 Networking/Auth/Persistence 协议边界和 User/Course 模型 |
 | 用户/平台功能进度 | 0 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
@@ -319,3 +319,4 @@ iOS/
 | 2026-07-14 | INIT-001 | 建立 Android → iOS 长期路线图；固定三仓基线；完成 Android 功能、架构、安全风险和 iOS 空仓现状盘点；尚未迁移功能 | 只读源码审查；Android/iOS/AIO `git status` 均在改动前干净；未初始化 Android 嵌套子模块 | — |
 | 2026-07-14 | APP-001 | 建立 XcodeGen 工程基线、SwiftUI 四入口、统一页面状态、单元/UI 测试骨架及 macOS CI；APP-01 进入待验证 | Windows：`project.yml`/workflow YAML 与 asset JSON 解析通过；14 个 Swift 文件分隔符和全仓空白检查通过；当前环境无 `xcodebuild`，未执行编译 | — |
 | 2026-07-14 | OPS-001 | 新增 `codex/**` 推送及手动触发的 macOS 26 未签名设备 IPA workflow，产出 IPA 与 SHA-256 并保留 7 天；明确 Personal Team 本地签名边界 | Windows：PyYAML 6.0.3 解析成功，job/产物路径断言及 `git diff --check` 通过；当前环境无 `xcodebuild`，GitHub Actions 和 iPhone 13 Pro 安装待验证 | — |
+| 2026-07-14 | OPS-002 | 首次 Runner 构建确认 Swift 编译已进入链接阶段，但设备和 Simulator 均因尚无 `AppIcon` 资产而失败；开发期临时关闭 AppIcon 编译要求，正式品牌资产迁移时恢复 | GitHub Actions：Unsigned IPA run `29275282513`、iOS CI run `29275282471` 均报 `None of the input catalogs contained ... AppIcon`；修复待复跑 | `4886b8c`（首次运行） |
