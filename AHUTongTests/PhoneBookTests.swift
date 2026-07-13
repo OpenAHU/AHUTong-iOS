@@ -10,7 +10,9 @@ final class PhoneBookTests: XCTestCase {
     }
 
     func testSearchMatchesDepartmentCategoryAndNumber() {
-        XCTAssertEqual(PhoneBookDirectory.search("心理健康").map(\.name), ["心理健康教育中心"])
+        let categoryResults = PhoneBookDirectory.search("心理健康")
+        XCTAssertEqual(categoryResults.count, 5)
+        XCTAssertTrue(categoryResults.contains { $0.name == "心理健康教育中心" })
         XCTAssertTrue(PhoneBookDirectory.search("报警电话").contains { $0.name == "芙蓉派出所" })
         XCTAssertTrue(PhoneBookDirectory.search("65107064").contains { $0.name == "206楼" })
     }
