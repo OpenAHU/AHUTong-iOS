@@ -8,8 +8,8 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P0/P1：工程基线与 App Shell |
-| 当前焦点 | APP-01 已完成；macOS 26 Simulator 测试、Release 真机构建、未签名 IPA 打包和 Artifact 上传均已验证 |
-| 下一步 | 在 iPhone 13 Pro 上用 Personal Team 完成首次 7 天签名安装并回写结果；随后建立 Networking/Auth/Persistence 协议边界和 User/Course 模型 |
+| 当前焦点 | Networking/Auth/Persistence 协议边界与测试替身已实现；AUTH-02、SCH-01 进入实现中，等待 macOS CI 验证 |
+| 下一步 | 完成 Keychain 会话存储、Schedule Repository 与脱敏响应 fixture；同时在 iPhone 13 Pro 上验证 7 天签名安装 |
 | 用户/平台功能进度 | 1 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
@@ -202,8 +202,8 @@ iOS/
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 已实现主页/课表/小工具/设置顺序、`NavigationStack`/`TabView`、统一 idle/loading/loaded/empty/failed 状态和 Dynamic Type 友好占位页 | Windows 静态检查通过；macOS 26/Xcode 26.5 Release 真机构建及 IPA run `29275491141` 通过；2 组单元测试和 1 条 UI smoke 的 Simulator run `29275491048` 通过；Commit `80d9494` | 2026-07-14 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 未开始 | 协议可读、同意状态持久化；拒绝与再次查看路径明确；不复制遗留 `Setup` 路由 | — | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 未开始 | 首次登录、冷启动恢复、并发刷新去重、过期重登、退出清理、多账号隔离；密码/Token/Cookie 仅进 Keychain | — | 2026-07-14 |
-| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 未开始 | golden fixture 可解析；单双周/跨学期/当前周测试；缓存按用户隔离；无网可读 | — | 2026-07-14 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 实现中 | 首次登录、冷启动恢复、并发刷新去重、过期重登、退出清理、多账号隔离；密码/Token/Cookie 仅进 Keychain | 已建立 `AuthSessionProtocol`、显式 signed-out/authenticated 状态与 actor 测试替身；未实现真实凭据和 Keychain；Windows 静态检查待执行，Commit — | 2026-07-14 |
+| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 实现中 | golden fixture 可解析；单双周/跨学期/当前周测试；缓存按用户隔离；无网可读 | 已实现 Android 字符串/整数兼容 Course、精确周索引、Semester/当前周解析、用户隔离 JSON Store 及测试；真实 API/磁盘缓存未接入；Windows 静态检查待执行，Commit — | 2026-07-14 |
 | SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 未开始 | 20 周切换、日期、单双周、刷新、总览、课程详情、显示全部课程、下学期预览对齐 | — | 2026-07-14 |
 | HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 未开始 | 今日课程、天气、余额/付款码入口、快捷工具槽位和编辑状态可用；灰度状态可注入 | — | 2026-07-14 |
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 未开始 | 多学籍/微专业、学期筛选、搜索、绩点和排名契约对齐；解析有 fixture 测试 | — | 2026-07-14 |
@@ -235,6 +235,8 @@ iOS/
 | 网络安全 | 存在全局明文流量配置 | 默认严格 ATS；仅对经论证的本地通信做最小例外 |
 | 客户端凭据 | Android 支付链存在硬编码客户端凭据/签名材料及敏感日志 | 不记录具体值；先轮换并迁到服务端签名/安全配置，清理敏感日志，否则支付阻塞 |
 | 课表 | 主要功能成熟；当前时间指示线有显式 TODO | 先完成行为对齐；时间线作为独立增强项，不阻塞首个课表切片 |
+| 课程数据格式 | 旧 `Course` 缓存把 weekday/周次/节次保存为字符串，新教务 Activity 使用整数和 `weekIndexes`；空 weekIndexes 的 Activity 会被丢弃 | iOS `Course` 解码同时接受字符串和整数；存在 `weekIndexes` 时以去重排序后的精确周为准，否则兼容旧起止周范围；畸形数据不触发强制转换崩溃 |
+| 课表缓存隔离 | 大部分当前学期缓存带用户前缀，但 `next.schedule` 仍是共享键 | iOS 持久化协议从入口要求 `UserScopedStore`，当前/下一学期均不得绕过用户命名空间 |
 | 失物招领 | 图片上传未实现；发布/删除可能提前提示成功；“我的帖子”只过滤当前已加载数据 | 不复制缺陷；服务端确认后更新 UI，“我的帖子”使用可靠查询/分页语义 |
 | 天气偏好 | 多个显示开关只改内存或未被首页读取，只有 `showOnHome` 持久化生效 | 只提供能真实生效并有测试的开关 |
 | 许可证 | Android 列表标有 TODO，可能不完整 | 从 iOS 实际依赖生成/维护完整清单 |
@@ -298,8 +300,8 @@ iOS/
 - [ ] 确认 D-002 许可证、最终 Bundle ID 与签名团队。
 - [x] 新增 iOS 子仓 `AGENTS.md`、`.gitignore` 和基础 README。
 - [x] 创建 SwiftUI App、Unit Test、UI Test Targets 和四入口空壳。
-- [ ] 建立 `Core/Networking`、`Core/Auth`、`Core/Persistence` 的协议边界与测试替身。
-- [ ] 为 User、Course 和统一错误建立第一批模型与脱敏 fixtures。
+- [x] 建立 `Core/Networking`、`Core/Auth`、`Core/Persistence` 的协议边界与测试替身。
+- [x] 为 User、Course 和统一错误建立第一批模型与脱敏 inline fixtures。
 - [x] 配置 macOS 26 CI，并动态选择可用 iOS Simulator。
 - [x] 配置手动未签名 IPA workflow，供本机 Personal Team 7 天签名安装。
 - [x] 运行首次 macOS build/test，并把 Xcode、Simulator 与结果证据回写 APP-01。
@@ -322,3 +324,4 @@ iOS/
 | 2026-07-14 | OPS-001 | 新增 `codex/**` 推送及手动触发的 macOS 26 未签名设备 IPA workflow，产出 IPA 与 SHA-256 并保留 7 天；明确 Personal Team 本地签名边界 | Windows：PyYAML 6.0.3 解析成功，job/产物路径断言及 `git diff --check` 通过；当前环境无 `xcodebuild`，GitHub Actions 和 iPhone 13 Pro 安装待验证 | — |
 | 2026-07-14 | OPS-002 | 首次 Runner 构建因尚无 `AppIcon` 资产失败；开发期关闭占位 AppIcon 要求后，Simulator 测试、Release 真机构建、IPA 打包、校验和生成及 Artifact 上传全部成功；正式品牌资产迁移时恢复 AppIcon | 失败：Unsigned IPA `29275282513`、iOS CI `29275282471`；修复后成功：Unsigned IPA `29275491141`，Artifact `AHUTong-unsigned-ipa-2`、51,762 bytes、保留至 2026-07-20；Simulator `29275491048` 通过 | `80d9494` |
 | 2026-07-14 | APP-002 | macOS 26/Xcode 26.5 首次完整验证通过，APP-01 达到完成定义 | iOS CI run `29275491048`：2 组单元测试与 1 条 UI smoke 通过；Unsigned IPA run `29275491141`：Release iphoneos 构建、打包和上传通过 | `80d9494` |
+| 2026-07-14 | CORE-001 | 建立可注入 APIClient/NetworkTransport、AuthSession 状态边界、用户隔离 DataStore/JSONStore；迁移 User、Course、Semester 和当前周纯模型，并为 Android 新旧 JSON 兼容、账号隔离及日期边界补测试 | Windows：新增 Swift 文件静态检查待执行；计划由 macOS CI 运行累计 17 个单元测试和 1 条 UI smoke | — |
