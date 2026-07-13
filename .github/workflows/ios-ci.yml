@@ -63,5 +63,4 @@ jobs:
             -scheme AHUTong \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -resultBundlePath "$RUNNER_TEMP/AHUTong.xcresult" \
-            CODE_SIGNING_ALLOWED=NO \
             test
