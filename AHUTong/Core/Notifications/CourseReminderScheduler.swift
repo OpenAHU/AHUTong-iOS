@@ -26,9 +26,12 @@ actor SystemNotificationScheduler: NotificationScheduling {
     func authorization() async -> ReminderAuthorization {
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
-        case .authorized, .provisional, .ephemeral: .authorized
-        case .denied: .denied
-        default: .notDetermined
+        case .authorized, .provisional, .ephemeral:
+            return ReminderAuthorization.authorized
+        case .denied:
+            return ReminderAuthorization.denied
+        default:
+            return ReminderAuthorization.notDetermined
         }
     }
 

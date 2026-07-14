@@ -19,7 +19,7 @@ struct LoginView: View {
     }
 
     var body: some View {
-        AndroidScreen(horizontalPadding: 0) {
+        AndroidScreen {
             ScrollView {
                 VStack(spacing: 16) {
                     Text("登录")
