@@ -55,7 +55,7 @@ final class CoreLocationWeatherProvider: NSObject, WeatherLocationProviding {
     }
 }
 
-extension CoreLocationWeatherProvider: CLLocationManagerDelegate {
+extension CoreLocationWeatherProvider: @MainActor CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         guard let continuation = authorizationContinuation else { return }
         switch manager.authorizationStatus {
