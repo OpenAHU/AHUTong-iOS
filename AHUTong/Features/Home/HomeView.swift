@@ -164,8 +164,7 @@ struct HomeView: View {
     @State private var layout: HomeWidgetLayout
     @State private var isEditing = false
     @AppStorage("home.request-edit") private var requestEdit = false
-    @State private var unavailableWidgetTitle = ""
-    @State private var showsUnavailableWidget = false
+    @State private var showsCardRecharge = false
     private let appModel: AppModel
 
     init(appModel: AppModel) {
@@ -203,6 +202,9 @@ struct HomeView: View {
                 if isEditing { widgetLibrary }
             }
         }
+        .navigationDestination(isPresented: $showsCardRecharge) {
+            CardRechargeView(appModel: appModel).androidDetailScreen()
+        }
         .task {
             async let schedule: Void = model.load(demo: ProcessInfo.processInfo.arguments.contains("--demo-session"))
             async let weather: Void = weatherModel.start()
@@ -219,11 +221,6 @@ struct HomeView: View {
                 isEditing = true
                 requestEdit = false
             }
-        }
-        .alert(unavailableWidgetTitle, isPresented: $showsUnavailableWidget) {
-            Button("知道了", role: .cancel) { }
-        } message: {
-            Text("该写操作仍在安全整改和真机验收阶段，本轮不提供不可验证的占位支付。")
         }
     }
 
@@ -289,7 +286,9 @@ struct HomeView: View {
     private var homeWidgetLayout: some View {
         VStack(spacing: 16) {
             HStack(alignment: .top, spacing: 16) {
-                CampusCardPanel(api: appModel.campusAPI, userID: userID, demo: demo)
+                CampusCardPanel(api: appModel.campusAPI, userID: userID, demo: demo) {
+                    showsCardRecharge = true
+                }
                     .frame(maxWidth: .infinity)
 
                 if isEditing || layout.slots[0] != nil || layout.slots[1] != nil {
@@ -317,14 +316,22 @@ struct HomeView: View {
     private func homeSlot(index: Int, height: CGFloat) -> some View {
         if let id = layout.slots[index], let spec = HomeWidgetSpec.all.first(where: { $0.id == id }) {
             Group {
-                if spec.id == "bathroom" || spec.id == "electricity" {
-                    Button {
-                        unavailableWidgetTitle = spec.title
-                        showsUnavailableWidget = true
+                if spec.id == "bathroom" {
+                    NavigationLink {
+                        BathroomPaymentView().androidDetailScreen()
                     } label: {
                         HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("home.payment.bathroom")
+                } else if spec.id == "electricity" {
+                    NavigationLink {
+                        ElectricityPaymentView().androidDetailScreen()
+                    } label: {
+                        HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("home.payment.electricity")
                 } else {
                     widgetDestination(spec: spec) {
                         HomeTextWidgetCard(title: spec.title, isEditing: isEditing)

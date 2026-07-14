@@ -7,6 +7,9 @@ struct SettingsView: View {
     @ObservedObject var appModel: AppModel
     @State private var showClearConfirmation = false
     @State private var showUpdateLog = false
+    @State private var debugTapCount = 0
+    @State private var lastDebugTap = Date.distantPast
+    @State private var showsDebug = false
 
     var body: some View {
         AndroidScreen {
@@ -66,6 +69,9 @@ struct SettingsView: View {
         } message: {
             Text("测试版本由 GitHub Actions 构建；七天签名到期后需要重新签名安装。")
         }
+        .navigationDestination(isPresented: $showsDebug) {
+            OperationsDiagnosticsView(userID: currentUser?.studentID).androidDetailScreen()
+        }
     }
 
     private var appCard: some View {
@@ -82,6 +88,9 @@ struct SettingsView: View {
             .padding(.horizontal, 24).padding(.vertical, 16)
         }
         .padding(.horizontal, 16)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: registerDebugTap)
+        .accessibilityIdentifier("settings.app-card")
     }
 
     private var accountCard: some View {
@@ -104,6 +113,21 @@ struct SettingsView: View {
 
     private func section(_ text: String) -> some View {
         Text(text).font(.headline.bold()).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24)
+    }
+
+    private var currentUser: User? {
+        if case let .authenticated(user) = appModel.sessionState { return user }
+        return nil
+    }
+
+    private func registerDebugTap() {
+        let now = Date()
+        debugTapCount = now.timeIntervalSince(lastDebugTap) <= 1 ? debugTapCount + 1 : 1
+        lastDebugTap = now
+        if debugTapCount >= 8 {
+            debugTapCount = 0
+            showsDebug = true
+        }
     }
 
     private func settingsGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {

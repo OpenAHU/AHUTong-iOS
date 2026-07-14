@@ -33,6 +33,10 @@
     </array>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.education</string>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>alipays</string>
+    </array>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>

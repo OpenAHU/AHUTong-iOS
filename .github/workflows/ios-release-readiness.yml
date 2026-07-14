@@ -1,0 +1,114 @@
+name: Release readiness archive
+
+on:
+  push:
+    branches:
+      - "codex/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-release-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  archive-and-audit:
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Show Apple toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust campus SDK
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Vendor/sdk
+
+      - name: Validate repository privacy and secret boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          plutil -lint AHUTong/PrivacyInfo.xcprivacy
+          plutil -lint AHUTongWidget/PrivacyInfo.xcprivacy
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          app = plistlib.loads(Path("AHUTong/PrivacyInfo.xcprivacy").read_bytes())
+          assert app["NSPrivacyTracking"] is False
+          assert app["NSPrivacyTrackingDomains"] == []
+          categories = {item["NSPrivacyAccessedAPIType"] for item in app["NSPrivacyAccessedAPITypes"]}
+          assert "NSPrivacyAccessedAPICategoryUserDefaults" in categories
+          collected = {item["NSPrivacyCollectedDataType"] for item in app["NSPrivacyCollectedDataTypes"]}
+          assert "NSPrivacyCollectedDataTypeUserID" in collected
+          assert "NSPrivacyCollectedDataTypePaymentInfo" in collected
+          for item in app["NSPrivacyCollectedDataTypes"]:
+              assert item["NSPrivacyCollectedDataTypeTracking"] is False
+              assert "NSPrivacyCollectedDataTypePurposeAppFunctionality" in item["NSPrivacyCollectedDataTypePurposes"]
+          PY
+          if grep -RIE --exclude-dir=Vendor --exclude='*.md' \
+            '(SECRET_KEY[[:space:]]*=|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|PROVISIONING_PROFILE_SPECIFIER[[:space:]]*=[[:space:]]*[^$])' \
+            AHUTong AHUTongWidget; then
+            echo "Potential sensitive signing or payment material found." >&2
+            exit 1
+          fi
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Create unsigned Release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project AHUTong.xcodeproj \
+            -scheme AHUTong \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/AHUTong.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean archive
+
+      - name: Validate archive structure and privacy manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/AHUTong.xcarchive/Products/Applications/AHUTong.app"
+          widget="$app/PlugIns/AHUTongWidget.appex"
+          test -x "$app/AHUTong"
+          test -x "$widget/AHUTongWidget"
+          test -f "$app/PrivacyInfo.xcprivacy"
+          test -f "$widget/PrivacyInfo.xcprivacy"
+          plutil -lint "$app/Info.plist" "$app/PrivacyInfo.xcprivacy"
+          plutil -lint "$widget/Info.plist" "$widget/PrivacyInfo.xcprivacy"
+          if strings "$app/AHUTong" | grep -E '(SECRET_KEY=|BEGIN PRIVATE KEY)' >/dev/null; then
+            echo "Sensitive payment or signing material found in app binary." >&2
+            exit 1
+          fi
+          find "$RUNNER_TEMP/AHUTong.xcarchive" -maxdepth 5 -type f | sort
+
+      - name: Upload unsigned archive evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: AHUTong-release-readiness-${{ github.run_number }}
+          path: ${{ runner.temp }}/AHUTong.xcarchive
+          if-no-files-found: error
+          retention-days: 7

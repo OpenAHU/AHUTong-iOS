@@ -260,6 +260,73 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testAndroidParityPaymentsAndOperations() {
+        let app = XCUIApplication()
+        launchDemo(app)
+
+        let recharge = app.buttons["campus-card.recharge"]
+        XCTAssertTrue(recharge.waitForExistence(timeout: 5))
+        recharge.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("24-card-recharge", app: app)
+        enter("10", into: app.textFields["payment.card.amount"], app: app)
+        app.buttons["payment.card.state"].tap()
+        XCTAssertTrue(app.staticTexts["确认支付"].waitForExistence(timeout: 3))
+        waitForRendering()
+        capture("25-card-recharge-dialog", app: app)
+        app.buttons["payment.card.bank"].tap()
+        waitForPaymentResult("payment.card.state", app: app)
+        waitForRendering()
+        capture("26-card-recharge-success", app: app)
+
+        launchDemo(app)
+        openHomePayment("home.payment.bathroom", marker: "payment.bathroom.screen", app: app)
+        waitForRendering()
+        capture("27-bathroom-payment", app: app)
+        enter("13800000000", into: app.textFields["payment.bathroom.phone"], app: app)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "现金金额")).firstMatch.waitForExistence(timeout: 3))
+        enter("8", into: app.textFields["payment.bathroom.amount"], app: app)
+        app.buttons["payment.bathroom.state"].tap()
+        XCTAssertTrue(app.staticTexts["请输入校园卡密码"].waitForExistence(timeout: 3))
+        waitForRendering()
+        capture("28-bathroom-payment-dialog", app: app)
+        enter("123456", into: app.secureTextFields["payment.bathroom.password"], app: app)
+        app.buttons["确认"].tap()
+        waitForPaymentResult("payment.bathroom.state", app: app)
+        waitForRendering()
+        capture("29-bathroom-payment-success", app: app)
+
+        launchDemo(app)
+        openHomePayment("home.payment.electricity", marker: "payment.electricity.screen", app: app)
+        waitForRendering()
+        capture("30-electricity-payment", app: app)
+        choose("磬苑校区", from: "payment.electricity.campus", app: app)
+        choose("竹园", from: "payment.electricity.building", app: app)
+        choose("3 层", from: "payment.electricity.floor", app: app)
+        choose("305", from: "payment.electricity.room", app: app)
+        enter("20", into: app.textFields["payment.electricity.amount"], app: app)
+        app.buttons["payment.electricity.state"].tap()
+        XCTAssertTrue(app.staticTexts["请输入校园卡密码"].waitForExistence(timeout: 3))
+        waitForRendering()
+        capture("31-electricity-payment-dialog", app: app)
+        enter("123456", into: app.secureTextFields["payment.electricity.password"], app: app)
+        app.buttons["确认"].tap()
+        waitForPaymentResult("payment.electricity.state", app: app)
+        waitForRendering()
+        capture("32-electricity-payment-success", app: app)
+
+        launchDemo(app)
+        app.buttons["tab.settings"].tap()
+        let appCard = app.descendants(matching: .any)["settings.app-card"]
+        XCTAssertTrue(appCard.waitForExistence(timeout: 4))
+        for _ in 0..<8 { appCard.tap() }
+        XCTAssertTrue(app.descendants(matching: .any)["operations.debug.screen"].waitForExistence(timeout: 5))
+        waitForRendering()
+        capture("33-operations-debug", app: app)
+    }
+
+    @MainActor
     private func capture(_ name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "android-parity-\(name)"
@@ -277,6 +344,51 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(toolsTab.waitForExistence(timeout: 3))
         toolsTab.tap()
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    private func launchDemo(_ app: XCUIApplication) {
+        app.terminate()
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func openHomePayment(_ identifier: String, marker: String, app: XCUIApplication) {
+        let link = app.buttons[identifier]
+        if !link.isHittable { app.swipeUp() }
+        XCTAssertTrue(link.waitForExistence(timeout: 4))
+        link.tap()
+        XCTAssertTrue(app.descendants(matching: .any)[marker].waitForExistence(timeout: 4))
+    }
+
+    @MainActor
+    private func enter(_ value: String, into field: XCUIElement, app: XCUIApplication) {
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText(value)
+        app.swipeDown()
+    }
+
+    @MainActor
+    private func choose(_ option: String, from identifier: String, app: XCUIApplication) {
+        let menu = app.buttons[identifier]
+        XCTAssertTrue(menu.waitForExistence(timeout: 3))
+        menu.tap()
+        let choice = app.buttons[option]
+        XCTAssertTrue(choice.waitForExistence(timeout: 3))
+        choice.tap()
+    }
+
+    @MainActor
+    private func waitForPaymentResult(_ identifier: String, app: XCUIApplication) {
+        let state = app.buttons[identifier]
+        expectation(
+            for: NSPredicate(format: "label CONTAINS %@", "支付成功"),
+            evaluatedWith: state
+        )
+        waitForExpectations(timeout: 4)
     }
 
     private func waitForRendering() {

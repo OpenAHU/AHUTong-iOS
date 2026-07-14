@@ -89,12 +89,13 @@ struct CampusCardPanel: View {
     @StateObject private var model: CampusCardViewModel
     @State private var showsQRCode = false
     @State private var showsFullQRCode = false
-    @State private var showsRechargeNotice = false
     @State private var isScreenCaptured = UIScreen.main.isCaptured
     private let demo: Bool
+    private let onRecharge: () -> Void
 
-    init(api: any CampusCoreAPI, userID: String, demo: Bool) {
+    init(api: any CampusCoreAPI, userID: String, demo: Bool, onRecharge: @escaping () -> Void) {
         self.demo = demo
+        self.onRecharge = onRecharge
         _model = StateObject(wrappedValue: CampusCardViewModel(api: api, userID: userID))
     }
 
@@ -117,11 +118,6 @@ struct CampusCardPanel: View {
         .task { await model.load(demo: demo) }
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
             isScreenCaptured = UIScreen.main.isCaptured
-        }
-        .alert("校园卡充值", isPresented: $showsRechargeNotice) {
-            Button("知道了", role: .cancel) { }
-        } message: {
-            Text("充值写操作仍在安全整改阶段，本轮只开放与 Android 一致的余额和付款码读取。")
         }
         .fullScreenCover(isPresented: $showsFullQRCode) {
             ZStack {
@@ -150,13 +146,14 @@ struct CampusCardPanel: View {
 
             Rectangle().fill(AndroidParityPalette.background(colorScheme)).frame(width: 2)
 
-            Button { showsRechargeNotice = true } label: {
+            Button(action: onRecharge) {
                 Text("充\n值").font(.headline).multilineTextAlignment(.center)
                     .frame(width: 48)
                     .frame(maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("campus-card.recharge")
         }
     }
 
