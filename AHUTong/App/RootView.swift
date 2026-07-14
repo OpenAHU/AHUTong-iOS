@@ -25,15 +25,10 @@ struct RootView: View {
                 }
             } else {
                 ZStack(alignment: .bottom) {
-                    TabView(selection: $selectedTab) {
-                        ForEach(AppTab.allCases) { tab in
-                            NavigationStack {
-                                destination(for: tab)
-                            }
-                            .tag(tab)
-                        }
+                    NavigationStack {
+                        destination(for: selectedTab)
                     }
-                    .toolbar(.hidden, for: .tabBar)
+                    .id(selectedTab)
 
                     if !isDetailVisible {
                         AndroidBottomBar(selection: $selectedTab)
@@ -41,6 +36,9 @@ struct RootView: View {
                     }
                 }
                 .background(AndroidParityRootBackground())
+                .onChange(of: selectedTab) { _, _ in
+                    isDetailVisible = false
+                }
                 .onPreferenceChange(AndroidDetailVisibilityKey.self) { isDetailVisible = $0 }
             }
         }

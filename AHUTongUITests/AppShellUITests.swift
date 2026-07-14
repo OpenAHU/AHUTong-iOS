@@ -12,6 +12,7 @@ final class AppShellUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 8))
+        waitForRendering()
         capture("01-disclaimer", app: app)
 
         app.buttons["onboarding.decline"].tap()
@@ -20,13 +21,16 @@ final class AppShellUITests: XCTestCase {
 
         app.buttons["onboarding.continue"].tap()
         XCTAssertTrue(app.staticTexts["隐私政策"].waitForExistence(timeout: 2))
+        waitForRendering()
         capture("02-privacy", app: app)
         app.buttons["onboarding.continue"].tap()
         XCTAssertTrue(app.staticTexts["商业合作"].waitForExistence(timeout: 2))
+        waitForRendering()
         capture("03-community", app: app)
         app.buttons["onboarding.decline"].tap()
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        waitForRendering()
         capture("04-home", app: app)
 
         let tabs = [
@@ -45,6 +49,7 @@ final class AppShellUITests: XCTestCase {
             case "settings": XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 3))
             default: XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 3))
             }
+            waitForRendering()
             capture(screenshotName, app: app)
         }
 
@@ -68,6 +73,7 @@ final class AppShellUITests: XCTestCase {
             } else {
                 XCTAssertTrue(app.buttons[marker].waitForExistence(timeout: 5))
             }
+            waitForRendering()
             capture(screenshotName, app: app)
             restartAtTools(app)
         }
@@ -91,5 +97,13 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(toolsTab.waitForExistence(timeout: 3))
         toolsTab.tap()
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
+    }
+
+    private func waitForRendering() {
+        let rendered = expectation(description: "界面完成渲染")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            rendered.fulfill()
+        }
+        wait(for: [rendered], timeout: 1)
     }
 }

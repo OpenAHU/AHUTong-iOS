@@ -154,11 +154,17 @@ private struct AndroidAgreementDialog: View {
 
             HStack(spacing: 12) {
                 Spacer()
-                Button("拒绝", action: onDecline)
-                    .androidAgreementButtonStyle(colorScheme: colorScheme)
+                AndroidAgreementButton(
+                    title: "拒绝",
+                    colorScheme: colorScheme,
+                    action: onDecline
+                )
                     .accessibilityIdentifier("onboarding.decline")
-                Button("同意", action: onAgree)
-                    .androidAgreementButtonStyle(colorScheme: colorScheme)
+                AndroidAgreementButton(
+                    title: "同意",
+                    colorScheme: colorScheme,
+                    action: onAgree
+                )
                     .accessibilityIdentifier("onboarding.continue")
             }
         }
@@ -170,17 +176,23 @@ private struct AndroidAgreementDialog: View {
     }
 }
 
-private extension View {
-    func androidAgreementButtonStyle(colorScheme: ColorScheme) -> some View {
-        self
-            .font(.headline)
-            .foregroundStyle(Color.primary)
-            .frame(width: 88, height: 56)
-            .background(
-                AndroidParityPalette.primaryContainer(colorScheme),
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-            .buttonStyle(.plain)
+private struct AndroidAgreementButton: View {
+    let title: String
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Color.primary)
+                .frame(width: 88, height: 56)
+                .background(
+                    AndroidParityPalette.primaryContainer(colorScheme),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 
