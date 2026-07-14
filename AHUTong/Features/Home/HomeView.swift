@@ -219,7 +219,7 @@ struct HomeView: View {
 
     private var homeWidgetLayout: some View {
         VStack(spacing: 16) {
-            HStack(spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
                 CampusCardPanel(api: appModel.campusAPI, userID: userID, demo: demo)
                     .frame(maxWidth: .infinity)
 

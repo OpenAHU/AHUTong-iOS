@@ -37,7 +37,7 @@ final class AppShellUITests: XCTestCase {
         let campusCardBalance = app.buttons["campus-card.balance"]
         XCTAssertTrue(campusCardBalance.waitForExistence(timeout: 3))
         campusCardBalance.tap()
-        XCTAssertTrue(app.buttons["刷新付款码"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.images["campus-card.qr-image"].waitForExistence(timeout: 3))
         waitForRendering()
         capture("17-card-qrcode", app: app)
 

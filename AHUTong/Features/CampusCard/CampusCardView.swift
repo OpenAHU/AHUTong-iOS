@@ -102,8 +102,9 @@ struct CampusCardPanel: View {
         Group {
             if showsQRCode { qrCard } else { balanceCard }
         }
-        .frame(height: 140)
+        .frame(height: showsQRCode ? 344 : 140)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             if showsQRCode && isScreenCaptured {
                 RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.black.opacity(0.88))
@@ -131,7 +132,6 @@ struct CampusCardPanel: View {
             }
             .onTapGesture { showsFullQRCode = false }
         }
-        .accessibilityIdentifier("home.campus-card")
     }
 
     private var balanceCard: some View {
@@ -171,21 +171,24 @@ struct CampusCardPanel: View {
                 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
             }
             .font(.headline)
-            .padding(.horizontal, 12)
-            .frame(height: 40)
+            .frame(height: 48)
 
-            HStack(spacing: 10) {
-                qrImage(size: 78)
-                VStack(alignment: .leading, spacing: 4) {
-                    balanceText.font(.headline.bold())
-                    Button("刷新付款码") { Task { await model.loadQRCode(demo: demo) } }
-                        .font(.caption)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            qrImage(size: 200)
+                .contentShape(Rectangle())
+                .onTapGesture { Task { await model.loadQRCode(demo: demo) } }
+
+            balanceText
+                .font(.title2.bold())
+                .padding(.top, 12)
+                .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task { await model.loadQRCode(demo: demo) }
-        .accessibilityIdentifier("campus-card.qrcode")
     }
 
     @ViewBuilder
@@ -223,6 +226,7 @@ private struct PaymentQRCode: View {
             Image(uiImage: image).resizable().interpolation(.none)
                 .padding(4).background(.white)
                 .accessibilityLabel("校园卡付款码")
+                .accessibilityIdentifier("campus-card.qr-image")
         } else {
             Text("加载失败")
         }
