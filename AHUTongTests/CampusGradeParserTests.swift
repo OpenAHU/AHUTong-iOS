@@ -3,7 +3,8 @@ import XCTest
 
 final class CampusGradeParserTests: XCTestCase {
     func testParsesNestedGradeResponseAndSummary() throws {
-        let data = Data(#"{
+        let data = Data(#"""
+        {
           "student": {"studentName":"张同学","majorName":"计算机科学与技术"},
           "gpa": 3.92,
           "majorRank": "8 / 120",
@@ -14,7 +15,8 @@ final class CampusGradeParserTests: XCTestCase {
               "semesterId":202601, "semesterName":"2025-2026-1"
             }]
           }
-        }"#.utf8)
+        }
+        """#.utf8)
 
         let report = try CampusGradeParser().parse(data)
 
