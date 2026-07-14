@@ -90,6 +90,7 @@ struct CampusCardPanel: View {
     @State private var showsQRCode = false
     @State private var showsFullQRCode = false
     @State private var showsRechargeNotice = false
+    @State private var isScreenCaptured = UIScreen.main.isCaptured
     private let demo: Bool
 
     init(api: any CampusCoreAPI, userID: String, demo: Bool) {
@@ -103,7 +104,19 @@ struct CampusCardPanel: View {
         }
         .frame(height: 140)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            if showsQRCode && isScreenCaptured {
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.black.opacity(0.88))
+                    .overlay {
+                        Text("正在录屏，付款码已隐藏")
+                            .font(.caption.bold()).foregroundStyle(.white)
+                    }
+            }
+        }
         .task { await model.load(demo: demo) }
+        .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
+            isScreenCaptured = UIScreen.main.isCaptured
+        }
         .alert("校园卡充值", isPresented: $showsRechargeNotice) {
             Button("知道了", role: .cancel) { }
         } message: {
@@ -133,6 +146,7 @@ struct CampusCardPanel: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("campus-card.balance")
 
             Rectangle().fill(AndroidParityPalette.background(colorScheme)).frame(width: 2)
 
@@ -171,6 +185,7 @@ struct CampusCardPanel: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task { await model.loadQRCode(demo: demo) }
+        .accessibilityIdentifier("campus-card.qrcode")
     }
 
     @ViewBuilder

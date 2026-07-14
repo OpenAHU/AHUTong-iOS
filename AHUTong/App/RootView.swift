@@ -81,12 +81,7 @@ struct RootView: View {
     }
 
     private var themeTint: Color {
-        switch themeColor {
-        case "green": .green
-        case "purple": .purple
-        case "orange": .orange
-        default: AndroidParityPalette.brand
-        }
+        AndroidThemeColor.color(for: themeColor)
     }
 }
 

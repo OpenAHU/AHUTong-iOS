@@ -177,16 +177,16 @@ private final class PreferencesModel: ObservableObject {
 
 private struct AndroidPreferencesView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @ObservedObject var onboardingModel: OnboardingViewModel
     @StateObject private var model: PreferencesModel
-    @AppStorage("home.default-payment-code") private var showPaymentCode = false
-    @AppStorage("schedule.show-all") private var showAllCourses = false
     @AppStorage("notifications.course-reminders") private var reminders = false
     @AppStorage("visual.liquid-glass") private var liquidGlass = true
     @AppStorage("theme.color") private var themeColor = "blue"
+    @State private var showsIslandExplanation = false
+    @State private var showsCustomColor = false
+    @State private var customColor = ""
 
     init(onboardingModel: OnboardingViewModel, appModel: AppModel) {
-        self.onboardingModel = onboardingModel
+        _ = onboardingModel
         _model = StateObject(wrappedValue: PreferencesModel(api: appModel.campusAPI))
     }
 
@@ -194,64 +194,171 @@ private struct AndroidPreferencesView: View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 24) {
-                    AndroidHeader(title: "偏好设置", large: true)
-                    preferenceSection("主页") {
-                        Toggle("主页默认显示支付二维码", isOn: $showPaymentCode)
-                        Text("校园卡可用时，首页余额入口将直接显示付款码。")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    preferenceSection("课表") {
-                        Toggle("总览课表", isOn: $showAllCourses)
-                        Text("显示全部周次的课程，非本周课程使用灰色标识。")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    Text("偏好设置")
+                        .font(.largeTitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 32)
+
                     preferenceSection("通知") {
-                        Toggle("课前提醒", isOn: Binding(get: { reminders }, set: { value in
+                        preferenceRow(
+                            title: "课前提醒",
+                            detail: "上课前 10 分钟提醒下一节课",
+                            isOn: reminders
+                        ) {
                             Task {
-                                let actual = await model.setReminders(value)
+                                let actual = await model.setReminders(!reminders)
                                 reminders = actual
                             }
-                        }))
-                        Text("每节课开始前 10 分钟提醒；课表刷新后会重新安排。")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    preferenceSection("液态玻璃") {
-                        Toggle("启用液态玻璃效果", isOn: $liquidGlass)
-                    }
-                    preferenceSection("主题颜色") {
-                        Picker("主题颜色", selection: $themeColor) {
-                            Text("蓝色").tag("blue"); Text("绿色").tag("green"); Text("紫色").tag("purple"); Text("橙色").tag("orange")
                         }
-                        .pickerStyle(.segmented)
                     }
-                    preferenceSection("协议与隐私") {
-                        ForEach(AgreementDocument.allCases) { document in
-                            NavigationLink { AgreementDetailView(document: document) } label: {
-                                HStack { Image(systemName: "doc.text"); Text(document.title); Spacer(); Image(systemName: "chevron.right") }
-                            }
+
+                    preferenceSection("通知增强") {
+                        preferenceRow(
+                            title: "课前倒计时岛卡提醒（实验性）",
+                            detail: "仅部分系统支持 需同时开启课前提醒",
+                            isOn: false
+                        ) { showsIslandExplanation = true }
+                        Button("管理系统岛卡权限") { showsIslandExplanation = true }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                             .buttonStyle(.plain)
+                            .foregroundStyle(AndroidThemeColor.color(for: themeColor))
+                            .padding(.vertical, 8)
+                    }
+
+                    preferenceSection("液态玻璃") {
+                        preferenceRow(title: "启用液态玻璃效果", isOn: liquidGlass) {
+                            liquidGlass.toggle()
                         }
-                        Button("撤回同意并重新确认", role: .destructive) { Task { await onboardingModel.resetConsent() } }
+                    }
+
+                    preferenceSection("主题颜色") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .top, spacing: 16) {
+                                themeSwatch(value: customColorValue, name: "自定义", custom: true)
+                                ForEach(Array(AndroidThemeColor.options.enumerated()), id: \.offset) { _, option in
+                                    themeSwatch(value: option.value, name: option.name)
+                                }
+                            }
+                        }
                     }
                 }
-                .padding(.bottom, 32)
+                .padding(16)
+                .padding(.bottom, 64)
             }
         }
         .alert("无法更新提醒", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("确定", role: .cancel) {}
         } message: { Text(model.errorMessage ?? "") }
+        .alert("iOS 平台说明", isPresented: $showsIslandExplanation) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text("岛卡是 Android 系统能力，iOS 暂不提供对应权限入口；课前普通通知仍可正常使用。")
+        }
+        .alert("自定义主题颜色", isPresented: $showsCustomColor) {
+            TextField("#FF007FAC", text: $customColor)
+            Button("取消", role: .cancel) {}
+            Button("确定") {
+                let value = customColor.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                if value.range(of: "^#[0-9A-F]{8}$", options: .regularExpression) != nil {
+                    themeColor = value
+                }
+            }
+        } message: {
+            Text("请输入 ARGB Hex 颜色代码（例如 #FF007FAC）")
+        }
         .accessibilityIdentifier("preferences.screen")
     }
 
     private func preferenceSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title).font(.title3.bold())
-            VStack(alignment: .leading, spacing: 12, content: content)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(18)
-                .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24))
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title).font(.title3)
+            content()
         }
-        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func preferenceRow(
+        title: String,
+        detail: String? = nil,
+        isOn: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).foregroundStyle(.primary)
+                    if let detail {
+                        Text(detail)
+                            .font(.subheadline)
+                            .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                AndroidPreferenceToggle(isOn: isOn)
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var customColorValue: String {
+        AndroidThemeColor.options.contains(where: { $0.value == themeColor }) || ["blue", "green", "purple", "orange"].contains(themeColor)
+            ? "#FF007FAC"
+            : themeColor
+    }
+
+    private func themeSwatch(value: String, name: String, custom: Bool = false) -> some View {
+        let selected = custom
+            ? !AndroidThemeColor.options.contains(where: { $0.value == themeColor }) && !["blue", "green", "purple", "orange"].contains(themeColor)
+            : themeColor == value || (value == "default" && themeColor == "blue")
+        return Button {
+            if custom {
+                customColor = selected ? themeColor : ""
+                showsCustomColor = true
+            } else {
+                themeColor = value
+            }
+        } label: {
+            VStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(custom && !selected ? Color.secondary.opacity(0.12) : AndroidThemeColor.color(for: value))
+                        .frame(width: 48, height: 48)
+                    if custom && !selected {
+                        Image(systemName: "plus").foregroundStyle(.secondary)
+                    } else if selected {
+                        Image(systemName: "checkmark").foregroundStyle(.white)
+                    }
+                }
+                Text(name)
+                    .font(.caption)
+                    .foregroundStyle(selected ? AndroidThemeColor.color(for: themeColor) : .primary)
+                    .fixedSize()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct AndroidPreferenceToggle: View {
+    let isOn: Bool
+
+    var body: some View {
+        ZStack(alignment: isOn ? .trailing : .leading) {
+            Capsule()
+                .fill(isOn ? AndroidParityPalette.brand : Color.secondary.opacity(0.24))
+                .frame(width: 52, height: 32)
+            Circle()
+                .fill(.white)
+                .frame(width: 26, height: 26)
+                .padding(3)
+                .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
+        }
+        .animation(.easeInOut(duration: 0.18), value: isOn)
+        .accessibilityValue(isOn ? "开启" : "关闭")
     }
 }
 

@@ -45,6 +45,45 @@ enum AndroidParityPalette {
     }
 }
 
+enum AndroidThemeColor {
+    static let options: [(value: String, name: String)] = [
+        ("default", "默认"),
+        ("#FF4A90E2", "极光蓝"),
+        ("#FFE07A9F", "樱花粉"),
+        ("#FFF4A261", "落日橙"),
+        ("#FF5C6BC0", "靛夜蓝"),
+        ("#FF6A994E", "苔藓绿"),
+        ("#FF9B7EDE", "薰衣草紫"),
+        ("#FFD64550", "绯红花"),
+        ("#FF4CC9F0", "天空青"),
+        ("#FF2E8B57", "森林翡翠"),
+        ("#FF6A4C93", "午夜紫"),
+        ("#FFFF6F61", "珊瑚粉"),
+        ("#FF7ED9C3", "北极薄荷")
+    ]
+
+    static func color(for value: String) -> Color {
+        if value == "default" || value == "blue" { return AndroidParityPalette.brand }
+        if value == "green" { return .green }
+        if value == "purple" { return .purple }
+        if value == "orange" { return .orange }
+
+        let components = rgbComponents(for: value)
+        return Color(red: components.red, green: components.green, blue: components.blue)
+    }
+
+    static func rgbComponents(for value: String) -> (red: Double, green: Double, blue: Double) {
+        let hex = value.hasPrefix("#") ? String(value.dropFirst()) : value
+        guard let raw = UInt64(hex, radix: 16) else { return (0, 127 / 255, 172 / 255) }
+        let rgb = hex.count == 8 ? raw & 0x00FF_FFFF : raw
+        return (
+            Double((rgb >> 16) & 0xFF) / 255,
+            Double((rgb >> 8) & 0xFF) / 255,
+            Double(rgb & 0xFF) / 255
+        )
+    }
+}
+
 struct AndroidScreen<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     private let content: Content
