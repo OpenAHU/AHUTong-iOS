@@ -33,7 +33,8 @@ final class CampusCardViewModel: ObservableObject {
 
     var balance: Double? {
         switch balanceState {
-        case let .loading(value), let .loaded(value), let .failed(_, value): value
+        case let .loading(value), let .failed(_, value): value
+        case let .loaded(value): value
         case .idle: cachedBalance
         }
     }
