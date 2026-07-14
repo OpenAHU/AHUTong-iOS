@@ -35,6 +35,7 @@ struct RootView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AndroidParityRootBackground())
                 .onChange(of: selectedTab) { _, _ in
                     isDetailVisible = false

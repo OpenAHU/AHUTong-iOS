@@ -58,6 +58,8 @@ struct AndroidScreen<Content: View>: View {
             AndroidParityPalette.background(colorScheme).ignoresSafeArea()
             content
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AndroidParityPalette.background(colorScheme).ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
     }
 }

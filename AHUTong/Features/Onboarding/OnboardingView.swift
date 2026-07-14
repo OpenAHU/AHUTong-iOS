@@ -144,6 +144,7 @@ private struct AndroidAgreementDialog: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: 300)
+            .clipped()
 
             if let errorMessage {
                 Text(errorMessage)
@@ -167,6 +168,7 @@ private struct AndroidAgreementDialog: View {
                 )
                     .accessibilityIdentifier("onboarding.continue")
             }
+            .zIndex(1)
         }
         .padding(24)
         .background(
@@ -183,14 +185,14 @@ private struct AndroidAgreementButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(Color.primary)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AndroidParityPalette.primaryContainer(colorScheme))
                 .frame(width: 88, height: 56)
-                .background(
-                    AndroidParityPalette.primaryContainer(colorScheme),
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                )
+                .overlay {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                }
         }
         .buttonStyle(.plain)
     }
