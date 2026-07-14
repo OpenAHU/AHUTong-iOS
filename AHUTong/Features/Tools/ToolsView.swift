@@ -17,6 +17,13 @@ struct ToolsView: View {
                     Label("校历", systemImage: "calendar")
                 }
                 .accessibilityIdentifier("tools.school-calendar")
+
+                NavigationLink {
+                    WeatherView()
+                } label: {
+                    Label("天气", systemImage: "cloud.sun")
+                }
+                .accessibilityIdentifier("tools.weather")
             }
 
             Section("学习") {
@@ -29,7 +36,7 @@ struct ToolsView: View {
             }
 
             Section("继续迁移") {
-                Text("成绩、考试、空闲教室和校园服务将按路线图继续接入。")
+                Text("成绩、考试、空闲教室和更多校园服务将按路线图继续接入。")
                     .foregroundStyle(.secondary)
             }
         }

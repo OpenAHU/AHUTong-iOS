@@ -8,8 +8,8 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P4：校园信息与内容工具 |
-| 当前焦点 | INFO-01 校历、INFO-02 电话本、CONTENT-03 学习资料已完成；AUTH-02、SCH-01 继续接入真实数据源 |
-| 下一步 | 接入真实登录状态机和教务课表 RemoteDataSource/golden fixture；同时在 iPhone 13 Pro 上验证 7 天签名安装 |
+| 当前焦点 | INFO-03 天气已形成真实 API、定位降级、缓存和完整信息展示闭环，等待 macOS CI 最终验证；CONTENT-01 已确认受 AUTH-02 阻塞 |
+| 下一步 | 推送 INFO-03 并完成 macOS 26/Xcode 26.5 单元/UI 测试与 Release iphoneos 构建；通过后继续 AUTH-02/SCH-01 真实契约 |
 | 用户/平台功能进度 | 5 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
@@ -216,8 +216,8 @@ iOS/
 | PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/Electricity/` | P5 / CARD-01、D-005 | 未开始 | 校区→楼栋→楼层→房间、余额、历史选择、金额/密码、结果核验完整；无敏感请求日志 | — | 2026-07-14 |
 | INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、Quick Look/分享或保存相册及权限降级完整 | 已接 `openahu.org/download/xiaoli.jpg`，实现图片校验、原子缓存/损坏恢复、离线回退、1–5 倍缩放、Quick Look/ShareLink 和刷新错误态；macOS 26/Xcode 26.5、iOS 26.4.1 Simulator CI `29281652468` 中 4/4 专项测试和 UI smoke 通过；Release iphoneos/IPA `29281652571` 通过；Commit `6a84c55`、`45ef3e7`、`f1ac99d` | 2026-07-14 |
 | INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 本地分类、搜索、校区号码和拨号确认完整；静态数据来源可追溯 | 已迁移 9 类 57 个部门/服务点，支持部门/分类/号码搜索、磬苑/龙河标注、0551 规范化和拨号确认，页面写明手册/更新来源；CI `29281652468` 中 4/4 专项测试和 UI smoke 通过；Release iphoneos/IPA `29281652571` 通过；Commit `6a84c55`、`45ef3e7`、`f1ac99d` | 2026-07-14 |
-| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 未开始 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；设置项必须真实生效 | — | 2026-07-14 |
-| CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 未开始 | 双列表、校区/类型/全文筛选、分页、详情与图片浏览完整 | — | 2026-07-14 |
+| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 待验证 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；设置项必须真实生效 | 已接 `uapis.cn/api/v1/misc/weather`，实现 IP 首屏、主动 GPS→反向地理编码、拒绝/失败回退、城市搜索、按查询隔离缓存、实况/预警/预报/小时/AQI/污染物/生活指数和 6 个即时生效持久化开关；6 个专项测试及四页面 UI smoke 待 macOS CI；Commit 待推送 | 2026-07-14 |
+| CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 阻塞 | 双列表、校区/类型/全文筛选、分页、详情与图片浏览完整 | 2026-07-14 匿名请求 campus/type/list 三个端点均 302 到 `index/tologin`；Android 也使用 AutoLoginInterceptor/TokenAuthenticator。解除条件：AUTH-02 建立可用校园会话后接入脱敏 fixture 与只读分页 | 2026-07-14 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 未开始 | 仅在服务端确认后提示成功；“我的帖子”由可靠数据源生成；图片能力按已确认 API 范围实现 | — | 2026-07-14 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 仓库/目录浏览、缓存、进度、Quick Look/分享、单个和批量删除完整 | 已接 Android 同源 6 个公开 GitHub 仓库，实现目录导航/排序、路径缓存/离线回退、CDN→Raw 降级、64 KiB 流式进度、哈希文件名、Quick Look/ShareLink、单删/批删；CI `29281652468` 中 6/6 专项测试和 UI smoke 通过；Release iphoneos/IPA `29281652571` 通过，Artifact `AHUTong-unsigned-ipa-8`（425,569 bytes，保留至 2026-07-20）；Commit `6a84c55`、`45ef3e7`、`f1ac99d` | 2026-07-14 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 未开始 | 重登、清缓存、主题、首页/课表/提醒偏好均真实生效；第三方许可证清单完整可追溯 | — | 2026-07-14 |
@@ -244,6 +244,7 @@ iOS/
 | 学习资料 | Android 通过 GitHub Contents API 浏览 6 个学院仓库，jsDelivr/Raw 下载到外部应用目录，再以 Intent 打开 | iOS 保持同一仓库清单和分支，目录按仓库/路径缓存；文件流式下载到 Application Support、文件名哈希化，使用 Quick Look/ShareLink；公开 GitHub 限流或断网时回退已访问目录和已下载文件 |
 | 失物招领 | 图片上传未实现；发布/删除可能提前提示成功；“我的帖子”只过滤当前已加载数据 | 不复制缺陷；服务端确认后更新 UI，“我的帖子”使用可靠查询/分页语义 |
 | 天气偏好 | 多个显示开关只改内存或未被首页读取，只有 `showOnHome` 持久化生效 | 只提供能真实生效并有测试的开关 |
+| 天气定位 | Android 首次进天气页立即请求精确位置，拒绝后回退 IP；缓存区级 adcode | iOS 首屏直接使用 IP，只有用户主动点击定位才请求 When-In-Use；GPS/反向编码失败或拒绝时自动回退 IP 并提示。显示位置、温度、天气、AQI、小时和生活指数六个开关立即改变页面并持久化，不提供尚未接入首页的无效开关 |
 | 许可证 | Android 列表标有 TODO，可能不完整 | 从 iOS 实际依赖生成/维护完整清单 |
 | 浴室数据源 | `SdkDataSource.getBathRooms()` 当前为空响应，部分功能走其他直连接口 | 以实际接口契约和 fixture 为准，不复制空实现 |
 | APK/热更新 | Android 有完整自更新、分段下载和安装流程 | 完全排除，走 App Store/TestFlight |
@@ -345,3 +346,5 @@ iOS/
 | 2026-07-14 | INFO-002 | 迁移 9 类 57 个校园电话条目、分类/全文搜索、双校区号码、0551 规范化、拨号确认和来源说明；INFO-02 已完成 | CI `29281652468`：4/4 电话本测试及三页面 UI smoke 通过；IPA `29281652571` 通过 | `6a84c55`、`45ef3e7`、`f1ac99d` |
 | 2026-07-14 | CONTENT-001 | 迁移 6 个公开学习资料仓库的目录浏览/缓存、离线回退、流式进度、双源下载、Quick Look/分享、单删/批删；CONTENT-03 已完成 | 六个 GitHub Contents 端点 GET 200；CI `29281652468`：6/6 资料测试及三页面 UI smoke 通过；IPA `29281652571`、Artifact `AHUTong-unsigned-ipa-8` 通过 | `6a84c55`、`45ef3e7`、`f1ac99d` |
 | 2026-07-14 | OPS-005 | 三个 P4 切片完成 Swift 6 严格并发、Simulator 全量回归和 Release iphoneos 打包；用户/平台功能完成数由 2 增至 5 | macOS 26/Xcode 26.5（17F42）、iPhone 17 Pro iOS 26.4.1 Simulator：43 个单元测试 + 1 条 UI smoke 全通过；Unsigned IPA run `29281652571` 成功，425,569 bytes | `f1ac99d` |
+| 2026-07-14 | INFO-003 | 迁移天气真实 API、IP/GPS/城市三种查询、权限降级、查询隔离缓存、完整天气信息和真正生效的显示设置；INFO-03 进入待验证 | 合肥城市查询和 IP 查询均 GET 200 JSON；Windows `git diff --check`、Swift 文件结构与隐私说明审计通过；6 个新增测试及四页面 UI smoke 待 macOS CI | 待推送 |
+| 2026-07-14 | CONTENT-002 | 验证失物招领只读端点的认证边界，确认 CONTENT-01 不能在 AUTH-02 前独立闭环并标记阻塞 | 匿名 GET `/lostfound/campus/all`、`/lostfound/type/all`、`/lostfound/all` 均返回 302 到登录页；Android 同时配置 AutoLoginInterceptor/TokenAuthenticator | — |

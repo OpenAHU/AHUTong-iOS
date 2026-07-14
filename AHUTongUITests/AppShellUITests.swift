@@ -39,6 +39,7 @@ final class AppShellUITests: XCTestCase {
         for route in [
             ("tools.phone-book", "校园电话本"),
             ("tools.school-calendar", "校历"),
+            ("tools.weather", "天气"),
             ("tools.study-repository", "学习资料")
         ] {
             let link = app.buttons[route.0]
