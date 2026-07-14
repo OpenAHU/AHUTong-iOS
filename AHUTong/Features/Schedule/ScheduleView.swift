@@ -303,7 +303,7 @@ struct ScheduleView: View {
         let calendar = Calendar(identifier: .gregorian)
         let date: Date
         if demo {
-            let semesterStart = calendar.date(from: DateComponents(year: 2025, month: 9, day: 1)) ?? Date()
+            let semesterStart = calendar.date(from: DateComponents(year: 2026, month: 7, day: 13)) ?? Date()
             date = calendar.date(byAdding: .day, value: (selectedWeek - 1) * 7 + dayIndex, to: semesterStart) ?? semesterStart
         } else {
             let weekday = calendar.component(.weekday, from: Date())

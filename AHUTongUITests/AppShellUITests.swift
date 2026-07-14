@@ -62,7 +62,7 @@ final class AppShellUITests: XCTestCase {
         }
 
         app.buttons["tab.schedule"].tap()
-        let demoCourse = app.buttons["schedule.course.demo-1"]
+        let demoCourse = app.buttons["schedule.course.demo-3"]
         XCTAssertTrue(demoCourse.waitForExistence(timeout: 4))
         demoCourse.tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 3))
