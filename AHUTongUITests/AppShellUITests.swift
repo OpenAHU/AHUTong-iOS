@@ -55,7 +55,9 @@ final class AppShellUITests: XCTestCase {
             switch tabID {
             case "schedule": XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 3))
             case "tools": XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
-            case "settings": XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 3))
+            case "settings":
+                XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 3))
+                XCTAssertTrue(app.buttons["settings.feedback"].waitForExistence(timeout: 3))
             default: XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 3))
             }
             waitForRendering()

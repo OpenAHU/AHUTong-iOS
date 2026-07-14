@@ -46,9 +46,10 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.debug")
-                        AndroidSettingButton(label: "意见反馈", systemImage: "bubble.left.and.exclamationmark") {
+                        AndroidSettingButton(label: "意见反馈", systemImage: AndroidParitySymbol.feedback) {
                             openURL(URL(string: "https://github.com/OpenAHU/AHUTong-iOS/issues")!)
                         }
+                        .accessibilityIdentifier("settings.feedback")
                         AndroidSettingButton(label: "清除缓存", systemImage: "line.3.horizontal.decrease.circle") {
                             showClearConfirmation = true
                         }

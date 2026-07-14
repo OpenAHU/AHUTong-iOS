@@ -93,7 +93,7 @@ private struct AndroidToolItem: Identifiable {
         AndroidToolItem(id: "exam", title: "考场查询", systemImage: "mappin.and.ellipse", tint: AndroidParityPalette.success),
         AndroidToolItem(id: "school-calendar", title: "校历", systemImage: "square.grid.2x2", tint: .purple),
         AndroidToolItem(id: "free-classroom", title: "空闲教室", systemImage: "building.2", tint: Color(red: 3 / 255, green: 169 / 255, blue: 244 / 255)),
-        AndroidToolItem(id: "lost-found", title: "失物招领", systemImage: "questionmark.bag", tint: Color(red: 25 / 255, green: 118 / 255, blue: 210 / 255)),
+        AndroidToolItem(id: "lost-found", title: "失物招领", systemImage: AndroidParitySymbol.lostAndFoundBag, tint: Color(red: 25 / 255, green: 118 / 255, blue: 210 / 255)),
         AndroidToolItem(id: "weather", title: "天气", systemImage: "sun.max.fill", tint: AndroidParityPalette.warning),
         AndroidToolItem(id: "study-repository", title: "学习资料", systemImage: "doc.on.doc", tint: Color(red: 141 / 255, green: 110 / 255, blue: 99 / 255))
     ]
@@ -104,8 +104,7 @@ private struct AndroidToolCell: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: tool.systemImage)
-                .font(.system(size: 36, weight: .regular))
+            toolIcon
                 .foregroundStyle(tool.tint)
                 .frame(width: 40, height: 40)
             Text(tool.title)
@@ -117,6 +116,22 @@ private struct AndroidToolCell: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 16)
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var toolIcon: some View {
+        if tool.id == "lost-found" {
+            ZStack {
+                Image(systemName: AndroidParitySymbol.lostAndFoundBag)
+                    .font(.system(size: 36, weight: .regular))
+                Image(systemName: AndroidParitySymbol.lostAndFoundQuestion)
+                    .font(.system(size: 13, weight: .semibold))
+                    .offset(y: 2)
+            }
+        } else {
+            Image(systemName: tool.systemImage)
+                .font(.system(size: 36, weight: .regular))
+        }
     }
 }
 

@@ -49,6 +49,21 @@ enum AndroidParityPalette {
     }
 }
 
+enum AndroidParitySymbol {
+    // The Android lost-and-found glyph is a question mark inside an outlined bag.
+    // SF Symbols does not provide that combined name, so the tool cell layers these
+    // two stable symbols instead of passing an invalid composite name to Image.
+    static let lostAndFoundBag = "bag"
+    static let lostAndFoundQuestion = "questionmark"
+    static let feedback = "exclamationmark.bubble"
+
+    static let requiredSystemNames = [
+        lostAndFoundBag,
+        lostAndFoundQuestion,
+        feedback
+    ]
+}
+
 enum AndroidThemeColor {
     static let options: [(value: String, name: String)] = [
         ("default", "默认"),
