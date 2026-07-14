@@ -39,6 +39,13 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.contributors")
+                        NavigationLink {
+                            OperationsDiagnosticsView(userID: currentUser?.studentID).androidDetailScreen()
+                        } label: {
+                            AndroidSettingRow(label: "Debug", systemImage: "terminal")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.debug")
                         AndroidSettingButton(label: "意见反馈", systemImage: "bubble.left.and.exclamationmark") {
                             openURL(URL(string: "https://github.com/OpenAHU/AHUTong-iOS/issues")!)
                         }
@@ -58,7 +65,7 @@ struct SettingsView: View {
         .confirmationDialog("您的登录状态、课表等信息将会被永久清除", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("清除", role: .destructive) {
                 Task {
-                    AppDataCleaner.clearCaches()
+                    await AppDataCleaner.clearCaches()
                     await appModel.signOut()
                     await onboardingModel.resetConsent()
                 }
@@ -406,7 +413,7 @@ private struct AndroidPreferenceToggle: View {
 
 private struct ThirdPartyLicensesView: View {
     private let entries = [
-        ("AHUTong SDK", "OpenAHU/AHUTong-sdk @ 8c2d6b8", "项目许可证与源码见固定子模块"),
+        ("AHUTong SDK", "OpenAHU/AHUTong-sdk @ e826156", "项目许可证与源码见固定子模块"),
         ("GuiXu", "Yukon163/GuiXu @ 2481ab3", "Apache License 2.0"),
         ("Rust crates", "Cargo.lock 固定依赖", "MIT / Apache-2.0 等，逐项版本见 Vendor/sdk/Cargo.lock")
     ]
@@ -573,7 +580,8 @@ private struct ContributorsView: View {
 }
 
 private enum AppDataCleaner {
-    static func clearCaches() {
+    static func clearCaches() async {
+        await AppPersistence.clearCaches()
         if let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
             try? FileManager.default.removeItem(at: support.appendingPathComponent("AHUTong/Cache", isDirectory: true))
         }

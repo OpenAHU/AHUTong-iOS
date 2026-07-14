@@ -67,6 +67,9 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func initialize(cookiesJSON: String) async throws {
+        try await RustPersistenceCoordinator.shared.configure(
+            databaseURL: GuiXuDataStore.applicationDatabaseURL()
+        )
         let body = try JSONEncoder().encode(["cookies_json": cookiesJSON])
         _ = try await request(path: "/init", method: "POST", body: body)
     }

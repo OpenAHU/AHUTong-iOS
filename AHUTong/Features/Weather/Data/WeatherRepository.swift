@@ -76,13 +76,7 @@ struct WeatherRepository: Sendable {
     }
 
     static func live() -> WeatherRepository {
-        let cache: any DataStore
-        do {
-            cache = try FileDataStore.applicationCache()
-        } catch {
-            cache = InMemoryDataStore()
-        }
-        return WeatherRepository(remote: UAPIsWeatherRemote(), cache: cache)
+        WeatherRepository(remote: UAPIsWeatherRemote(), cache: AppPersistence.migratingFileCache())
     }
 
     func load(query: WeatherQuery) async throws -> WeatherSnapshot {
@@ -124,7 +118,7 @@ struct WeatherPreferencesStore: Sendable {
     private let store: any DataStore
     private let key = "weather.display-preferences.v1"
 
-    init(store: any DataStore = UserDefaultsDataStore()) {
+    init(store: any DataStore = AppPersistence.migratingDefaults()) {
         self.store = store
     }
 

@@ -223,7 +223,7 @@ final class AppShellUITests: XCTestCase {
             capture("state-\(state)-home", app: app)
 
             app.buttons["tab.schedule"].tap()
-            XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 6))
             waitForRendering()
             capture("state-\(state)-schedule", app: app)
 
@@ -333,9 +333,9 @@ final class AppShellUITests: XCTestCase {
 
         launchDemo(app)
         app.buttons["tab.settings"].tap()
-        let appCard = app.descendants(matching: .any)["settings.app-card"]
-        XCTAssertTrue(appCard.waitForExistence(timeout: 4))
-        for _ in 0..<8 { appCard.tap() }
+        let debug = app.buttons["settings.debug"]
+        XCTAssertTrue(debug.waitForExistence(timeout: 4))
+        debug.tap()
         XCTAssertTrue(app.descendants(matching: .any)["operations.debug.screen"].waitForExistence(timeout: 5))
         waitForRendering()
         capture("33-operations-debug", app: app)

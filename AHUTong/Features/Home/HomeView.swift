@@ -121,7 +121,7 @@ final class HomeViewModel: ObservableObject {
         self.api = api
         repository = ScheduleRepository(
             remote: RustScheduleRemoteDataSource(api: api),
-            cache: UserScopedStore(store: UserDefaultsDataStore(), userID: userID)
+            cache: UserScopedStore(store: AppPersistence.migratingDefaults(), userID: userID)
         )
     }
 

@@ -228,16 +228,10 @@ struct StudyRepositoryService: Sendable {
     }
 
     static func live() -> StudyRepositoryService {
-        let cache: any DataStore
-        do {
-            cache = try FileDataStore.applicationCache()
-        } catch {
-            cache = InMemoryDataStore()
-        }
         return StudyRepositoryService(
             contentRemote: GitHubRepositoryContentRemote(),
             fileRemote: URLSessionRepositoryFileRemote(),
-            cache: cache,
+            cache: AppPersistence.migratingFileCache(),
             downloads: RepositoryDownloadFileStore.live()
         )
     }

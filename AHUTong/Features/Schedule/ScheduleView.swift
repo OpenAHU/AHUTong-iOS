@@ -13,7 +13,7 @@ final class ScheduleViewModel: ObservableObject {
 
     init(api: any CampusCoreAPI, userID: String) {
         self.api = api
-        let store = UserDefaultsDataStore()
+        let store = AppPersistence.migratingDefaults()
         repository = ScheduleRepository(
             remote: RustScheduleRemoteDataSource(api: api),
             cache: UserScopedStore(store: store, userID: userID)
