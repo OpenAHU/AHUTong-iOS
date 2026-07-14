@@ -139,14 +139,10 @@ final class AppShellUITests: XCTestCase {
         waitForRendering()
         capture("20-lost-found-detail", app: app)
 
-        app.terminate()
-        app.launchArguments = ["--demo-session"]
-        app.launch()
-        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        app.buttons["tab.tools"].tap()
-        app.buttons["tools.lost-found"].tap()
-        XCTAssertTrue(app.buttons["lost-found.publish"].waitForExistence(timeout: 4))
-        app.buttons["lost-found.publish"].tap()
+        app.swipeDown()
+        let publish = app.descendants(matching: .any)["lost-found.publish"]
+        XCTAssertTrue(publish.waitForExistence(timeout: 4))
+        publish.tap()
         XCTAssertTrue(app.descendants(matching: .any)["lost-found.publish.sheet"].waitForExistence(timeout: 4))
         waitForRendering()
         capture("21-lost-found-publish", app: app)

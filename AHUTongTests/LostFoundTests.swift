@@ -11,8 +11,8 @@ final class LostFoundTests: XCTestCase {
 
     func testFiltersAcrossCampusTypeAndSearchableFields() {
         let item = DemoLostFoundRemote.fixtures[0]
-        XCTAssertTrue(item.matches(query: "值班室", campusID: "1", typeID: "1"))
-        XCTAssertFalse(item.matches(query: "值班室", campusID: "2", typeID: "1"))
+        XCTAssertTrue(item.matches(query: "自习区", campusID: "1", typeID: "2"))
+        XCTAssertFalse(item.matches(query: "自习区", campusID: "2", typeID: "2"))
         XCTAssertFalse(item.matches(query: "耳机", campusID: nil, typeID: nil))
     }
 

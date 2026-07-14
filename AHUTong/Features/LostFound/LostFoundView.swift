@@ -166,6 +166,7 @@ struct LostFoundView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(24)
+                .accessibilityLabel("发布帖子")
                 .accessibilityIdentifier("lost-found.publish")
             }
         }
