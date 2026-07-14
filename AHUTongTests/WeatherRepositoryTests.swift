@@ -123,7 +123,8 @@ final class WeatherRepositoryTests: XCTestCase {
     }
 
     private static let fixtureData = Data(
-        #"{
+        #"""
+        {
           "province":"安徽省","city":"合肥市","district":"蜀山区","adcode":"340104",
           "weather":"雾","weather_icon":"500","temperature":29,"wind_direction":"东南风",
           "wind_power":"1级","humidity":99,"report_time":"8 分钟前发布","feels_like":35,
@@ -134,7 +135,8 @@ final class WeatherRepositoryTests: XCTestCase {
           "forecast":[{"date":"2026-07-14","week":"星期二","temp_max":33,"temp_min":26,"weather_day":"小雨","weather_night":"晴","wind_dir_day":"东南风","wind_scale_day":"2级","humidity":82,"precip":0.2,"pop":60,"uv_index":6,"sunrise":"05:15","sunset":"19:18"}],
           "hourly_forecast":[{"time":"2026-07-14 08:10:08","temperature":29,"weather":"雾","wind_direction":"东南风","wind_speed":4,"wind_scale":"1级","humidity":99,"feels_like":35,"visibility":5}],
           "life_indices":{"clothing":{"level":"炎热","brief":"极热","advice":"穿清凉夏装"},"uv":{"level":"高","brief":"较强","advice":"注意防晒"},"umbrella":{"level":"建议备伞","brief":"小雨","advice":"随身备伞"}}
-        }"#.utf8
+        }
+        """#.utf8
     )
 
     private static var fixture: WeatherResponse {
