@@ -11,7 +11,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments.append("--reset-onboarding")
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["agreement.dialog.disclaimer"].waitForExistence(timeout: 8))
         capture("01-disclaimer", app: app)
 
         app.buttons["onboarding.decline"].tap()

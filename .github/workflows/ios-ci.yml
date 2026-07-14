@@ -70,9 +70,20 @@ jobs:
 
       - name: Upload UI parity screenshots and test result
         if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/UIParityAttachments"
+          xcrun xcresulttool export attachments \
+            --path "$RUNNER_TEMP/AHUTong.xcresult" \
+            --output-path "$RUNNER_TEMP/UIParityAttachments" || true
+
+      - name: Upload UI parity evidence
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: AHUTong-ui-parity-xcresult-${{ github.run_number }}
-          path: ${{ runner.temp }}/AHUTong.xcresult
+          path: |
+            ${{ runner.temp }}/AHUTong.xcresult
+            ${{ runner.temp }}/UIParityAttachments
           if-no-files-found: warn
           retention-days: 7
