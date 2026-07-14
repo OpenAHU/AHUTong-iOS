@@ -281,9 +281,9 @@ final class AppShellUITests: XCTestCase {
 
     private func waitForRendering() {
         let rendered = expectation(description: "界面完成渲染")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             rendered.fulfill()
         }
-        wait(for: [rendered], timeout: 1)
+        wait(for: [rendered], timeout: 2)
     }
 }
