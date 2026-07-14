@@ -34,7 +34,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         waitForRendering()
         capture("04-home", app: app)
-        app.buttons["campus-card.balance"].tap()
+        let campusCardBalance = app.buttons["campus-card.balance"]
+        XCTAssertTrue(campusCardBalance.waitForExistence(timeout: 3))
+        campusCardBalance.tap()
         XCTAssertTrue(app.buttons["刷新付款码"].waitForExistence(timeout: 3))
         waitForRendering()
         capture("17-card-qrcode", app: app)

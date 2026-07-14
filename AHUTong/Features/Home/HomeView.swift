@@ -242,7 +242,6 @@ struct HomeView: View {
             }
         }
         .padding(.horizontal, 32)
-        .accessibilityIdentifier("home.widget-grid")
     }
 
     @ViewBuilder
