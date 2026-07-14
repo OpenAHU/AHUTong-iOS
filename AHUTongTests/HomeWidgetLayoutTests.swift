@@ -2,6 +2,13 @@ import XCTest
 @testable import AHUTong
 
 final class HomeWidgetLayoutTests: XCTestCase {
+    func testDefaultMatchesAndroidHomeWidgets() {
+        XCTAssertEqual(
+            HomeWidgetLayout().slots,
+            ["bathroom", "electricity", nil, nil, nil, nil, nil, nil]
+        )
+    }
+
     func testNormalizesUnknownAndDuplicateWidgetsToEightSlots() {
         let layout = HomeWidgetLayout(slots: ["grade", "grade", "unknown", "exam"])
 

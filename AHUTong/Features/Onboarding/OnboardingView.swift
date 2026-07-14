@@ -70,7 +70,7 @@ struct OnboardingView: View {
 
     var body: some View {
         AndroidScreen {
-            Color.black.opacity(colorScheme == .dark ? 0.25 : 0.08)
+            Color.black.opacity(colorScheme == .dark ? 0.50 : 0.60)
                 .ignoresSafeArea()
 
             AndroidAgreementDialog(
@@ -79,7 +79,7 @@ struct OnboardingView: View {
                 onAgree: acceptCurrent,
                 onDecline: declineCurrent
             )
-            .padding(24)
+            .frame(width: 320)
         }
         .alert("需要你的同意", isPresented: $model.showsDeclineExplanation) {
             Button("继续查看", role: .cancel) { }
@@ -88,7 +88,7 @@ struct OnboardingView: View {
         }
     }
 
-    private var documents: [AgreementDocument] { AgreementDocument.allCases }
+    private var documents: [AgreementDocument] { [.community, .privacy, .disclaimer] }
 
     private var currentDocument: AgreementDocument {
         documents[min(currentIndex, documents.count - 1)]
@@ -111,6 +111,8 @@ struct OnboardingView: View {
     private func declineCurrent() {
         if currentDocument.isRequired {
             model.showsDeclineExplanation = true
+        } else if currentIndex < documents.count - 1 {
+            currentIndex += 1
         } else {
             Task { await model.confirmRequiredDocuments() }
         }
@@ -126,17 +128,9 @@ private struct AndroidAgreementDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            HStack(spacing: 8) {
-                Text(document.title)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .accessibilityIdentifier("onboarding.title")
-                if !document.isRequired {
-                    Text("可选")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Text(document.title)
+                .font(.system(size: 24, weight: .regular))
+                .accessibilityIdentifier("onboarding.title")
 
             ScrollView {
                 Text(document.body)
@@ -153,7 +147,7 @@ private struct AndroidAgreementDialog: View {
                     .accessibilityIdentifier("onboarding.error")
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Spacer()
                 AndroidAgreementButton(
                     title: "拒绝",

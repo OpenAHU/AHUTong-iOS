@@ -24,7 +24,7 @@ struct HomeWidgetLayout: Codable, Equatable, Sendable {
     static let slotCount = 8
     private(set) var slots: [String?]
 
-    init(slots: [String?] = ["grade", "exam", "phone_book", "school_calendar", "free_classroom", "weather", "repository", nil]) {
+    init(slots: [String?] = ["bathroom", "electricity", nil, nil, nil, nil, nil, nil]) {
         let known = Set(HomeWidgetSpec.all.map(\.id))
         var seen: Set<String> = []
         self.slots = (0..<Self.slotCount).map { index in
@@ -70,8 +70,8 @@ final class HomeViewModel: ObservableObject {
 
     func load(demo: Bool) async {
         if demo {
-            courses = ScheduleViewModel.demoCourses
-            currentWeek = 2
+            courses = []
+            currentWeek = 1
             return
         }
         let year = Calendar.current.component(.year, from: Date())
@@ -101,6 +101,8 @@ struct HomeView: View {
     @StateObject private var model: HomeViewModel
     @State private var layout: HomeWidgetLayout
     @State private var isEditing = false
+    @State private var unavailableWidgetTitle = ""
+    @State private var showsUnavailableWidget = false
     private let appModel: AppModel
 
     init(appModel: AppModel) {
@@ -108,8 +110,10 @@ struct HomeView: View {
         let userID: String
         if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = "guest" }
         _model = StateObject(wrappedValue: HomeViewModel(api: appModel.campusAPI, userID: userID))
-        let stored = UserDefaults.standard.data(forKey: "home.widget-layout")
-            .flatMap { try? JSONDecoder().decode(HomeWidgetLayout.self, from: $0) }
+        let stored = UserDefaults.standard.integer(forKey: "home.widget-layout-version") == 2
+            ? UserDefaults.standard.data(forKey: "home.widget-layout")
+                .flatMap { try? JSONDecoder().decode(HomeWidgetLayout.self, from: $0) }
+            : nil
         _layout = State(initialValue: stored ?? HomeWidgetLayout())
     }
 
@@ -118,7 +122,7 @@ struct HomeView: View {
             ScrollView {
                 LazyVStack(spacing: 24) {
                     atAGlance
-                    todayCourseList
+                    if !model.todayCourses.isEmpty { todayCourseList }
                     if case let .loaded(snapshot) = weatherModel.state {
                         NavigationLink { WeatherView().androidDetailScreen() } label: {
                             HomeWeatherCard(weather: snapshot.response)
@@ -126,7 +130,7 @@ struct HomeView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("home.weather")
                     }
-                    widgetGrid
+                    homeWidgetLayout
                 }
                 .padding(.bottom, isEditing ? 420 : 96)
             }
@@ -144,7 +148,13 @@ struct HomeView: View {
         .onChange(of: layout) { _, newValue in
             if let data = try? JSONEncoder().encode(newValue) {
                 UserDefaults.standard.set(data, forKey: "home.widget-layout")
+                UserDefaults.standard.set(2, forKey: "home.widget-layout-version")
             }
+        }
+        .alert(unavailableWidgetTitle, isPresented: $showsUnavailableWidget) {
+            Button("知道了", role: .cancel) { }
+        } message: {
+            Text("该写操作仍在安全整改和真机验收阶段，本轮不提供不可验证的占位支付。")
         }
     }
 
@@ -200,31 +210,75 @@ struct HomeView: View {
         .accessibilityIdentifier("home.today-courses")
     }
 
-    private var widgetGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            ForEach(Array(layout.slots.enumerated()), id: \.offset) { index, id in
-                if let id, let spec = HomeWidgetSpec.all.first(where: { $0.id == id }) {
-                    widgetDestination(spec: spec) {
-                        HomeWidgetCard(spec: spec, isEditing: isEditing)
+    private var homeWidgetLayout: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 16) {
+                CampusCardPanel(api: appModel.campusAPI, userID: userID, demo: demo)
+                    .frame(maxWidth: .infinity)
+
+                if isEditing || layout.slots[0] != nil || layout.slots[1] != nil {
+                    VStack(spacing: 8) {
+                        homeSlot(index: 0, height: 66)
+                        homeSlot(index: 1, height: 66)
                     }
-                    .contextMenu {
-                        if isEditing { Button("移除", role: .destructive) { layout.remove(at: index) } }
+                    .frame(width: 132)
+                }
+            }
+
+            ForEach([2, 4, 6], id: \.self) { index in
+                if isEditing || layout.slots[index] != nil || layout.slots[index + 1] != nil {
+                    HStack(spacing: 16) {
+                        homeSlot(index: index, height: 76)
+                        homeSlot(index: index + 1, height: 76)
                     }
-                } else {
-                    Button { isEditing = true } label: {
-                        RoundedRectangle(cornerRadius: 24).strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [8, 6]))
-                            .foregroundStyle(.secondary)
-                            .frame(height: 112)
-                            .overlay { Image(systemName: "plus").font(.title2) }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("空白小工具槽位 \(index + 1)")
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 32)
         .accessibilityIdentifier("home.widget-grid")
     }
+
+    @ViewBuilder
+    private func homeSlot(index: Int, height: CGFloat) -> some View {
+        if let id = layout.slots[index], let spec = HomeWidgetSpec.all.first(where: { $0.id == id }) {
+            Group {
+                if spec.id == "bathroom" || spec.id == "electricity" {
+                    Button {
+                        unavailableWidgetTitle = spec.title
+                        showsUnavailableWidget = true
+                    } label: {
+                        HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    widgetDestination(spec: spec) {
+                        HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .contextMenu {
+                if isEditing { Button("移除", role: .destructive) { layout.remove(at: index) } }
+            }
+        } else if isEditing {
+            Button { isEditing = true } label: {
+                RoundedRectangle(cornerRadius: 24)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [8, 6]))
+                    .foregroundStyle(.secondary)
+                    .overlay { Text("拖到这里").font(.caption) }
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .accessibilityLabel("空白小工具槽位 \(index + 1)")
+        }
+    }
+
+    private var userID: String {
+        if case let .authenticated(user) = appModel.sessionState { return user.studentID }
+        return "guest"
+    }
+
+    private var demo: Bool { ProcessInfo.processInfo.arguments.contains("--demo-session") }
 
     private var widgetLibrary: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -287,6 +341,22 @@ private struct HomeWidgetCard: View {
         .frame(maxWidth: compact ? nil : .infinity)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: compact ? 18 : 24))
         .rotationEffect(.degrees(isEditing ? -0.7 : 0))
+    }
+}
+
+private struct HomeTextWidgetCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let title: String
+    let isEditing: Bool
+
+    var body: some View {
+        Text(title)
+            .font(.headline.bold())
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 16)
+            .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .rotationEffect(.degrees(isEditing ? -0.7 : 0))
     }
 }
 

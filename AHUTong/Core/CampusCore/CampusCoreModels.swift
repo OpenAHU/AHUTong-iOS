@@ -54,6 +54,38 @@ enum CampusCoreError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
+struct CampusCardResponseParser: Sendable {
+    func balance(from data: Data) throws -> Double {
+        let object = try responseObject(from: data)
+        if let number = object as? NSNumber { return number.doubleValue }
+        if let string = object as? String, let number = Double(string) { return number }
+        throw CampusCoreError.invalidResponse
+    }
+
+    func qrPayload(from data: Data) throws -> String {
+        let object = try responseObject(from: data)
+        guard let payload = object as? String, !payload.isEmpty else {
+            throw CampusCoreError.invalidResponse
+        }
+        return payload
+    }
+
+    private func responseObject(from data: Data) throws -> Any {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw CampusCoreError.invalidResponse
+        }
+        let code = (root["code"] as? NSNumber)?.intValue
+            ?? (root["code"] as? String).flatMap(Int.init)
+        guard code == 10_000 else {
+            throw CampusCoreError.campus(root["msg"] as? String ?? "校园卡服务返回失败")
+        }
+        guard let object = root["object"], !(object is NSNull) else {
+            throw CampusCoreError.invalidResponse
+        }
+        return object
+    }
+}
+
 struct CampusGradeParser: Sendable {
     func parse(_ data: Data) throws -> CampusGradeReport {
         let object = try JSONSerialization.jsonObject(with: data)

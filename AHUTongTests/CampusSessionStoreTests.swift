@@ -55,5 +55,7 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     func currentWeek() -> Int { 1 }
     func exams() -> [CampusExam] { [] }
     func grades() -> CampusGradeReport { CampusGradeReport(grades: [], gradePointAverage: nil, rank: nil, studentProfiles: []) }
+    func cardBalance() -> Double { 126.35 }
+    func cardQRCode() -> String { "DEMO-QR" }
     func lastInitializedCookies() -> String { cookies }
 }

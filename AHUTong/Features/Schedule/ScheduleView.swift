@@ -22,7 +22,7 @@ final class ScheduleViewModel: ObservableObject {
 
     func load(demo: Bool = false) async {
         if demo {
-            currentWeek = 2
+            currentWeek = 1
             state = .loaded(Self.demoCourses)
             source = .cache
             return
@@ -62,9 +62,13 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     static let demoCourses = [
-        Course(weekday: 1, startWeek: 1, endWeek: 16, location: "博学南楼101", name: "高等数学", teacher: "李老师", duration: 2, startPeriod: 1, courseID: "demo-1", weekIndexes: Array(1...16)),
-        Course(weekday: 3, startWeek: 1, endWeek: 16, location: "博学北楼B203", name: "大学英语", teacher: "王老师", duration: 2, startPeriod: 3, courseID: "demo-2", weekIndexes: Array(1...16)),
-        Course(weekday: 5, startWeek: 2, endWeek: 16, location: "笃行南楼301", name: "数据结构", teacher: "张老师", duration: 3, startPeriod: 6, courseID: "demo-3", weekIndexes: stride(from: 2, through: 16, by: 2).map { $0 })
+        Course(weekday: 1, startWeek: 1, endWeek: 16, location: "博学南楼 A301", name: "移动应用开发", teacher: "张老师", duration: 2, startPeriod: 1, courseID: "demo-1", weekIndexes: Array(1...16)),
+        Course(weekday: 1, startWeek: 1, endWeek: 16, location: "文典阁 205", name: "数据库系统", teacher: "李老师", duration: 3, startPeriod: 6, courseID: "demo-2", weekIndexes: Array(1...16)),
+        Course(weekday: 2, startWeek: 1, endWeek: 12, location: "笃行北楼 B402", name: "计算机网络", teacher: "王老师", duration: 2, startPeriod: 3, courseID: "demo-3", weekIndexes: Array(1...12)),
+        Course(weekday: 3, startWeek: 1, endWeek: 16, location: "博学南楼 A210", name: "操作系统", teacher: "陈老师", duration: 2, startPeriod: 1, courseID: "demo-4", weekIndexes: Array(1...16)),
+        Course(weekday: 4, startWeek: 3, endWeek: 15, location: "实验中心 503", name: "软件工程实践", teacher: "刘老师", duration: 3, startPeriod: 8, courseID: "demo-5", weekIndexes: Array(3...15)),
+        Course(weekday: 5, startWeek: 1, endWeek: 16, location: "磬苑操场", name: "大学体育", teacher: "赵老师", duration: 2, startPeriod: 3, courseID: "demo-6", weekIndexes: Array(1...16)),
+        Course(weekday: 7, startWeek: 4, endWeek: 16, location: "线上", name: "形势与政策", teacher: "辅导员", duration: 2, startPeriod: 11, courseID: "demo-7", weekIndexes: [4, 8, 12, 16])
     ]
 }
 
@@ -265,20 +269,40 @@ struct ScheduleView: View {
     }
 
     private func courseColor(_ name: String) -> Color {
-        let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .indigo, .teal]
-        return colors[Int(UInt(bitPattern: name.hashValue) % UInt(colors.count))]
+        let names: [String]
+        if case let .loaded(courses) = model.state {
+            var uniqueNames: [String] = []
+            for course in courses where !uniqueNames.contains(course.name) {
+                uniqueNames.append(course.name)
+            }
+            names = uniqueNames
+        } else {
+            names = [name]
+        }
+        let index = names.firstIndex(of: name) ?? 0
+        return Color(hue: Double(index) / Double(max(names.count, 1)), saturation: 0.62, brightness: 0.72)
     }
 
-    private var currentWeekdayIndex: Int { (Calendar.current.component(.weekday, from: Date()) + 5) % 7 }
+    private var currentWeekdayIndex: Int {
+        demo ? -1 : (Calendar.current.component(.weekday, from: Date()) + 5) % 7
+    }
 
     private func dateLabel(dayIndex: Int) -> String {
         let calendar = Calendar(identifier: .gregorian)
-        let weekday = calendar.component(.weekday, from: Date())
-        let mondayOffset = -((weekday + 5) % 7) + (selectedWeek - model.currentWeek) * 7
-        let date = calendar.date(byAdding: .day, value: mondayOffset + dayIndex, to: Date()) ?? Date()
+        let date: Date
+        if demo {
+            let semesterStart = calendar.date(from: DateComponents(year: 2025, month: 9, day: 1)) ?? Date()
+            date = calendar.date(byAdding: .day, value: (selectedWeek - 1) * 7 + dayIndex, to: semesterStart) ?? semesterStart
+        } else {
+            let weekday = calendar.component(.weekday, from: Date())
+            let mondayOffset = -((weekday + 5) % 7) + (selectedWeek - model.currentWeek) * 7
+            date = calendar.date(byAdding: .day, value: mondayOffset + dayIndex, to: Date()) ?? Date()
+        }
         let components = calendar.dateComponents([.month, .day], from: date)
         return String(format: "%02d-%02d", components.month ?? 0, components.day ?? 0)
     }
+
+    private var demo: Bool { ProcessInfo.processInfo.arguments.contains("--demo-session") }
 
     private func shortLocation(_ location: String) -> String {
         location.replacingOccurrences(of: "博学北楼", with: "博北")

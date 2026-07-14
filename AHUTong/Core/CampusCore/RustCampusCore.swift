@@ -50,12 +50,15 @@ protocol CampusCoreAPI: Sendable {
     func currentWeek() async throws -> Int
     func exams() async throws -> [CampusExam]
     func grades() async throws -> CampusGradeReport
+    func cardBalance() async throws -> Double
+    func cardQRCode() async throws -> String
 }
 
 actor RustCampusCoreAPI: CampusCoreAPI {
     private let server: RustLocalServer
     private let session: URLSession
     private let gradeParser = CampusGradeParser()
+    private let cardParser = CampusCardResponseParser()
 
     init(server: RustLocalServer = .shared, session: URLSession = .shared) {
         self.server = server
@@ -96,6 +99,14 @@ actor RustCampusCoreAPI: CampusCoreAPI {
 
     func grades() async throws -> CampusGradeReport {
         try gradeParser.parse(try await request(path: "/grade"))
+    }
+
+    func cardBalance() async throws -> Double {
+        try cardParser.balance(from: try await request(path: "/ycard/balance"))
+    }
+
+    func cardQRCode() async throws -> String {
+        try cardParser.qrPayload(from: try await request(path: "/ycard/qrcode"))
     }
 
     private func request(path: String, method: String = "GET", body: Data? = nil) async throws -> Data {

@@ -14,21 +14,22 @@ final class AppShellUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 8))
         waitForRendering()
-        capture("01-disclaimer", app: app)
+        capture("01-community", app: app)
+
+        app.buttons["onboarding.decline"].tap()
+        XCTAssertTrue(app.staticTexts["隐私政策"].waitForExistence(timeout: 2))
+        waitForRendering()
+        capture("02-privacy", app: app)
 
         app.buttons["onboarding.decline"].tap()
         XCTAssertTrue(app.alerts["需要你的同意"].waitForExistence(timeout: 2))
         app.alerts.buttons["继续查看"].tap()
 
         app.buttons["onboarding.continue"].tap()
-        XCTAssertTrue(app.staticTexts["隐私政策"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["温馨提示与免责声明"].waitForExistence(timeout: 2))
         waitForRendering()
-        capture("02-privacy", app: app)
+        capture("03-disclaimer", app: app)
         app.buttons["onboarding.continue"].tap()
-        XCTAssertTrue(app.staticTexts["商业合作"].waitForExistence(timeout: 2))
-        waitForRendering()
-        capture("03-community", app: app)
-        app.buttons["onboarding.decline"].tap()
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         waitForRendering()
