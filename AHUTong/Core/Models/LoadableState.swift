@@ -39,4 +39,6 @@ enum DemoDataState: String {
             .map { String($0.dropFirst(prefix.count)) }
         return value.flatMap(Self.init(rawValue:)) ?? .normal
     }
+
+    static let referenceDate = Date(timeIntervalSince1970: 1_784_023_200) // 2026-07-14 10:00:00 UTC
 }

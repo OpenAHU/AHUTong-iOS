@@ -102,7 +102,7 @@ struct CampusCardPanel: View {
         Group {
             if showsQRCode { qrCard } else { balanceCard }
         }
-        .frame(height: showsQRCode ? 344 : 140)
+        .frame(height: showsQRCode ? 400 : 140)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
@@ -171,9 +171,10 @@ struct CampusCardPanel: View {
                 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
             }
             .font(.headline)
+            .foregroundStyle(.primary)
             .frame(height: 48)
 
-            qrImage(size: 200)
+            qrImage(size: 138)
                 .contentShape(Rectangle())
                 .onTapGesture { Task { await model.loadQRCode(demo: demo) } }
 
@@ -206,7 +207,9 @@ struct CampusCardPanel: View {
     private func qrImage(size: CGFloat) -> some View {
         switch model.qrState {
         case let .loaded(payload):
-            PaymentQRCode(payload: payload).frame(width: size, height: size)
+            PaymentQRCode(payload: payload)
+                .frame(width: size, height: size)
+                .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.gray, lineWidth: 1) }
         case .loading:
             ProgressView().frame(width: size, height: size)
         case let .failed(message):

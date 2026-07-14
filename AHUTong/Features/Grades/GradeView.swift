@@ -39,8 +39,8 @@ final class GradeViewModel: ObservableObject {
             CampusGrade(courseName: "操作系统", courseCode: "COMP3402", credit: 3.5, score: "90", gradePoint: 3.6, courseProperty: "专业必修", semesterID: 202420252, semesterName: "2024-2025-2"),
             CampusGrade(courseName: "软件工程实践", courseCode: "COMP3403", credit: 2, score: "95", gradePoint: 3.9, courseProperty: "实践教学", semesterID: 202420252, semesterName: "2024-2025-2")
         ],
-        gradePointAverage: 3.72,
-        rank: "12 / 178",
+        gradePointAverage: nil,
+        rank: nil,
         studentProfiles: ["计算机科学与技术"]
     )
 }

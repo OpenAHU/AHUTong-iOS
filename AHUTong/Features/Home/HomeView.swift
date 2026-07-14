@@ -51,11 +51,68 @@ struct HomeWidgetLayout: Codable, Equatable, Sendable {
     }
 }
 
+struct HomeCourseSummary: Equatable {
+    let title: String
+    let headline: String
+    let detail: String
+    let focusedCourseID: String?
+
+    static func make(courses: [Course], now: Date, calendar: Calendar = .current) -> Self {
+        let components = calendar.dateComponents([.hour, .minute], from: now)
+        let currentMinutes = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        let current = courses.first { range(for: $0).contains(currentMinutes) }
+        let next = courses.first { currentMinutes < range(for: $0).lowerBound }
+        let focused = current ?? next
+
+        guard let focused else {
+            return Self(title: "今日课程", headline: "已全部上完", detail: "准备您自己的安排吧", focusedCourseID: nil)
+        }
+
+        if current != nil {
+            let duration = range(for: focused).upperBound - currentMinutes
+            return Self(
+                title: "正在上课",
+                headline: focused.name,
+                detail: "距下课还有 \(durationText(duration))",
+                focusedCourseID: focused.courseID
+            )
+        }
+
+        let duration = range(for: focused).lowerBound - currentMinutes
+        return Self(
+            title: "下节课是",
+            headline: focused.name,
+            detail: "还有 \(durationText(duration))，在 \(focused.location)",
+            focusedCourseID: focused.courseID
+        )
+    }
+
+    static func range(for course: Course) -> ClosedRange<Int> {
+        let start = timetable[course.startPeriod]?.lowerBound ?? 0
+        let end = timetable[course.endPeriod]?.upperBound ?? start
+        return start...end
+    }
+
+    private static let timetable: [Int: ClosedRange<Int>] = [
+        1: 480...525, 2: 530...575, 3: 590...635, 4: 640...685,
+        5: 690...735, 6: 840...885, 7: 890...935, 8: 950...995,
+        9: 1_000...1_045, 10: 1_050...1_095, 11: 1_140...1_185,
+        12: 1_190...1_235, 13: 1_240...1_285
+    ]
+
+    private static func durationText(_ minutes: Int) -> String {
+        if minutes.isMultiple(of: 60) { return "\(minutes / 60)小时整" }
+        if minutes > 60 { return "\(minutes / 60)小时\(minutes % 60)分钟" }
+        return "\(minutes)分钟"
+    }
+}
+
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published private(set) var courses: [Course] = []
     @Published private(set) var currentWeek = 1
     @Published private(set) var errorMessage: String?
+    @Published private(set) var referenceDate = Date()
 
     private let repository: ScheduleRepository
     private let api: any CampusCoreAPI
@@ -70,8 +127,9 @@ final class HomeViewModel: ObservableObject {
 
     func load(demo: Bool) async {
         if demo {
-            courses = []
+            courses = DemoDataState.current == .normal ? ScheduleViewModel.demoCourses : []
             currentWeek = 1
+            referenceDate = DemoDataState.referenceDate
             return
         }
         let year = Calendar.current.component(.year, from: Date())
@@ -89,9 +147,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     var todayCourses: [Course] {
-        let weekday = (Calendar.current.component(.weekday, from: Date()) + 5) % 7 + 1
+        let weekday = (Calendar.current.component(.weekday, from: referenceDate) + 5) % 7 + 1
         return courses.filter { $0.weekday == weekday && $0.occurs(inWeek: currentWeek) }
             .sorted { $0.startPeriod < $1.startPeriod }
+    }
+
+    var summary: HomeCourseSummary {
+        HomeCourseSummary.make(courses: todayCourses, now: referenceDate)
     }
 }
 
@@ -167,29 +229,26 @@ struct HomeView: View {
 
     private var atAGlance: some View {
         VStack(alignment: .leading, spacing: 32) {
-            Text(Self.dateFormatter.string(from: Date()))
+            Text(Self.dateFormatter.string(from: model.referenceDate))
                 .font(.body)
                 .padding(.leading, 32)
                 .padding(.trailing, 16)
                 .padding(.top, 8)
             VStack(alignment: .leading, spacing: 8) {
-                Text("今日课程").font(.body.bold()).accessibilityIdentifier("screen.home")
-                Text(headline).font(.system(size: 40, weight: .bold)).lineLimit(2)
-                Text(subheadline).font(.body).lineLimit(1)
+                Text(model.summary.title).font(.body.bold()).accessibilityIdentifier("screen.home")
+                Text(model.summary.headline)
+                    .font(.system(size: 40, weight: .bold)).lineLimit(2)
+                    .padding(.leading, model.summary.focusedCourseID == nil ? 0 : 8)
+                    .overlay(alignment: .leading) {
+                        if model.summary.focusedCourseID != nil {
+                            Rectangle().fill(Color(red: 100 / 255, green: 122 / 255, blue: 190 / 255)).frame(width: 4)
+                        }
+                    }
+                Text(model.summary.detail).font(.body).lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 32)
         }
-    }
-
-    private var headline: String {
-        guard let next = model.todayCourses.first else { return "已全部上完" }
-        return next.name
-    }
-
-    private var subheadline: String {
-        guard let next = model.todayCourses.first else { return "准备您自己的安排吧" }
-        return "第 \(next.startPeriod)-\(next.endPeriod) 节 · \(shortLocation(next.location))"
     }
 
     @ViewBuilder
@@ -202,12 +261,22 @@ struct HomeView: View {
                         .font(.body).foregroundStyle(.secondary)
                 } else {
                     ForEach(model.todayCourses) { course in
+                        let isFocused = model.summary.focusedCourseID == course.courseID
                         HStack(spacing: 16) {
+                            Circle()
+                                .fill(Color(red: 100 / 255, green: 122 / 255, blue: 190 / 255))
+                                .frame(width: isFocused ? 8 : 4, height: isFocused ? 8 : 4)
                             Text("\(course.startPeriod) - \(course.endPeriod)").frame(width: 52, alignment: .leading)
-                            Text(course.name).fontWeight(.medium).lineLimit(1)
+                            Text(course.name).fontWeight(isFocused ? .bold : .medium).lineLimit(1)
                             Spacer()
                             Text(shortLocation(course.location)).foregroundStyle(.secondary).lineLimit(1)
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 12)
+                        .background(
+                            isFocused ? AndroidParityPalette.primaryContainer(colorScheme) : .clear,
+                            in: Capsule()
+                        )
                     }
                 }
             }
