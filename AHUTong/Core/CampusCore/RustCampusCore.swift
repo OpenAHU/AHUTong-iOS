@@ -46,6 +46,7 @@ protocol CampusCoreAPI: Sendable {
     func initialize(cookiesJSON: String) async throws
     func login(studentID: String, password: String) async throws -> User
     func dumpCookies() async throws -> String
+    func cookiesFlat() async throws -> String
     func schedule() async throws -> [Course]
     func currentWeek() async throws -> Int
     func exams() async throws -> [CampusExam]
@@ -79,6 +80,10 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     func dumpCookies() async throws -> String {
         let data = try await request(path: "/cookies/dump")
         return try JSONDecoder().decode(CookieDump.self, from: data).cookies
+    }
+
+    func cookiesFlat() async throws -> String {
+        String(decoding: try await request(path: "/cookies/flat"), as: UTF8.self)
     }
 
     func schedule() async throws -> [Course] {

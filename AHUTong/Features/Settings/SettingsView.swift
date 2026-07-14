@@ -154,18 +154,27 @@ private struct AndroidSettingButton: View {
 }
 
 @MainActor
-private final class PreferencesModel: ObservableObject {
+final class PreferencesModel: ObservableObject {
     @Published var errorMessage: String?
     private let api: any CampusCoreAPI
     private let reminder = CourseReminderCoordinator()
+    private let demo: Bool
 
-    init(api: any CampusCoreAPI) { self.api = api }
+    init(api: any CampusCoreAPI, demo: Bool = ProcessInfo.processInfo.arguments.contains("--demo-session")) {
+        self.api = api
+        self.demo = demo
+    }
 
     func setReminders(_ enabled: Bool) async -> Bool {
         do {
-            let courses = try await api.schedule()
-            let week = try await api.currentWeek()
-            let result = try await reminder.setEnabled(enabled, courses: courses, currentWeek: week)
+            let courses = demo ? ScheduleViewModel.demoCourses : try await api.schedule()
+            let week = demo ? 1 : try await api.currentWeek()
+            let result = try await reminder.setEnabled(
+                enabled,
+                courses: courses,
+                currentWeek: week,
+                now: demo ? DemoDataState.referenceDate : Date()
+            )
             if enabled && !result { errorMessage = "未授予通知权限，无法开启课前提醒" }
             return result
         } catch {
@@ -204,7 +213,8 @@ private struct AndroidPreferencesView: View {
                         preferenceRow(
                             title: "课前提醒",
                             detail: "上课前 10 分钟提醒下一节课",
-                            isOn: reminders
+                            isOn: reminders,
+                            identifier: "preferences.course-reminders"
                         ) {
                             Task {
                                 let actual = await model.setReminders(!reminders)
@@ -217,7 +227,8 @@ private struct AndroidPreferencesView: View {
                         preferenceRow(
                             title: "课前倒计时岛卡提醒（实验性）",
                             detail: "仅部分系统支持 需同时开启课前提醒",
-                            isOn: false
+                            isOn: false,
+                            identifier: "preferences.island-reminder"
                         ) { showsIslandExplanation = true }
                         Button("管理系统岛卡权限") { showsIslandExplanation = true }
                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -227,7 +238,7 @@ private struct AndroidPreferencesView: View {
                     }
 
                     preferenceSection("液态玻璃") {
-                        preferenceRow(title: "启用液态玻璃效果", isOn: liquidGlass) {
+                        preferenceRow(title: "启用液态玻璃效果", isOn: liquidGlass, identifier: "preferences.liquid-glass") {
                             liquidGlass.toggle()
                         }
                     }
@@ -284,6 +295,7 @@ private struct AndroidPreferencesView: View {
         title: String,
         detail: String? = nil,
         isOn: Bool,
+        identifier: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -302,6 +314,7 @@ private struct AndroidPreferencesView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier ?? "")
     }
 
     private var customColorValue: String {

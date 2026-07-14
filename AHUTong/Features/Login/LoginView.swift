@@ -78,6 +78,14 @@ struct LoginView: View {
             }
             .overlay(alignment: .bottom) { dynamicLoginButton }
         }
+        .task {
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--demo-login-state=working") {
+                state = .working
+            } else if arguments.contains("--demo-login-state=error") {
+                state = .failed("账号或密码错误")
+            }
+        }
     }
 
     private var loginFace: some View {

@@ -25,6 +25,8 @@ targets:
     platform: iOS
     sources:
       - path: AHUTong
+    dependencies:
+      - target: AHUTongWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.openahu.ahutong
@@ -34,17 +36,13 @@ targets:
         VERSIONING_SYSTEM: apple-generic
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: 安大通
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
-        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 用于按当前位置查询本地天气；拒绝后仍可使用 IP 定位或城市搜索。
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: AHUTong/Info.plist
         # Keep device builds installable until the real iOS app icon set is migrated.
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SWIFT_OBJC_BRIDGING_HEADER: AHUTong/Support/AHUTong-Bridging-Header.h
+        CODE_SIGN_ENTITLEMENTS: AHUTong/AHUTong.entitlements
         LIBRARY_SEARCH_PATHS: "$(inherited) $(BUILT_PRODUCTS_DIR)"
         OTHER_LDFLAGS: "$(inherited) -lahutong_rs -framework Security -framework SystemConfiguration -framework CoreFoundation -liconv -lresolv"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
@@ -60,6 +58,25 @@ targets:
       gatherCoverageData: true
       coverageTargets:
         - AHUTong
+
+  AHUTongWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: AHUTongWidget
+      - path: AHUTong/Core/Widget
+      - path: AHUTong/Core/Models/Course.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.openahu.ahutong.widget
+        PRODUCT_NAME: AHUTongWidget
+        MARKETING_VERSION: 3.1.9
+        CURRENT_PROJECT_VERSION: 1
+        INFOPLIST_FILE: AHUTongWidget/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: AHUTongWidget/AHUTongWidget.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
 
   AHUTongTests:
     type: bundle.unit-test

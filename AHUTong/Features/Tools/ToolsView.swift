@@ -46,6 +46,8 @@ struct ToolsView: View {
             case "school-calendar": SchoolCalendarView().androidDetailScreen()
             case "weather": WeatherView().androidDetailScreen()
             case "study-repository": StudyRepositoryView().androidDetailScreen()
+            case "free-classroom": FreeClassroomView(appModel: appModel).androidDetailScreen()
+            case "lost-found": LostFoundView(appModel: appModel).androidDetailScreen()
             default: AndroidToolPlaceholder(title: tool.title).androidDetailScreen()
             }
         } label: {

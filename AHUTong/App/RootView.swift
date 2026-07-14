@@ -60,6 +60,13 @@ struct RootView: View {
             )
             _ = await (onboarding, session)
         }
+        .onOpenURL { url in
+            guard url.scheme == "ahutong" else { return }
+            if url.host == "schedule" {
+                selectedTab = .schedule
+                isDetailVisible = false
+            }
+        }
         .tint(themeTint)
     }
 

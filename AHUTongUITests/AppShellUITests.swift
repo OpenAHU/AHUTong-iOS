@@ -118,6 +118,86 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
         waitForRendering()
         capture("16-preferences", app: app)
+
+        restartAtTools(app)
+        app.buttons["tools.free-classroom"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["free-classroom.screen"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["free-classroom.search"].waitForExistence(timeout: 4))
+        app.buttons["free-classroom.search"].tap()
+        XCTAssertTrue(app.staticTexts["201 教室"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("18-free-classroom", app: app)
+
+        restartAtTools(app)
+        app.buttons["tools.lost-found"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["lost-found.screen"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["lost-found.item.demo-lost-1"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("19-lost-found", app: app)
+        app.buttons["lost-found.item.demo-lost-1"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["lost-found.detail"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("20-lost-found-detail", app: app)
+
+        app.terminate()
+        app.launchArguments = ["--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        app.buttons["tab.tools"].tap()
+        app.buttons["tools.lost-found"].tap()
+        XCTAssertTrue(app.buttons["lost-found.publish"].waitForExistence(timeout: 4))
+        app.buttons["lost-found.publish"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["lost-found.publish.sheet"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("21-lost-found-publish", app: app)
+
+        app.terminate()
+        app.launchArguments = ["--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        app.buttons["tab.tools"].tap()
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["添加桌面课表微件"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("22-widget-preview", app: app)
+    }
+
+    @MainActor
+    func testAndroidParityLoginAndReminderSystemStates() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-consent"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["login.title"].waitForExistence(timeout: 5))
+        waitForRendering()
+        capture("00-login", app: app)
+
+        app.terminate()
+        app.launchArguments = ["--demo-consent", "--demo-login-state=error"]
+        app.launch()
+        XCTAssertTrue(app.buttons["login.submit"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["账号或密码错误"].waitForExistence(timeout: 3))
+        waitForRendering()
+        capture("state-error-login", app: app)
+
+        app.terminate()
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        app.buttons["tab.settings"].tap()
+        app.buttons["settings.preferences"].tap()
+        let reminder = app.buttons["preferences.course-reminders"]
+        XCTAssertTrue(reminder.waitForExistence(timeout: 4))
+        reminder.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if springboard.alerts.firstMatch.waitForExistence(timeout: 3) {
+            let allow = springboard.alerts.buttons.matching(
+                NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "允许", "Allow")
+            ).firstMatch
+            XCTAssertTrue(allow.waitForExistence(timeout: 2))
+            allow.tap()
+        }
+        waitForRendering()
+        capture("23-course-reminder-enabled", app: app)
     }
 
     @MainActor
@@ -155,6 +235,30 @@ final class AppShellUITests: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any)["exams.screen"].waitForExistence(timeout: 4))
             waitForRendering()
             capture("state-\(state)-exams", app: app)
+
+            app.terminate()
+            app.launchArguments = arguments
+            app.launch()
+            XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+            app.buttons["tab.tools"].tap()
+            app.buttons["tools.free-classroom"].tap()
+            XCTAssertTrue(app.buttons["free-classroom.search"].waitForExistence(timeout: 4))
+            app.buttons["free-classroom.search"].tap()
+            let classroomState = app.descendants(matching: .any)["free-classroom.\(state)"]
+            XCTAssertTrue(classroomState.waitForExistence(timeout: 4))
+            waitForRendering()
+            capture("state-\(state)-free-classroom", app: app)
+
+            app.terminate()
+            app.launchArguments = arguments
+            app.launch()
+            XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+            app.buttons["tab.tools"].tap()
+            app.buttons["tools.lost-found"].tap()
+            let lostFoundState = app.descendants(matching: .any)["lost-found.\(state)"]
+            XCTAssertTrue(lostFoundState.waitForExistence(timeout: 4))
+            waitForRendering()
+            capture("state-\(state)-lost-found", app: app)
             app.terminate()
         }
     }

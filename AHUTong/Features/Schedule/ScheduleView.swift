@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 @MainActor
 final class ScheduleViewModel: ObservableObject {
@@ -24,10 +25,16 @@ final class ScheduleViewModel: ObservableObject {
         if demo {
             currentWeek = 1
             switch DemoDataState.current {
-            case .normal: state = .loaded(Self.demoCourses)
+            case .normal:
+                state = .loaded(Self.demoCourses)
+                await updateSystemIntegrations(courses: Self.demoCourses, referenceDate: DemoDataState.referenceDate)
             case .loading: state = .loading
-            case .empty: state = .empty
-            case .error: state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
+            case .empty:
+                state = .empty
+                await updateSystemIntegrations(courses: [], referenceDate: DemoDataState.referenceDate)
+            case .error:
+                state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
+                await publishWidget(.unavailable(.expired, updatedAt: DemoDataState.referenceDate))
             }
             source = .cache
             return
@@ -40,8 +47,10 @@ final class ScheduleViewModel: ObservableObject {
             currentWeek = (try? await week) ?? 1
             source = result.source
             state = .loaded(result.courses)
+            await updateSystemIntegrations(courses: result.courses)
         } catch {
             state = .failed(AppErrorState(message: error.localizedDescription))
+            await publishWidget(.unavailable(.expired))
         }
     }
 
@@ -52,9 +61,28 @@ final class ScheduleViewModel: ObservableObject {
             source = result.source
             state = .loaded(result.courses)
             currentWeek = (try? await api.currentWeek()) ?? currentWeek
+            await updateSystemIntegrations(courses: result.courses)
         } catch {
             state = .failed(AppErrorState(message: error.localizedDescription))
+            await publishWidget(.unavailable(.expired))
         }
+    }
+
+    private func updateSystemIntegrations(courses: [Course], referenceDate: Date = Date()) async {
+        await publishWidget(.make(courses: courses, currentWeek: currentWeek, updatedAt: referenceDate))
+        if UserDefaults.standard.bool(forKey: "notifications.course-reminders") {
+            _ = try? await CourseReminderCoordinator().setEnabled(
+                true,
+                courses: courses,
+                currentWeek: currentWeek,
+                now: referenceDate
+            )
+        }
+    }
+
+    private func publishWidget(_ snapshot: ScheduleWidgetSnapshot) async {
+        try? await ScheduleWidgetSnapshotStore.shared.save(snapshot)
+        WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
     }
 
     private static func currentSemester(date: Date = Date()) -> Semester {

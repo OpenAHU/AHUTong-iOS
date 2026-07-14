@@ -1,4 +1,5 @@
 import Foundation
+import WidgetKit
 
 struct CampusSessionSnapshot: Codable, Equatable, Sendable {
     let user: User
@@ -62,7 +63,24 @@ final class AppModel: ObservableObject {
                 return
             }
             try await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
-            sessionState = .authenticated(snapshot.user)
+            do {
+                _ = try await campusAPI.currentWeek()
+                sessionState = .authenticated(snapshot.user)
+            } catch {
+                guard let credentials = try await credentialStore.credentials(for: snapshot.user.studentID) else {
+                    try? await sessionStore.clear()
+                    sessionState = .signedOut
+                    return
+                }
+                try await campusAPI.initialize(cookiesJSON: "")
+                let user = try await campusAPI.login(
+                    studentID: credentials.studentID,
+                    password: credentials.password
+                )
+                let cookies = try await campusAPI.dumpCookies()
+                try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+                sessionState = .authenticated(user)
+            }
         } catch {
             sessionState = .signedOut
         }
@@ -84,6 +102,8 @@ final class AppModel: ObservableObject {
         }
         try? await sessionStore.clear()
         try? await campusAPI.initialize(cookiesJSON: "")
+        try? await ScheduleWidgetSnapshotStore.shared.save(.unavailable(.signedOut))
+        WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
         sessionState = .signedOut
     }
 }

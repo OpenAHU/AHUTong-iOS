@@ -105,7 +105,13 @@ actor CourseReminderCoordinator {
         self.planner = planner
     }
 
-    func setEnabled(_ enabled: Bool, courses: [Course], currentWeek: Int) async throws -> Bool {
+    func setEnabled(
+        _ enabled: Bool,
+        courses: [Course],
+        currentWeek: Int,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) async throws -> Bool {
         if !enabled {
             try await scheduler.replaceCourseReminders(with: [])
             return false
@@ -119,7 +125,7 @@ actor CourseReminderCoordinator {
         }
         guard granted else { return false }
         try await scheduler.replaceCourseReminders(
-            with: planner.requests(courses: courses, currentWeek: currentWeek)
+            with: planner.requests(courses: courses, currentWeek: currentWeek, now: now, calendar: calendar)
         )
         return true
     }
