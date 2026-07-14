@@ -3,6 +3,8 @@ import SwiftUI
 enum AndroidParityPalette {
     static let brand = Color(red: 0 / 255, green: 127 / 255, blue: 172 / 255)
     static let accent = Color(red: 0 / 255, green: 136 / 255, blue: 255 / 255)
+    static let systemTheme = Color(red: 103 / 255, green: 80 / 255, blue: 164 / 255)
+    static let liquidToggle = Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255)
     static let folder = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)
     static let success = Color(red: 76 / 255, green: 175 / 255, blue: 80 / 255)
     static let warning = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)
@@ -63,7 +65,8 @@ enum AndroidThemeColor {
     ]
 
     static func color(for value: String) -> Color {
-        if value == "default" || value == "blue" { return AndroidParityPalette.brand }
+        if value == "default" { return AndroidParityPalette.systemTheme }
+        if value == "blue" { return AndroidParityPalette.brand }
         if value == "green" { return .green }
         if value == "purple" { return .purple }
         if value == "orange" { return .orange }

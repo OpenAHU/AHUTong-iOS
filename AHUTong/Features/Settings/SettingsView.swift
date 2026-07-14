@@ -349,7 +349,7 @@ private struct AndroidPreferenceToggle: View {
     var body: some View {
         ZStack(alignment: isOn ? .trailing : .leading) {
             Capsule()
-                .fill(isOn ? AndroidParityPalette.brand : Color.secondary.opacity(0.24))
+                .fill(isOn ? AndroidParityPalette.liquidToggle : Color.secondary.opacity(0.24))
                 .frame(width: 52, height: 32)
             Circle()
                 .fill(.white)
