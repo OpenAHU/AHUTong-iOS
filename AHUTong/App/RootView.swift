@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct RootView: View {
+    @AppStorage("theme.color") private var themeColor = "blue"
     @State private var selectedTab: AppTab = .home
     @State private var isDetailVisible = false
     @StateObject private var onboardingModel: OnboardingViewModel
+    @StateObject private var appModel: AppModel
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -13,6 +15,7 @@ struct RootView: View {
         _onboardingModel = StateObject(
             wrappedValue: OnboardingViewModel(store: consentStore)
         )
+        _appModel = StateObject(wrappedValue: AppModel())
     }
 
     var body: some View {
@@ -23,6 +26,10 @@ struct RootView: View {
                 NavigationStack {
                     OnboardingView(model: onboardingModel)
                 }
+            } else if appModel.sessionState == .loading {
+                AndroidSplashView()
+            } else if appModel.sessionState == .signedOut {
+                LoginView(appModel: appModel)
             } else {
                 ZStack(alignment: .bottom) {
                     NavigationStack {
@@ -44,23 +51,37 @@ struct RootView: View {
             }
         }
         .task {
-            await onboardingModel.load(
+            async let onboarding: Void = onboardingModel.load(
                 resetForUITesting: ProcessInfo.processInfo.arguments.contains("--reset-onboarding")
             )
+            async let session: Void = appModel.restore(
+                demoSession: ProcessInfo.processInfo.arguments.contains("--demo-session")
+            )
+            _ = await (onboarding, session)
         }
+        .tint(themeTint)
     }
 
     @ViewBuilder
     private func destination(for tab: AppTab) -> some View {
         switch tab {
         case .home:
-            HomeView()
+            HomeView(appModel: appModel)
         case .schedule:
-            ScheduleView()
+            ScheduleView(appModel: appModel)
         case .tools:
-            ToolsView()
+            ToolsView(appModel: appModel)
         case .settings:
-            SettingsView(onboardingModel: onboardingModel)
+            SettingsView(onboardingModel: onboardingModel, appModel: appModel)
+        }
+    }
+
+    private var themeTint: Color {
+        switch themeColor {
+        case "green": .green
+        case "purple": .purple
+        case "orange": .orange
+        default: AndroidParityPalette.brand
         }
     }
 }

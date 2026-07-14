@@ -4,6 +4,7 @@ struct ToolsView: View {
     @Environment(\.colorScheme) private var colorScheme
     private let tools = AndroidToolItem.all
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
+    let appModel: AppModel
 
     var body: some View {
         AndroidScreen {
@@ -31,6 +32,8 @@ struct ToolsView: View {
     private func destination(for tool: AndroidToolItem) -> some View {
         NavigationLink {
             switch tool.id {
+            case "grade": GradeView(appModel: appModel).androidDetailScreen()
+            case "exam": ExamView(appModel: appModel).androidDetailScreen()
             case "phone-book": PhoneBookView().androidDetailScreen()
             case "school-calendar": SchoolCalendarView().androidDetailScreen()
             case "weather": WeatherView().androidDetailScreen()

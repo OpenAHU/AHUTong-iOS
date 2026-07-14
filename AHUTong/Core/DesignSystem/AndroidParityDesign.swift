@@ -196,6 +196,7 @@ struct AndroidEmptyState: View {
 
 struct AndroidBottomBar: View {
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("visual.liquid-glass") private var liquidGlass = true
     @Binding var selection: AppTab
     @Namespace private var selectionAnimation
 
@@ -231,7 +232,13 @@ struct AndroidBottomBar: View {
         }
         .padding(4)
         .frame(height: 64)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+        .background {
+            if liquidGlass {
+                Capsule(style: .continuous).fill(.ultraThinMaterial)
+            } else {
+                Capsule(style: .continuous).fill(AndroidParityPalette.surface(colorScheme))
+            }
+        }
         .overlay {
             Capsule(style: .continuous)
                 .stroke(colorScheme == .dark ? .white.opacity(0.1) : .black.opacity(0.06))

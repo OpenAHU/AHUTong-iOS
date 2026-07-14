@@ -9,6 +9,7 @@ final class AppShellUITests: XCTestCase {
     func testAndroidParityPrimaryScreens() {
         let app = XCUIApplication()
         app.launchArguments.append("--reset-onboarding")
+        app.launchArguments.append("--demo-session")
         app.launch()
 
         XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 8))
@@ -53,6 +54,18 @@ final class AppShellUITests: XCTestCase {
             capture(screenshotName, app: app)
         }
 
+        app.buttons["tab.schedule"].tap()
+        let demoCourse = app.buttons["schedule.course.demo-1"]
+        XCTAssertTrue(demoCourse.waitForExistence(timeout: 4))
+        demoCourse.tap()
+        XCTAssertTrue(app.otherElements["schedule.course-detail"].waitForExistence(timeout: 3))
+        waitForRendering()
+        capture("13-course-detail", app: app)
+        app.terminate()
+        app.launchArguments = ["--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+
         app.buttons["tab.tools"].tap()
         let routes = [
             ("tools.phone-book", "搜索电话或部门", "09-phone-book"),
@@ -77,6 +90,27 @@ final class AppShellUITests: XCTestCase {
             capture(screenshotName, app: app)
             restartAtTools(app)
         }
+
+
+        let academicRoutes = [
+            ("tools.grade", "grades.screen", "14-grades"),
+            ("tools.exam", "exams.screen", "15-exams")
+        ]
+        for (linkID, marker, screenshotName) in academicRoutes {
+            let link = app.buttons[linkID]
+            XCTAssertTrue(link.waitForExistence(timeout: 4))
+            link.tap()
+            XCTAssertTrue(app.descendants(matching: .any)[marker].waitForExistence(timeout: 5))
+            waitForRendering()
+            capture(screenshotName, app: app)
+            restartAtTools(app)
+        }
+
+        app.buttons["tab.settings"].tap()
+        app.buttons["settings.preferences"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("16-preferences", app: app)
     }
 
     @MainActor
@@ -90,7 +124,7 @@ final class AppShellUITests: XCTestCase {
     @MainActor
     private func restartAtTools(_ app: XCUIApplication) {
         app.terminate()
-        app.launchArguments = []
+        app.launchArguments = ["--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         let toolsTab = app.buttons["tab.tools"]

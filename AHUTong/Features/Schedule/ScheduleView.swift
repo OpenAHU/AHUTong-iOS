@@ -1,8 +1,81 @@
 import SwiftUI
 
+@MainActor
+final class ScheduleViewModel: ObservableObject {
+    @Published private(set) var state: LoadableState<[Course]> = .idle
+    @Published private(set) var currentWeek = 1
+    @Published private(set) var source: ScheduleSnapshotSource?
+
+    private let repository: ScheduleRepository
+    private let api: any CampusCoreAPI
+    private let semester: Semester
+
+    init(api: any CampusCoreAPI, userID: String) {
+        self.api = api
+        let store = UserDefaultsDataStore()
+        repository = ScheduleRepository(
+            remote: RustScheduleRemoteDataSource(api: api),
+            cache: UserScopedStore(store: store, userID: userID)
+        )
+        semester = Self.currentSemester()
+    }
+
+    func load(demo: Bool = false) async {
+        if demo {
+            currentWeek = 2
+            state = .loaded(Self.demoCourses)
+            source = .cache
+            return
+        }
+        state = .loading
+        do {
+            async let week = api.currentWeek()
+            async let snapshot = repository.load(semester: semester)
+            let result = try await snapshot
+            currentWeek = (try? await week) ?? 1
+            source = result.source
+            state = .loaded(result.courses)
+        } catch {
+            state = .failed(AppErrorState(message: error.localizedDescription))
+        }
+    }
+
+    func refresh() async {
+        state = .loading
+        do {
+            let result = try await repository.load(semester: semester, policy: .refresh)
+            source = result.source
+            state = .loaded(result.courses)
+            currentWeek = (try? await api.currentWeek()) ?? currentWeek
+        } catch {
+            state = .failed(AppErrorState(message: error.localizedDescription))
+        }
+    }
+
+    private static func currentSemester(date: Date = Date()) -> Semester {
+        let components = Calendar.current.dateComponents([.year, .month], from: date)
+        let year = components.year ?? 2026
+        let month = components.month ?? 9
+        let startYear = month < 9 ? year - 1 : year
+        let term = (2...8).contains(month) ? "2" : "1"
+        return Semester(schoolYear: "\(startYear)-\(startYear + 1)", term: term)!
+    }
+
+    static let demoCourses = [
+        Course(weekday: 1, startWeek: 1, endWeek: 16, location: "博学南楼101", name: "高等数学", teacher: "李老师", duration: 2, startPeriod: 1, courseID: "demo-1", weekIndexes: Array(1...16)),
+        Course(weekday: 3, startWeek: 1, endWeek: 16, location: "博学北楼B203", name: "大学英语", teacher: "王老师", duration: 2, startPeriod: 3, courseID: "demo-2", weekIndexes: Array(1...16)),
+        Course(weekday: 5, startWeek: 2, endWeek: 16, location: "笃行南楼301", name: "数据结构", teacher: "张老师", duration: 3, startPeriod: 6, courseID: "demo-3", weekIndexes: stride(from: 2, through: 16, by: 2).map { $0 })
+    ]
+}
+
 struct ScheduleView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var model: ScheduleViewModel
     @State private var selectedWeek = 1
+    @State private var selectedCourse: Course?
+    @State private var showSettings = false
+    @AppStorage("schedule.show-all") private var showAllCourses = false
+    @AppStorage("schedule.preview-next") private var previewNextSemester = false
 
     private let times = [
         "08:00", "08:50", "09:50", "10:40", "11:30", "14:00", "14:50",
@@ -10,16 +83,34 @@ struct ScheduleView: View {
     ]
     private let weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
+    init(appModel: AppModel) {
+        let userID: String
+        if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = "guest" }
+        _model = StateObject(wrappedValue: ScheduleViewModel(api: appModel.campusAPI, userID: userID))
+    }
+
     var body: some View {
         AndroidScreen {
             ScrollView(.vertical) {
                 VStack(spacing: 8) {
                     controls
-                    scheduleGrid
+                    content
                 }
                 .padding(.bottom, 96)
             }
             .scrollIndicators(.hidden)
+        }
+        .task {
+            await model.load(demo: ProcessInfo.processInfo.arguments.contains("--demo-session"))
+            selectedWeek = model.currentWeek
+        }
+        .sheet(item: $selectedCourse) { course in CourseDetailView(course: course) }
+        .alert("课表设置", isPresented: $showSettings) {
+            Toggle("总览课表", isOn: $showAllCourses)
+            Toggle("预览下学期课表", isOn: $previewNextSemester)
+            Button("完成", role: .cancel) {}
+        } message: {
+            Text("总览课表会显示全部周次课程；下学期预览将在教务系统提供数据时切换。")
         }
     }
 
@@ -34,15 +125,11 @@ struct ScheduleView: View {
                                 withAnimation { proxy.scrollTo(max(1, week - 2), anchor: .leading) }
                             } label: {
                                 Text("\(week)")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
+                                    .font(.headline.bold())
                                     .foregroundStyle(selectedWeek == week ? Color.white : Color.primary)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 8)
-                                    .background(
-                                        selectedWeek == week ? AndroidParityPalette.brand : .clear,
-                                        in: Capsule(style: .continuous)
-                                    )
+                                    .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Capsule())
                             }
                             .buttonStyle(.plain)
                             .id(week)
@@ -52,11 +139,10 @@ struct ScheduleView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-
             HStack(spacing: 0) {
-                scheduleAction("location", "回到当前周") { selectedWeek = 1 }
-                scheduleAction("gearshape", "课表设置") {}
-                scheduleAction("arrow.clockwise", "刷新课表") {}
+                scheduleAction("location", "回到当前周") { selectedWeek = model.currentWeek }
+                scheduleAction("gearshape", "课表设置") { showSettings = true }
+                scheduleAction("arrow.clockwise", "刷新课表") { Task { await model.refresh() } }
             }
             .padding(2)
             .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
@@ -64,74 +150,186 @@ struct ScheduleView: View {
         }
     }
 
-    private func scheduleAction(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .frame(width: 38, height: 38)
+    @ViewBuilder
+    private var content: some View {
+        switch model.state {
+        case .idle, .loading:
+            scheduleGrid(courses: [])
+                .overlay { ProgressView("加载课表…").accessibilityIdentifier("schedule.loading") }
+        case let .failed(error):
+            scheduleGrid(courses: [])
+                .overlay {
+                    VStack(spacing: 12) {
+                        Text("加载课表失败").font(.headline)
+                        Text(error.message).font(.caption).multilineTextAlignment(.center)
+                        Button("重试") { Task { await model.refresh() } }
+                    }
+                    .padding(24)
+                    .accessibilityIdentifier("schedule.error")
+                }
+        case .empty:
+            scheduleGrid(courses: [])
+                .overlay { ContentUnavailableView("本周没有课程", systemImage: "calendar") }
+        case let .loaded(courses):
+            scheduleGrid(courses: courses)
+                .overlay {
+                    if courses.isEmpty {
+                        ContentUnavailableView("本周没有课程", systemImage: "calendar")
+                            .accessibilityIdentifier("schedule.empty")
+                    }
+                }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
-    private var scheduleGrid: some View {
+    private func scheduleAction(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: icon).font(.system(size: 20)).frame(width: 38, height: 38) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+    }
+
+    private func scheduleGrid(courses: [Course]) -> some View {
         GeometryReader { geometry in
             let spacing: CGFloat = 4
             let timeWidth: CGFloat = 40
             let dayWidth = (geometry.size.width - timeWidth - spacing * 9) / 7
-
-            VStack(spacing: spacing) {
-                HStack(spacing: spacing) {
-                    Color.clear.frame(width: timeWidth, height: 64)
-                    ForEach(Array(weekdays.enumerated()), id: \.offset) { index, weekday in
-                        VStack(spacing: 2) {
-                            Text(weekday).font(.caption).fontWeight(.semibold)
-                            Text(dateLabel(dayIndex: index)).font(.caption2).foregroundStyle(.secondary)
-                        }
-                        .frame(width: dayWidth, height: 64)
-                        .background(
-                            index == currentWeekdayIndex && selectedWeek == 1
-                                ? AndroidParityPalette.primaryContainer(colorScheme)
-                                : .clear,
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        )
-                    }
-                }
-
-                ForEach(Array(times.enumerated()), id: \.offset) { index, time in
-                    HStack(spacing: spacing) {
-                        VStack(spacing: 1) {
-                            Text("\(index + 1)").font(.caption).fontWeight(.semibold)
-                            Text(time).font(.system(size: 9)).foregroundStyle(.secondary)
-                        }
-                        .frame(width: timeWidth, height: 48)
-
-                        ForEach(0..<7, id: \.self) { _ in
-                            Color.clear.frame(width: dayWidth, height: 48)
-                        }
-                    }
+            ZStack(alignment: .topLeading) {
+                grid(dayWidth: dayWidth, spacing: spacing, timeWidth: timeWidth)
+                ForEach(visibleCourses(courses)) { course in
+                    courseCard(course, dayWidth: dayWidth, spacing: spacing, timeWidth: timeWidth)
                 }
             }
             .padding(.top, 8)
             .padding(4)
         }
         .frame(height: 64 + 13 * 52 + 24)
-        .background(
-            AndroidParityPalette.raisedSurface(colorScheme),
-            in: RoundedRectangle(cornerRadius: 32, style: .continuous)
-        )
+        .background(AndroidParityPalette.raisedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 32))
     }
 
-    private var currentWeekdayIndex: Int {
-        let value = Calendar.current.component(.weekday, from: Date())
-        return (value + 5) % 7
+    private func grid(dayWidth: CGFloat, spacing: CGFloat, timeWidth: CGFloat) -> some View {
+        VStack(spacing: spacing) {
+            HStack(spacing: spacing) {
+                Color.clear.frame(width: timeWidth, height: 64)
+                ForEach(Array(weekdays.enumerated()), id: \.offset) { index, weekday in
+                    VStack(spacing: 2) {
+                        Text(weekday).font(.caption.bold())
+                        Text(dateLabel(dayIndex: index)).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .frame(width: dayWidth, height: 64)
+                    .background(index == currentWeekdayIndex && selectedWeek == model.currentWeek ? AndroidParityPalette.primaryContainer(colorScheme) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            ForEach(Array(times.enumerated()), id: \.offset) { index, time in
+                HStack(spacing: spacing) {
+                    VStack(spacing: 1) {
+                        Text("\(index + 1)").font(.caption.bold())
+                        Text(time).font(.system(size: 9)).foregroundStyle(.secondary)
+                    }
+                    .frame(width: timeWidth, height: 48)
+                    ForEach(0..<7, id: \.self) { _ in Color.clear.frame(width: dayWidth, height: 48) }
+                }
+            }
+        }
     }
+
+    private func courseCard(_ course: Course, dayWidth: CGFloat, spacing: CGFloat, timeWidth: CGFloat) -> some View {
+        let active = course.occurs(inWeek: selectedWeek)
+        let height = CGFloat(course.duration) * 48 + CGFloat(max(course.duration - 1, 0)) * spacing
+        return Button { selectedCourse = course } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(course.name).font(.system(size: 11, weight: .bold)).lineLimit(3)
+                Spacer(minLength: 0)
+                Text(active ? shortLocation(course.location) : "非本周")
+                    .font(.system(size: 10, weight: .bold))
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity)
+                    .padding(2)
+                    .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(.black)
+            }
+            .foregroundStyle(.white)
+            .padding(4)
+            .frame(width: dayWidth, height: height)
+            .background(active ? courseColor(course.name) : Color.gray, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .offset(
+            x: timeWidth + spacing + CGFloat(course.weekday - 1) * (dayWidth + spacing),
+            y: 64 + spacing + CGFloat(course.startPeriod - 1) * (48 + spacing)
+        )
+        .accessibilityLabel("\(course.name)，\(course.location)，第\(course.startPeriod)节")
+        .accessibilityIdentifier("schedule.course.\(course.courseID)")
+    }
+
+    private func visibleCourses(_ courses: [Course]) -> [Course] {
+        courses.filter { showAllCourses || $0.occurs(inWeek: selectedWeek) }
+    }
+
+    private func courseColor(_ name: String) -> Color {
+        let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .indigo, .teal]
+        return colors[Int(UInt(bitPattern: name.hashValue) % UInt(colors.count))]
+    }
+
+    private var currentWeekdayIndex: Int { (Calendar.current.component(.weekday, from: Date()) + 5) % 7 }
 
     private func dateLabel(dayIndex: Int) -> String {
         let calendar = Calendar(identifier: .gregorian)
-        let start = calendar.date(from: DateComponents(year: 2026, month: 9, day: 1)) ?? Date()
-        let date = calendar.date(byAdding: .day, value: (selectedWeek - 1) * 7 + dayIndex, to: start) ?? start
+        let weekday = calendar.component(.weekday, from: Date())
+        let mondayOffset = -((weekday + 5) % 7) + (selectedWeek - model.currentWeek) * 7
+        let date = calendar.date(byAdding: .day, value: mondayOffset + dayIndex, to: Date()) ?? Date()
         let components = calendar.dateComponents([.month, .day], from: date)
         return String(format: "%02d-%02d", components.month ?? 0, components.day ?? 0)
+    }
+
+    private func shortLocation(_ location: String) -> String {
+        location.replacingOccurrences(of: "博学北楼", with: "博北")
+            .replacingOccurrences(of: "博学南楼", with: "博南")
+            .replacingOccurrences(of: "笃行南楼", with: "笃南")
+            .replacingOccurrences(of: "笃行北楼", with: "笃北")
+            .replacingOccurrences(of: "互联大楼", with: "互楼")
+    }
+}
+
+private struct CourseDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    let course: Course
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack {
+                    Text(course.name).font(.title2.bold())
+                    Spacer()
+                    Button("完成") { dismiss() }
+                }
+                Text(scheduleDescription).font(.headline)
+            }
+            .padding(24)
+            Divider().frame(height: 2)
+            HStack(spacing: 0) {
+                detail("location", course.location)
+                Divider().frame(width: 2)
+                detail("person.crop.circle", course.teacher)
+            }
+        }
+        .background(AndroidParityPalette.raisedSurface(colorScheme))
+        .presentationDetents([.height(300)])
+        .presentationCornerRadius(32)
+        .accessibilityIdentifier("schedule.course-detail")
+    }
+
+    private func detail(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 8) { Image(systemName: icon); Text(text).font(.headline).lineLimit(2) }
+            .frame(maxWidth: .infinity, minHeight: 72)
+            .padding(.horizontal, 16)
+    }
+
+    private var scheduleDescription: String {
+        let names = [1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "日"]
+        let weeks = course.activeWeeks
+        let weekText = weeks == Array(course.startWeek...course.endWeek)
+            ? "\(course.startWeek) - \(course.endWeek)"
+            : weeks.map(String.init).joined(separator: "、")
+        return "第\(weekText)周的周\(names[course.weekday] ?? "")，第 \(course.startPeriod)-\(course.endPeriod) 节课"
     }
 }

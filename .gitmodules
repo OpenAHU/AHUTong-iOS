@@ -1,0 +1,6 @@
+[submodule "Vendor/GuiXu-Rust"]
+	path = Vendor/GuiXu-Rust
+	url = https://github.com/Yukon163/GuiXu.git
+[submodule "Vendor/sdk"]
+	path = Vendor/sdk
+	url = https://github.com/OpenAHU/AHUTong-sdk.git

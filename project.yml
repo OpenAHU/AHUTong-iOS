@@ -40,9 +40,19 @@ targets:
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 用于按当前位置查询本地天气；拒绝后仍可使用 IP 定位或城市搜索。
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
         # Keep device builds installable until the real iOS app icon set is migrated.
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_OBJC_BRIDGING_HEADER: AHUTong/Support/AHUTong-Bridging-Header.h
+        LIBRARY_SEARCH_PATHS: "$(inherited) $(BUILT_PRODUCTS_DIR)"
+        OTHER_LDFLAGS: "$(inherited) -lahutong_rs -framework Security -framework SystemConfiguration -framework CoreFoundation -liconv -lresolv"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    preBuildScripts:
+      - name: Build fixed Rust campus SDK
+        script: |
+          "$SRCROOT/scripts/build-rust-ios.sh"
+        basedOnDependencyAnalysis: false
     scheme:
       testTargets:
         - AHUTongTests

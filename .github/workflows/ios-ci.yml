@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - name: Show Apple toolchain
         run: |
@@ -33,6 +35,14 @@ jobs:
 
       - name: Install XcodeGen
         run: brew install xcodegen
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust campus SDK
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Vendor/sdk
 
       - name: Generate Xcode project
         run: |
