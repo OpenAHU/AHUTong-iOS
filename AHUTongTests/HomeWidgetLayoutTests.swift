@@ -61,7 +61,7 @@ final class HomeWidgetLayoutTests: XCTestCase {
             calendar: calendar
         )
         XCTAssertEqual(before.title, "下节课是")
-        XCTAssertEqual(before.detail, "还有 30分钟，在 笃行北楼 B402")
+        XCTAssertEqual(before.detail, "还有 20分钟，在 笃行北楼 B402")
 
         let after = HomeCourseSummary.make(
             courses: [course],
