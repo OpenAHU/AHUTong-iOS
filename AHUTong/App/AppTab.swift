@@ -26,9 +26,9 @@ enum AppTab: String, CaseIterable, Identifiable, Sendable {
         case .home:
             "house"
         case .schedule:
-            "calendar"
+            "tablecells"
         case .tools:
-            "square.grid.2x2"
+            "wrench.and.screwdriver"
         case .settings:
             "gearshape"
         }

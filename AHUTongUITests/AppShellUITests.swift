@@ -6,47 +6,74 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
-    func testPrimaryTabsAreReachable() {
+    func testAndroidParityPrimaryScreens() {
         let app = XCUIApplication()
         app.launchArguments.append("--reset-onboarding")
         app.launch()
 
         XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 5))
+        capture("01-disclaimer", app: app)
+
         app.buttons["onboarding.decline"].tap()
         XCTAssertTrue(app.alerts["需要你的同意"].waitForExistence(timeout: 2))
         app.alerts.buttons["继续查看"].tap()
 
-        app.buttons["agreement.toggle.disclaimer"].tap()
-        app.buttons["agreement.toggle.privacy"].tap()
-        let continueButton = app.buttons["onboarding.continue"]
-        expectation(
-            for: NSPredicate(format: "isEnabled == true"),
-            evaluatedWith: continueButton
-        )
-        waitForExpectations(timeout: 2)
-        continueButton.tap()
+        app.buttons["onboarding.continue"].tap()
+        XCTAssertTrue(app.otherElements["agreement.dialog.privacy"].waitForExistence(timeout: 2))
+        capture("02-privacy", app: app)
+        app.buttons["onboarding.continue"].tap()
+        XCTAssertTrue(app.otherElements["agreement.dialog.community"].waitForExistence(timeout: 2))
+        capture("03-community", app: app)
+        app.buttons["onboarding.decline"].tap()
 
-        XCTAssertTrue(app.navigationBars["主页"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["screen.home"].waitForExistence(timeout: 5))
+        capture("04-home", app: app)
 
-        for title in ["课表", "小工具", "设置", "主页"] {
-            let tab = app.tabBars.buttons[title]
-            XCTAssertTrue(tab.exists)
+        let tabs = [
+            ("schedule", "screen.schedule", "05-schedule"),
+            ("tools", "screen.tools", "06-tools"),
+            ("settings", "screen.settings", "07-settings"),
+            ("home", "screen.home", "08-home-return")
+        ]
+        for (tabID, screenID, screenshotName) in tabs {
+            let tab = app.buttons["tab.\(tabID)"]
+            XCTAssertTrue(tab.waitForExistence(timeout: 2))
             tab.tap()
-            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 2))
+            XCTAssertTrue(app.otherElements[screenID].waitForExistence(timeout: 3))
+            capture(screenshotName, app: app)
         }
 
-        app.tabBars.buttons["小工具"].tap()
-        for route in [
-            ("tools.phone-book", "校园电话本"),
-            ("tools.school-calendar", "校历"),
-            ("tools.weather", "天气"),
-            ("tools.study-repository", "学习资料")
-        ] {
-            let link = app.buttons[route.0]
-            XCTAssertTrue(link.waitForExistence(timeout: 2))
+        app.buttons["tab.tools"].tap()
+        let routes = [
+            ("tools.phone-book", "screen.phone-book", "09-phone-book"),
+            ("tools.school-calendar", "screen.school-calendar", "10-school-calendar"),
+            ("tools.weather", "screen.weather", "11-weather"),
+            ("tools.study-repository", "screen.study-repository", "12-study-repository")
+        ]
+
+        for (linkID, screenID, screenshotName) in routes {
+            let link = app.buttons[linkID]
+            XCTAssertTrue(link.waitForExistence(timeout: 4))
             link.tap()
-            XCTAssertTrue(app.navigationBars[route.1].waitForExistence(timeout: 3))
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.otherElements[screenID].waitForExistence(timeout: 5))
+            capture(screenshotName, app: app)
+            edgeSwipeBack(app)
+            XCTAssertTrue(app.otherElements["screen.tools"].waitForExistence(timeout: 3))
         }
+    }
+
+    @MainActor
+    private func capture(_ name: String, app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "android-parity-\(name)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    private func edgeSwipeBack(_ app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
     }
 }

@@ -65,48 +65,21 @@ final class OnboardingViewModel: ObservableObject {
 
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var currentIndex = 0
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("欢迎使用安大通")
-                        .font(.largeTitle.bold())
-                        .accessibilityIdentifier("onboarding.title")
-                    Text("继续前请阅读并确认必要说明。社区与商业合作为可选内容。")
-                        .foregroundStyle(.secondary)
-                }
+        AndroidScreen {
+            Color.black.opacity(colorScheme == .dark ? 0.25 : 0.08)
+                .ignoresSafeArea()
 
-                ForEach(AgreementDocument.allCases) { document in
-                    agreementRow(document)
-                }
-
-                if let errorMessage = model.errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("onboarding.error")
-                }
-
-                VStack(spacing: 12) {
-                    Button("同意并继续") {
-                        Task { await model.confirmRequiredDocuments() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-                    .disabled(!model.canContinue)
-                    .accessibilityIdentifier("onboarding.continue")
-
-                    Button("暂不同意") {
-                        model.showsDeclineExplanation = true
-                    }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("onboarding.decline")
-                }
-            }
+            AndroidAgreementDialog(
+                document: currentDocument,
+                errorMessage: model.errorMessage,
+                onAgree: acceptCurrent,
+                onDecline: declineCurrent
+            )
             .padding(24)
-        }
-        .navigationDestination(for: AgreementDocument.self) { document in
-            AgreementDetailView(document: document)
         }
         .alert("需要你的同意", isPresented: $model.showsDeclineExplanation) {
             Button("继续查看", role: .cancel) { }
@@ -115,41 +88,100 @@ struct OnboardingView: View {
         }
     }
 
-    @ViewBuilder
-    private func agreementRow(_ document: AgreementDocument) -> some View {
-        HStack(spacing: 12) {
-            NavigationLink(value: document) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(document.title)
-                            .font(.headline)
-                        if !document.isRequired {
-                            Text("可选")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Text(document.summary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+    private var documents: [AgreementDocument] { AgreementDocument.allCases }
 
-            if document.isRequired {
-                Button {
-                    Task { await model.toggle(document) }
-                } label: {
-                    Image(systemName: model.consent.isAccepted(document) ? "checkmark.circle.fill" : "circle")
-                        .font(.title2)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("同意\(document.title)")
-                .accessibilityIdentifier("agreement.toggle.\(document.id)")
+    private var currentDocument: AgreementDocument {
+        documents[min(currentIndex, documents.count - 1)]
+    }
+
+    private func acceptCurrent() {
+        let document = currentDocument
+        Task {
+            if document.isRequired && !model.consent.isAccepted(document) {
+                await model.toggle(document)
+            }
+            if currentIndex == documents.count - 1 {
+                await model.confirmRequiredDocuments()
+            } else {
+                currentIndex += 1
             }
         }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func declineCurrent() {
+        if currentDocument.isRequired {
+            model.showsDeclineExplanation = true
+        } else {
+            Task { await model.confirmRequiredDocuments() }
+        }
+    }
+}
+
+private struct AndroidAgreementDialog: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let document: AgreementDocument
+    let errorMessage: String?
+    let onAgree: () -> Void
+    let onDecline: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 8) {
+                Text(document.title)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .accessibilityIdentifier("onboarding.title")
+                if !document.isRequired {
+                    Text("可选")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ScrollView {
+                Text(document.body)
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 300)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(AndroidParityPalette.error)
+                    .accessibilityIdentifier("onboarding.error")
+            }
+
+            HStack(spacing: 12) {
+                Spacer()
+                Button("拒绝", action: onDecline)
+                    .androidAgreementButtonStyle(colorScheme: colorScheme)
+                    .accessibilityIdentifier("onboarding.decline")
+                Button("同意", action: onAgree)
+                    .androidAgreementButtonStyle(colorScheme: colorScheme)
+                    .accessibilityIdentifier("onboarding.continue")
+            }
+        }
+        .padding(24)
+        .background(
+            AndroidParityPalette.surface(colorScheme),
+            in: RoundedRectangle(cornerRadius: 32, style: .continuous)
+        )
+        .accessibilityIdentifier("agreement.dialog.\(document.id)")
+    }
+}
+
+private extension View {
+    func androidAgreementButtonStyle(colorScheme: ColorScheme) -> some View {
+        self
+            .font(.headline)
+            .foregroundStyle(Color.primary)
+            .frame(width: 88, height: 56)
+            .background(
+                AndroidParityPalette.primaryContainer(colorScheme),
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .buttonStyle(.plain)
     }
 }
 
@@ -157,12 +189,16 @@ struct AgreementDetailView: View {
     let document: AgreementDocument
 
     var body: some View {
-        ScrollView {
-            Text(document.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+        AndroidScreen {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    AndroidHeader(title: document.title, large: true)
+                    Text(document.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                }
+            }
         }
-        .navigationTitle(document.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .androidDetailScreen()
     }
 }

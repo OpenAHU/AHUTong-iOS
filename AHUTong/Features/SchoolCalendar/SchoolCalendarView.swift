@@ -1,4 +1,3 @@
-import QuickLook
 import SwiftUI
 import UIKit
 
@@ -29,8 +28,8 @@ final class SchoolCalendarViewModel: ObservableObject {
 }
 
 struct SchoolCalendarView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var model: SchoolCalendarViewModel
-    @State private var previewURL: URL?
 
     init(repository: SchoolCalendarRepository = .live()) {
         _model = StateObject(
@@ -39,55 +38,56 @@ struct SchoolCalendarView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack(alignment: .bottomTrailing) {
+            Color.black.ignoresSafeArea()
             switch model.state {
             case .idle, .loading:
-                ProgressView("正在获取校历")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 16) {
+                    ProgressView().tint(.white)
+                    Text("正在获取校历...").foregroundStyle(.white)
+                }
             case let .loaded(snapshot):
-                VStack(spacing: 0) {
-                    if snapshot.source == .staleCache {
-                        Label("网络不可用，正在显示已缓存校历", systemImage: "wifi.slash")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(8)
+                SchoolCalendarZoomView(fileURL: snapshot.fileURL)
+
+                HStack(spacing: 12) {
+                    ShareLink(item: snapshot.fileURL) {
+                        Text("保存").foregroundStyle(.white)
                     }
-                    SchoolCalendarZoomView(fileURL: snapshot.fileURL)
+                    .buttonStyle(.plain)
+                    Button("退出") { dismiss() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
                 }
-                .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button("快速预览", systemImage: "doc.text.magnifyingglass") {
-                            previewURL = snapshot.fileURL
-                        }
-                        .labelStyle(.iconOnly)
-                        ShareLink(item: snapshot.fileURL) {
-                            Label("分享校历", systemImage: "square.and.arrow.up")
-                        }
-                        .labelStyle(.iconOnly)
-                        Button("刷新", systemImage: "arrow.clockwise") {
-                            Task { await model.load(policy: .refresh) }
-                        }
-                        .labelStyle(.iconOnly)
+                .padding(16)
+                .background(Color.black.opacity(0.4))
+
+                if snapshot.source == .staleCache {
+                    Text("网络不可用，正在显示已缓存校历")
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(Color.black.opacity(0.4), in: Capsule())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 8)
+                        .allowsHitTesting(false)
                     }
-                }
             case .empty:
-                ContentUnavailableView("暂无校历", systemImage: "calendar.badge.exclamationmark")
+                Text("暂无校历").foregroundStyle(.white)
             case let .failed(error):
-                ContentUnavailableView {
-                    Label(error.title, systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error.message)
-                } actions: {
+                VStack(spacing: 16) {
+                    Text(error.title).font(.headline).foregroundStyle(.white)
+                    Text(error.message).foregroundStyle(.white.opacity(0.8)).multilineTextAlignment(.center)
                     Button("重试") {
                         Task { await model.load(policy: .refresh) }
                     }
+                    .buttonStyle(.borderedProminent)
                 }
+                .padding(32)
             }
         }
-        .navigationTitle("校历")
-        .navigationBarTitleDisplayMode(.inline)
-        .quickLookPreview($previewURL)
+        .toolbar(.hidden, for: .navigationBar)
         .task { await model.load() }
+        .accessibilityIdentifier("screen.school-calendar")
     }
 }
 
@@ -125,7 +125,7 @@ private struct SchoolCalendarZoomView: View {
     private var magnificationGesture: some Gesture {
         MagnifyGesture()
             .onChanged { value in
-                scale = (lastScale * value.magnification).clamped(to: 1...5)
+                scale = (lastScale * value.magnification).clamped(to: 0.5...5)
             }
             .onEnded { _ in
                 lastScale = scale
@@ -136,7 +136,6 @@ private struct SchoolCalendarZoomView: View {
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { value in
-                guard scale > 1 else { return }
                 offset = CGSize(
                     width: lastOffset.width + value.translation.width,
                     height: lastOffset.height + value.translation.height

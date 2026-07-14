@@ -44,7 +44,9 @@ jobs:
         run: |
           simulator_udid="$(
             xcrun simctl list devices available --json |
-              jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[]][0].udid'
+              jq -r '(
+                [.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name == "iPhone 13 Pro")][0].udid
+              ) // ([.devices | to_entries[] | select(.key | contains("iOS")) | .value[]][0].udid)'
           )"
 
           if [[ -z "$simulator_udid" || "$simulator_udid" == "null" ]]; then
@@ -53,6 +55,7 @@ jobs:
           fi
 
           echo "SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
+          xcrun simctl list devices available | grep "$simulator_udid" || true
 
       - name: Build and test
         shell: bash
@@ -64,3 +67,12 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -resultBundlePath "$RUNNER_TEMP/AHUTong.xcresult" \
             test
+
+      - name: Upload UI parity screenshots and test result
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: AHUTong-ui-parity-xcresult-${{ github.run_number }}
+          path: ${{ runner.temp }}/AHUTong.xcresult
+          if-no-files-found: warn
+          retention-days: 7

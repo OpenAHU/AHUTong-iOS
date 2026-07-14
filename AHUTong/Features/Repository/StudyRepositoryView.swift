@@ -27,9 +27,10 @@ final class StudyRepositoryViewModel: ObservableObject {
     }
 
     func selectRepository(_ id: String) async {
-        guard id != selectedRepositoryID else { return }
-        selectedRepositoryID = id
-        currentPath = ""
+        if id != selectedRepositoryID {
+            selectedRepositoryID = id
+            currentPath = ""
+        }
         await load()
     }
 
@@ -41,10 +42,7 @@ final class StudyRepositoryViewModel: ObservableObject {
 
     func goUp() async {
         guard !currentPath.isEmpty else { return }
-        currentPath = currentPath
-            .split(separator: "/")
-            .dropLast()
-            .joined(separator: "/")
+        currentPath = currentPath.split(separator: "/").dropLast().joined(separator: "/")
         await load()
     }
 
@@ -75,9 +73,7 @@ final class StudyRepositoryViewModel: ObservableObject {
                 repositoryID: selectedRepositoryID,
                 item: item
             ) { [weak self] value in
-                await MainActor.run {
-                    self?.downloadProgress[item.id] = value
-                }
+                await MainActor.run { self?.downloadProgress[item.id] = value }
             }
             downloadProgress[item.id] = nil
             await refreshDownloads()
@@ -105,138 +101,184 @@ final class StudyRepositoryViewModel: ObservableObject {
 }
 
 struct StudyRepositoryView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var model: StudyRepositoryViewModel
     @State private var previewURL: URL?
+    @State private var showsRepositorySelector = true
 
     init(service: StudyRepositoryService = .live()) {
         _model = StateObject(wrappedValue: StudyRepositoryViewModel(service: service))
     }
 
     var body: some View {
-        List {
-            Section("资料仓库") {
-                Picker(
-                    "学院",
-                    selection: Binding(
-                        get: { model.selectedRepositoryID },
-                        set: { id in Task { await model.selectRepository(id) } }
-                    )
-                ) {
-                    ForEach(StudyRepositoryCatalog.repositories) { repository in
-                        Text(repository.name).tag(repository.id)
-                    }
+        AndroidScreen {
+            VStack(spacing: 0) {
+                repositoryHeader
+                if showsRepositorySelector {
+                    repositorySelector
+                } else {
+                    directoryView
                 }
-
-                Link(destination: model.selectedRepository.githubURL) {
-                    Label("查看 GitHub 来源仓库", systemImage: "link")
-                }
-            }
-
-            if !model.currentPath.isEmpty {
-                Section {
-                    Button {
-                        Task { await model.goUp() }
-                    } label: {
-                        Label("返回上一级", systemImage: "arrow.up.left")
-                    }
-                    Text(model.currentPath)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            directoryContent
-        }
-        .navigationTitle("学习资料")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    RepositoryDownloadsView(service: model.service)
-                } label: {
-                    Label("已下载", systemImage: "arrow.down.circle")
-                }
-                .accessibilityIdentifier("repository.downloads")
             }
         }
-        .refreshable { await model.load(policy: .refresh) }
         .quickLookPreview($previewURL)
         .task { await model.start() }
-        .alert(
-            "提示",
-            isPresented: Binding(
-                get: { model.alertMessage != nil },
-                set: { if !$0 { model.alertMessage = nil } }
-            )
-        ) {
+        .alert("提示", isPresented: Binding(
+            get: { model.alertMessage != nil },
+            set: { if !$0 { model.alertMessage = nil } }
+        )) {
             Button("知道了", role: .cancel) { model.alertMessage = nil }
         } message: {
             Text(model.alertMessage ?? "")
         }
+        .accessibilityIdentifier("screen.study-repository")
     }
 
-    @ViewBuilder
-    private var directoryContent: some View {
-        switch model.state {
-        case .idle, .loading:
-            Section {
-                HStack {
-                    Spacer()
-                    ProgressView("正在加载目录")
-                    Spacer()
+    private var repositoryHeader: some View {
+        HStack(spacing: 0) {
+            AndroidIconButton(systemName: "arrow.left", accessibilityLabel: "返回") {
+                if showsRepositorySelector {
+                    dismiss()
+                } else if model.currentPath.isEmpty {
+                    showsRepositorySelector = true
+                } else {
+                    Task { await model.goUp() }
                 }
             }
-        case let .loaded(snapshot):
-            Section {
-                ForEach(snapshot.items) { item in
-                    RepositoryContentRow(
-                        item: item,
-                        downloaded: model.downloadedFile(for: item),
-                        progress: model.downloadProgress[item.id],
-                        openDirectory: { Task { await model.openDirectory(item) } },
-                        download: { Task { await model.download(item) } },
-                        preview: { previewURL = $0 }
-                    )
-                }
-            } header: {
-                HStack {
-                    Text("目录")
-                    Spacer()
-                    Text(sourceLabel(snapshot))
-                }
-            }
-        case .empty:
-            Section {
-                ContentUnavailableView(
-                    "目录为空",
-                    systemImage: "folder",
-                    description: Text("此目录暂时没有公开资料。")
-                )
-            }
-        case let .failed(error):
-            Section {
-                ContentUnavailableView {
-                    Label(error.title, systemImage: "wifi.exclamationmark")
-                } description: {
-                    Text(error.message)
-                } actions: {
-                    Button("重试") {
+            Text(headerTitle)
+                .font(.title2)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !showsRepositorySelector {
+                if model.state.isLoading {
+                    ProgressView().controlSize(.small).frame(width: 48, height: 48)
+                } else {
+                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") {
                         Task { await model.load(policy: .refresh) }
                     }
                 }
             }
+            NavigationLink {
+                RepositoryDownloadsView(service: model.service)
+                    .androidDetailScreen()
+            } label: {
+                Text("已下载").font(.body).padding(.horizontal, 8).frame(height: 48)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("repository.downloads")
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
     }
 
-    private func sourceLabel(_ snapshot: RepositoryDirectorySnapshot) -> String {
-        switch snapshot.source {
-        case .remote: "刚刚更新"
-        case .cache: "本地缓存"
-        case .staleCache: "离线缓存"
+    private var headerTitle: String {
+        if showsRepositorySelector { return "学习资料" }
+        if model.currentPath.isEmpty { return model.selectedRepository.name }
+        return model.currentPath.split(separator: "/").last.map(String.init) ?? model.selectedRepository.name
+    }
+
+    private var repositorySelector: some View {
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                ForEach(StudyRepositoryCatalog.repositories) { repository in
+                    Button {
+                        showsRepositorySelector = false
+                        Task { await model.selectRepository(repository.id) }
+                    } label: {
+                        RepositorySelectorRow(repository: repository)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 80)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var directoryView: some View {
+        VStack(spacing: 0) {
+            if !model.currentPath.isEmpty {
+                Text(model.currentPath)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
+            }
+
+            switch model.state {
+            case .idle, .loading:
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            case let .loaded(snapshot):
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        if snapshot.source == .staleCache {
+                            Text("GitHub 连接失败，当前显示上次缓存")
+                                .font(.caption)
+                                .foregroundStyle(Color(red: 138 / 255, green: 90 / 255, blue: 0))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(AndroidParityPalette.warning.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 6)
+                        }
+                        ForEach(snapshot.items) { item in
+                            RepositoryContentRow(
+                                item: item,
+                                downloaded: model.downloadedFile(for: item),
+                                progress: model.downloadProgress[item.id],
+                                openDirectory: { Task { await model.openDirectory(item) } },
+                                download: { Task { await model.download(item) } },
+                                preview: { previewURL = $0 }
+                            )
+                        }
+                        RepositoryFooter(url: model.selectedRepository.githubURL)
+                    }
+                }
+                .scrollIndicators(.hidden)
+            case .empty:
+                AndroidEmptyState(text: "此目录为空")
+                Spacer()
+            case let .failed(error):
+                VStack(spacing: 16) {
+                    Text(error.message).multilineTextAlignment(.center).foregroundStyle(AndroidParityPalette.error)
+                    Button("重试") { Task { await model.load(policy: .refresh) } }
+                }
+                .padding(32)
+                Spacer()
+            }
         }
     }
 }
 
+private struct RepositorySelectorRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let repository: StudyRepositoryConfiguration
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "folder").font(.system(size: 28)).foregroundStyle(AndroidParityPalette.folder)
+            Text(repository.name).font(.body)
+            Text(repository.repository)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(AndroidParityPalette.raisedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(Rectangle())
+    }
+}
+
 private struct RepositoryContentRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let item: GitHubContentItem
     let downloaded: DownloadedStudyFile?
     let progress: Double?
@@ -245,49 +287,49 @@ private struct RepositoryContentRow: View {
     let preview: (URL) -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: item.isDirectory ? "folder.fill" : fileIcon(item.name))
-                .foregroundStyle(item.isDirectory ? Color.yellow : Color.accentColor)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.name)
-                    .lineLimit(2)
-                if !item.isDirectory, item.size > 0 {
-                    Text(formatByteCount(item.size))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                if item.isDirectory {
+                    Image(systemName: "folder").font(.system(size: 28)).foregroundStyle(AndroidParityPalette.folder)
+                } else {
+                    RepositoryFileBadge(name: item.name)
                 }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.name).font(.body).lineLimit(2)
+                    if !item.isDirectory, item.size > 0 {
+                        Text(formatByteCount(item.size)).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
                 if let progress {
-                    ProgressView(value: progress)
-                    Text("正在下载 \(Int(progress * 100))%")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: 2) {
+                        ProgressView(value: progress).frame(width: 24)
+                        Text("\(Int(progress * 100))%").font(.caption2)
+                    }
+                } else if let downloaded {
+                    VStack(spacing: 2) {
+                        Label("已下载", systemImage: "checkmark.circle")
+                            .font(.caption2).foregroundStyle(AndroidParityPalette.success)
+                        Button("打开") { preview(downloaded.localURL) }.font(.caption2)
+                    }
+                } else if !item.isDirectory {
+                    Button(action: download) {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .font(.system(size: 22)).foregroundStyle(Color(red: 66 / 255, green: 165 / 255, blue: 245 / 255))
+                            .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            Spacer()
-            if item.isDirectory {
-                Button(action: openDirectory) {
-                    Image(systemName: "chevron.right")
-                }
-                .accessibilityLabel("打开 \(item.name)")
-            } else if let downloaded {
-                Button {
-                    preview(downloaded.localURL)
-                } label: {
-                    Image(systemName: "doc.text.magnifyingglass")
-                }
-                .accessibilityLabel("预览 \(item.name)")
-                ShareLink(item: downloaded.localURL) {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .accessibilityLabel("分享 \(item.name)")
-            } else if progress == nil {
-                Button(action: download) {
-                    Image(systemName: "arrow.down.circle")
-                }
-                .accessibilityLabel("下载 \(item.name)")
+            if let progress, progress > 0, progress < 1 {
+                ProgressView(value: progress).frame(height: 3)
             }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(AndroidParityPalette.raisedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 12)
         .contentShape(Rectangle())
         .onTapGesture {
             if item.isDirectory { openDirectory() }
@@ -296,146 +338,203 @@ private struct RepositoryContentRow: View {
     }
 }
 
-struct RepositoryDownloadsView: View {
-    let service: StudyRepositoryService
+private struct RepositoryFileBadge: View {
+    let name: String
 
+    var body: some View {
+        Text(fileType(name))
+            .font(.caption2)
+            .fontWeight(.bold)
+            .foregroundStyle(.white)
+            .frame(width: 32, height: 32)
+            .background(fileColor(name), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct RepositoryFooter: View {
+    let url: URL
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("发现新资料？向").foregroundStyle(.secondary)
+            Link("GitHub 仓库", destination: url).foregroundStyle(Color(red: 66 / 255, green: 165 / 255, blue: 245 / 255))
+            Text("提 PR 或向开发者").foregroundStyle(.secondary)
+            Link("联系", destination: URL(string: "mailto:1793838025@qq.com")!).foregroundStyle(Color(red: 66 / 255, green: 165 / 255, blue: 245 / 255))
+            Text("资料").foregroundStyle(.secondary)
+        }
+        .font(.caption)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 24)
+    }
+}
+
+struct RepositoryDownloadsView: View {
+    @Environment(\.dismiss) private var dismiss
+    let service: StudyRepositoryService
     @State private var files: [DownloadedStudyFile] = []
     @State private var selectedIDs: Set<String> = []
-    @State private var editMode: EditMode = .inactive
+    @State private var isManaging = false
     @State private var previewURL: URL?
     @State private var showBatchConfirmation = false
     @State private var errorMessage: String?
 
     var body: some View {
-        Group {
-            if files.isEmpty {
-                ContentUnavailableView(
-                    "暂无下载文件",
-                    systemImage: "arrow.down.circle",
-                    description: Text("浏览学习资料时可将文件保存到本机。")
-                )
-            } else {
-                List {
-                    ForEach(files) { file in
-                        HStack(spacing: 12) {
-                            if editMode.isEditing {
-                                Button {
-                                    toggle(file.id)
-                                } label: {
-                                    Image(systemName: selectedIDs.contains(file.id) ? "checkmark.circle.fill" : "circle")
-                                }
+        AndroidScreen {
+            VStack(spacing: 0) {
+                downloadsHeader
+                if files.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("暂无下载文件").font(.body)
+                        Text("浏览学习资料时可下载文件").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 4) {
+                            ForEach(files) { file in
+                                DownloadedFileRow(
+                                    file: file,
+                                    isManaging: isManaging,
+                                    isSelected: selectedIDs.contains(file.id),
+                                    open: { previewURL = file.localURL },
+                                    toggle: { toggle(file.id) },
+                                    delete: { Task { await delete(ids: Set([file.id])) } }
+                                )
                             }
-                            Image(systemName: fileIcon(file.name))
-                                .foregroundStyle(Color.accentColor)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(file.name).lineLimit(2)
-                                Text("\(formatByteCount(file.size)) · \(file.path)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                        }
+                    }
+                    if isManaging {
+                        HStack {
+                            Button(selectedIDs.count == files.count ? "取消全选" : "全选") {
+                                selectedIDs = selectedIDs.count == files.count ? [] : Set(files.map(\.id))
                             }
                             Spacer()
-                            if !editMode.isEditing {
-                                Button {
-                                    previewURL = file.localURL
-                                } label: {
-                                    Image(systemName: "doc.text.magnifyingglass")
-                                }
-                                ShareLink(item: file.localURL) {
-                                    Image(systemName: "square.and.arrow.up")
-                                }
-                            }
+                            Button("删除所选", role: .destructive) { showBatchConfirmation = true }
+                                .disabled(selectedIDs.isEmpty)
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if editMode.isEditing { toggle(file.id) }
-                            else { previewURL = file.localURL }
-                        }
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                let ids = Set([file.id])
-                                Task { await delete(ids: ids) }
-                            } label: {
-                                Label("删除", systemImage: "trash")
-                            }
-                        }
+                        .padding(12)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                        .padding(12)
                     }
                 }
             }
         }
-        .navigationTitle(editMode.isEditing ? "已选择 \(selectedIDs.count) 项" : "已下载文件")
-        .environment(\.editMode, $editMode)
-        .toolbar {
-            if !files.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) { EditButton() }
-            }
-            if editMode.isEditing {
-                ToolbarItem(placement: .bottomBar) {
-                    Button("删除所选", role: .destructive) {
-                        showBatchConfirmation = true
-                    }
-                    .disabled(selectedIDs.isEmpty)
-                }
-            }
-        }
-        .task { await reload() }
         .quickLookPreview($previewURL)
-        .confirmationDialog(
-            "删除选中的 \(selectedIDs.count) 个文件？",
-            isPresented: $showBatchConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("删除", role: .destructive) {
-                Task { await delete(ids: selectedIDs) }
-            }
+        .task { await reload() }
+        .confirmationDialog("删除选中的 \(selectedIDs.count) 个文件？", isPresented: $showBatchConfirmation) {
+            Button("删除", role: .destructive) { Task { await delete(ids: selectedIDs) } }
             Button("取消", role: .cancel) {}
         }
         .alert("操作失败", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("知道了", role: .cancel) { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
+            get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
+        )) { Button("知道了", role: .cancel) {} } message: { Text(errorMessage ?? "") }
+    }
+
+    private var downloadsHeader: some View {
+        HStack(spacing: 0) {
+            AndroidIconButton(systemName: "arrow.left", accessibilityLabel: "返回") { dismiss() }
+            Text("已下载文件").font(.title2).fontWeight(.semibold).frame(maxWidth: .infinity, alignment: .leading)
+            if !files.isEmpty {
+                Button(isManaging ? "完成" : "管理") {
+                    isManaging.toggle()
+                    if !isManaging { selectedIDs.removeAll() }
+                }
+                .buttonStyle(.plain)
+                .frame(height: 48)
+                .padding(.horizontal, 8)
+            }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
     }
 
     private func toggle(_ id: String) {
-        if selectedIDs.contains(id) { selectedIDs.remove(id) }
-        else { selectedIDs.insert(id) }
+        if selectedIDs.contains(id) { selectedIDs.remove(id) } else { selectedIDs.insert(id) }
     }
 
     private func reload() async {
         do {
             files = try await service.downloadedFiles()
             selectedIDs.formIntersection(files.map(\.id))
-        } catch {
-            errorMessage = "无法读取下载记录。"
-        }
+        } catch { errorMessage = "无法读取下载记录。" }
     }
 
     private func delete(ids: Set<String>) async {
         do {
             try await service.deleteDownloadedFiles(ids: ids)
             await reload()
-        } catch {
-            errorMessage = "无法删除所选文件。"
+        } catch { errorMessage = "无法删除所选文件。" }
+    }
+}
+
+private struct DownloadedFileRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let file: DownloadedStudyFile
+    let isManaging: Bool
+    let isSelected: Bool
+    let open: () -> Void
+    let toggle: () -> Void
+    let delete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if isManaging {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24))
+            }
+            RepositoryFileBadge(name: file.name)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(file.name).lineLimit(2)
+                Text("\(formatByteCount(file.size)) · \(file.path)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !isManaging {
+                Button(action: open) { Image(systemName: "doc.text.magnifyingglass") }.buttonStyle(.plain)
+                Button(action: delete) { Image(systemName: "trash").foregroundStyle(AndroidParityPalette.error) }.buttonStyle(.plain)
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(AndroidParityPalette.raisedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        .onTapGesture { isManaging ? toggle() : open() }
     }
 }
 
 func formatByteCount(_ bytes: Int64) -> String {
-    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    switch bytes {
+    case ..<1024: "\(bytes)B"
+    case ..<(1024 * 1024): "\(bytes / 1024)KB"
+    case ..<(1024 * 1024 * 1024): "\(bytes / (1024 * 1024))MB"
+    default: "\(bytes / (1024 * 1024 * 1024))GB"
+    }
 }
 
-private func fileIcon(_ name: String) -> String {
+private func fileType(_ name: String) -> String {
     switch URL(fileURLWithPath: name).pathExtension.lowercased() {
-    case "pdf": "doc.richtext"
-    case "doc", "docx": "doc.text"
-    case "ppt", "pptx": "rectangle.on.rectangle"
-    case "xls", "xlsx", "csv": "tablecells"
-    case "png", "jpg", "jpeg", "gif", "svg": "photo"
-    case "zip", "rar", "7z": "archivebox"
-    default: "doc"
+    case "pdf": "PDF"
+    case "doc", "docx": "DOC"
+    case "ppt", "pptx": "PPT"
+    case "xls", "xlsx", "csv": "XLS"
+    case "png", "jpg", "jpeg", "gif": "IMG"
+    case "svg": "SVG"
+    case "zip", "rar", "7z": "ZIP"
+    case "apk": "APK"
+    default: "FILE"
+    }
+}
+
+private func fileColor(_ name: String) -> Color {
+    switch fileType(name) {
+    case "PDF": Color(red: 229 / 255, green: 57 / 255, blue: 53 / 255)
+    case "DOC": Color(red: 21 / 255, green: 101 / 255, blue: 192 / 255)
+    case "PPT": Color(red: 230 / 255, green: 81 / 255, blue: 0)
+    case "XLS": Color(red: 46 / 255, green: 125 / 255, blue: 50 / 255)
+    case "IMG": Color(red: 142 / 255, green: 36 / 255, blue: 170 / 255)
+    case "SVG": Color(red: 255 / 255, green: 112 / 255, blue: 67 / 255)
+    case "ZIP": Color(red: 121 / 255, green: 85 / 255, blue: 72 / 255)
+    case "APK": Color(red: 0, green: 150 / 255, blue: 136 / 255)
+    default: Color(red: 117 / 255, green: 117 / 255, blue: 117 / 255)
     }
 }
