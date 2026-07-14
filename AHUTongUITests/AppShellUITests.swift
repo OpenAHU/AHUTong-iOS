@@ -69,8 +69,7 @@ final class AppShellUITests: XCTestCase {
                 XCTAssertTrue(app.buttons[marker].waitForExistence(timeout: 5))
             }
             capture(screenshotName, app: app)
-            edgeSwipeBack(app)
-            XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
+            restartAtTools(app)
         }
     }
 
@@ -83,9 +82,14 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
-    private func edgeSwipeBack(_ app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+    private func restartAtTools(_ app: XCUIApplication) {
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        let toolsTab = app.buttons["tab.tools"]
+        XCTAssertTrue(toolsTab.waitForExistence(timeout: 3))
+        toolsTab.tap()
+        XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
     }
 }
