@@ -161,6 +161,7 @@ struct LostFoundView: View {
                     .padding(.bottom, 104)
                 }
                 .scrollIndicators(.hidden)
+                .accessibilityIdentifier("lost-found.screen")
 
                 Button { showPublish = true } label: {
                     Image(systemName: "plus")
@@ -198,7 +199,6 @@ struct LostFoundView: View {
         .alert("操作结果", isPresented: mutationAlert) {
             Button("确定", role: .cancel) { model.clearMutation() }
         } message: { Text(mutationMessage) }
-        .accessibilityIdentifier("lost-found.screen")
     }
 
     private var header: some View {
