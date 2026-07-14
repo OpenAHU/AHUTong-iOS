@@ -8,9 +8,9 @@
 | --- | --- |
 | 总体状态 | 实现中 |
 | 当前里程碑 | P4：校园信息与内容工具 |
-| 当前焦点 | INFO-03 天气已形成真实 API、定位降级、缓存和完整信息展示闭环，等待 macOS CI 最终验证；CONTENT-01 已确认受 AUTH-02 阻塞 |
-| 下一步 | 推送 INFO-03 并完成 macOS 26/Xcode 26.5 单元/UI 测试与 Release iphoneos 构建；通过后继续 AUTH-02/SCH-01 真实契约 |
-| 用户/平台功能进度 | 5 / 23 个切片已完成 |
+| 当前焦点 | INFO-03 天气已完成真实 API、定位降级、缓存、完整信息展示及 macOS CI 闭环；CONTENT-01 已确认受 AUTH-02 阻塞 |
+| 下一步 | 继续 AUTH-02 校园会话真实契约与 SCH-01 教务 RemoteDataSource；会话可用后解除 CONTENT-01 阻塞 |
+| 用户/平台功能进度 | 6 / 23 个切片已完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
 
@@ -216,7 +216,7 @@ iOS/
 | PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/Electricity/` | P5 / CARD-01、D-005 | 未开始 | 校区→楼栋→楼层→房间、余额、历史选择、金额/密码、结果核验完整；无敏感请求日志 | — | 2026-07-14 |
 | INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、Quick Look/分享或保存相册及权限降级完整 | 已接 `openahu.org/download/xiaoli.jpg`，实现图片校验、原子缓存/损坏恢复、离线回退、1–5 倍缩放、Quick Look/ShareLink 和刷新错误态；macOS 26/Xcode 26.5、iOS 26.4.1 Simulator CI `29281652468` 中 4/4 专项测试和 UI smoke 通过；Release iphoneos/IPA `29281652571` 通过；Commit `6a84c55`、`45ef3e7`、`f1ac99d` | 2026-07-14 |
 | INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 本地分类、搜索、校区号码和拨号确认完整；静态数据来源可追溯 | 已迁移 9 类 57 个部门/服务点，支持部门/分类/号码搜索、磬苑/龙河标注、0551 规范化和拨号确认，页面写明手册/更新来源；CI `29281652468` 中 4/4 专项测试和 UI smoke 通过；Release iphoneos/IPA `29281652571` 通过；Commit `6a84c55`、`45ef3e7`、`f1ac99d` | 2026-07-14 |
-| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 待验证 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；设置项必须真实生效 | 已接 `uapis.cn/api/v1/misc/weather`，实现 IP 首屏、主动 GPS→反向地理编码、拒绝/失败回退、城市搜索、按查询隔离缓存、实况/预警/预报/小时/AQI/污染物/生活指数和 6 个即时生效持久化开关；6 个专项测试及四页面 UI smoke 待 macOS CI；Commit 待推送 | 2026-07-14 |
+| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 已完成 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；设置项必须真实生效 | 已接 `uapis.cn/api/v1/misc/weather`，实现 IP 首屏、主动 GPS→反向地理编码、拒绝/失败回退、城市搜索、按查询隔离缓存、实况/预警/预报/小时/AQI/污染物/生活指数和 6 个即时生效持久化开关；CI `29296066142` 中 6/6 专项测试、累计 49 个单元测试及四页面 UI smoke 通过；Release iphoneos/IPA `29296066128` 通过；Commit `8186920`、`de7ba4a`、`8603887` | 2026-07-14 |
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 阻塞 | 双列表、校区/类型/全文筛选、分页、详情与图片浏览完整 | 2026-07-14 匿名请求 campus/type/list 三个端点均 302 到 `index/tologin`；Android 也使用 AutoLoginInterceptor/TokenAuthenticator。解除条件：AUTH-02 建立可用校园会话后接入脱敏 fixture 与只读分页 | 2026-07-14 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 未开始 | 仅在服务端确认后提示成功；“我的帖子”由可靠数据源生成；图片能力按已确认 API 范围实现 | — | 2026-07-14 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 仓库/目录浏览、缓存、进度、Quick Look/分享、单个和批量删除完整 | 已接 Android 同源 6 个公开 GitHub 仓库，实现目录导航/排序、路径缓存/离线回退、CDN→Raw 降级、64 KiB 流式进度、哈希文件名、Quick Look/ShareLink、单删/批删；CI `29281652468` 中 6/6 专项测试和 UI smoke 通过；Release iphoneos/IPA `29281652571` 通过，Artifact `AHUTong-unsigned-ipa-8`（425,569 bytes，保留至 2026-07-20）；Commit `6a84c55`、`45ef3e7`、`f1ac99d` | 2026-07-14 |
@@ -346,5 +346,6 @@ iOS/
 | 2026-07-14 | INFO-002 | 迁移 9 类 57 个校园电话条目、分类/全文搜索、双校区号码、0551 规范化、拨号确认和来源说明；INFO-02 已完成 | CI `29281652468`：4/4 电话本测试及三页面 UI smoke 通过；IPA `29281652571` 通过 | `6a84c55`、`45ef3e7`、`f1ac99d` |
 | 2026-07-14 | CONTENT-001 | 迁移 6 个公开学习资料仓库的目录浏览/缓存、离线回退、流式进度、双源下载、Quick Look/分享、单删/批删；CONTENT-03 已完成 | 六个 GitHub Contents 端点 GET 200；CI `29281652468`：6/6 资料测试及三页面 UI smoke 通过；IPA `29281652571`、Artifact `AHUTong-unsigned-ipa-8` 通过 | `6a84c55`、`45ef3e7`、`f1ac99d` |
 | 2026-07-14 | OPS-005 | 三个 P4 切片完成 Swift 6 严格并发、Simulator 全量回归和 Release iphoneos 打包；用户/平台功能完成数由 2 增至 5 | macOS 26/Xcode 26.5（17F42）、iPhone 17 Pro iOS 26.4.1 Simulator：43 个单元测试 + 1 条 UI smoke 全通过；Unsigned IPA run `29281652571` 成功，425,569 bytes | `f1ac99d` |
-| 2026-07-14 | INFO-003 | 迁移天气真实 API、IP/GPS/城市三种查询、权限降级、查询隔离缓存、完整天气信息和真正生效的显示设置；INFO-03 进入待验证 | 合肥城市查询和 IP 查询均 GET 200 JSON；Windows `git diff --check`、Swift 文件结构与隐私说明审计通过；6 个新增测试及四页面 UI smoke 待 macOS CI | 待推送 |
+| 2026-07-14 | INFO-003 | 迁移天气真实 API、IP/GPS/城市三种查询、权限降级、查询隔离缓存、完整天气信息和真正生效的显示设置；INFO-03 已完成 | 合肥城市查询和 IP 查询均 GET 200 JSON；CI `29296066142`：macOS 26/Xcode 26.5（17F42）、iPhone 17 Pro iOS 26.4.1 Simulator，6/6 天气测试、累计 49 个单元测试及四页面 UI smoke 全通过；IPA `29296066128` 成功 | `8186920`、`de7ba4a`、`8603887` |
 | 2026-07-14 | CONTENT-002 | 验证失物招领只读端点的认证边界，确认 CONTENT-01 不能在 AUTH-02 前独立闭环并标记阻塞 | 匿名 GET `/lostfound/campus/all`、`/lostfound/type/all`、`/lostfound/all` 均返回 302 到登录页；Android 同时配置 AutoLoginInterceptor/TokenAuthenticator | — |
+| 2026-07-14 | OPS-006 | INFO-03 完成 Swift 6 严格并发、Simulator 全量回归和 Release iphoneos 打包；用户/平台功能完成数由 5 增至 6 | CI `29296066142` 通过 49 个单元测试及 1 条 UI smoke；Unsigned IPA run `29296066128` 成功，Artifact `AHUTong-unsigned-ipa-11`、604,066 bytes | `8603887` |
