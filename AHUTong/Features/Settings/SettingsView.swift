@@ -15,23 +15,20 @@ struct SettingsView: View {
                     AndroidHeader(title: "设置", large: true)
                     appCard
                     section("账户信息")
-                    settingsGroup {
-                        accountRow
-                        NavigationLink {
-                            AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
-                        } label: {
-                            AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("settings.preferences")
-                        AndroidSettingButton(label: "退出登录", systemImage: "rectangle.portrait.and.arrow.right") {
-                            Task { await appModel.signOut() }
-                        }
+                    accountCard
+                    NavigationLink {
+                        AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
+                    } label: {
+                        AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
+                            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                            .padding(.horizontal, 16)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.preferences")
                     section("关于")
                     settingsGroup {
                         NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
-                            AndroidSettingRow(label: "开源许可证", systemImage: "doc.text")
+                            AndroidSettingRow(label: "开源协议", systemImage: "doc.text")
                         }
                         .buttonStyle(.plain)
                         NavigationLink { ContributorsView().androidDetailScreen() } label: {
@@ -74,10 +71,7 @@ struct SettingsView: View {
     private var appCard: some View {
         AndroidCard(radius: 32, background: AndroidParityPalette.primaryContainer(colorScheme)) {
             HStack(spacing: 16) {
-                ZStack {
-                    Capsule().fill(Color.white)
-                    Image(systemName: "a.circle.fill").font(.system(size: 56, weight: .bold)).foregroundStyle(AndroidParityPalette.brand)
-                }
+                AndroidAppMark()
                 .frame(width: 72, height: 72)
                 VStack(alignment: .leading) {
                     Text("安大通").font(.title2)
@@ -90,18 +84,22 @@ struct SettingsView: View {
         .padding(.horizontal, 16)
     }
 
-    private var accountRow: some View {
+    private var accountCard: some View {
         let user: User? = if case let .authenticated(user) = appModel.sessionState { user } else { nil }
-        return HStack(spacing: 16) {
-            Image(systemName: "person.crop.circle.fill").font(.title2).frame(width: 24)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(user?.name ?? "未登录").font(.headline)
-                Text(user?.studentID ?? "").font(.caption).foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 28) {
+            Text(user?.name ?? "未登录").font(.title2)
+            Button {
+                Task { await appModel.signOut() }
+            } label: {
+                Label("重新登录", systemImage: "rectangle.portrait.and.arrow.forward")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
             }
-            Spacer()
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 24).padding(.vertical, 16)
-        .background(AndroidParityPalette.surface(colorScheme))
+        .padding(24)
+        .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .padding(.horizontal, 16)
     }
 
     private func section(_ text: String) -> some View {
@@ -110,6 +108,23 @@ struct SettingsView: View {
 
     private func settingsGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 2, content: content).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 16)
+    }
+}
+
+private struct AndroidAppMark: View {
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("安大通")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Color(red: 240 / 255, green: 112 / 255, blue: 62 / 255), in: RoundedRectangle(cornerRadius: 3))
+            Image(systemName: "building.columns")
+                .font(.system(size: 27, weight: .light))
+                .foregroundStyle(.gray)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.white, in: Circle())
     }
 }
 

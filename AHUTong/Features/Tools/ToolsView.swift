@@ -5,12 +5,20 @@ struct ToolsView: View {
     private let tools = AndroidToolItem.all
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
     let appModel: AppModel
+    let onEditHome: () -> Void
+
+    init(appModel: AppModel, onEditHome: @escaping () -> Void = {}) {
+        self.appModel = appModel
+        self.onEditHome = onEditHome
+    }
 
     var body: some View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 24) {
-                    AndroidHeader(title: "小工具")
+                    AndroidHeader(title: "小工具") {
+                        AndroidIconButton(systemName: "pencil", accessibilityLabel: "编辑首页", action: onEditHome)
+                    }
 
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(tools) { tool in

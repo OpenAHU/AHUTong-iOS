@@ -11,7 +11,7 @@ enum AndroidParityPalette {
     static func background(_ scheme: ColorScheme) -> Color {
         scheme == .dark
             ? Color(red: 26 / 255, green: 26 / 255, blue: 26 / 255)
-            : Color(red: 245 / 255, green: 245 / 255, blue: 245 / 255)
+            : Color(red: 248 / 255, green: 247 / 255, blue: 253 / 255)
     }
 
     static func surface(_ scheme: ColorScheme) -> Color {
@@ -29,7 +29,7 @@ enum AndroidParityPalette {
     static func primaryContainer(_ scheme: ColorScheme) -> Color {
         scheme == .dark
             ? Color(red: 35 / 255, green: 68 / 255, blue: 82 / 255)
-            : Color(red: 190 / 255, green: 233 / 255, blue: 255 / 255)
+            : Color(red: 216 / 255, green: 224 / 255, blue: 255 / 255)
     }
 
     static func secondaryText(_ scheme: ColorScheme) -> Color {

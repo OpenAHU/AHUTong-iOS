@@ -70,7 +70,10 @@ struct RootView: View {
         case .schedule:
             ScheduleView(appModel: appModel)
         case .tools:
-            ToolsView(appModel: appModel)
+            ToolsView(appModel: appModel) {
+                UserDefaults.standard.set(true, forKey: "home.request-edit")
+                selectedTab = .home
+            }
         case .settings:
             SettingsView(onboardingModel: onboardingModel, appModel: appModel)
         }

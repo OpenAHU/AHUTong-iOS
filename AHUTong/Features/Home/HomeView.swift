@@ -101,6 +101,7 @@ struct HomeView: View {
     @StateObject private var model: HomeViewModel
     @State private var layout: HomeWidgetLayout
     @State private var isEditing = false
+    @AppStorage("home.request-edit") private var requestEdit = false
     @State private var unavailableWidgetTitle = ""
     @State private var showsUnavailableWidget = false
     private let appModel: AppModel
@@ -149,6 +150,12 @@ struct HomeView: View {
             if let data = try? JSONEncoder().encode(newValue) {
                 UserDefaults.standard.set(data, forKey: "home.widget-layout")
                 UserDefaults.standard.set(2, forKey: "home.widget-layout-version")
+            }
+        }
+        .onAppear {
+            if requestEdit {
+                isEditing = true
+                requestEdit = false
             }
         }
         .alert(unavailableWidgetTitle, isPresented: $showsUnavailableWidget) {

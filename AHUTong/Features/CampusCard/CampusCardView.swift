@@ -119,7 +119,7 @@ struct CampusCardPanel: View {
             Button { showsQRCode = true } label: {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("校园卡余额").font(.headline.bold()).padding(.top, 15)
-                    balanceText.font(.title2.bold())
+                    balanceText.font(.title2.bold()).lineLimit(1).minimumScaleFactor(0.72)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(20)

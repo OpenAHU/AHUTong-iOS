@@ -280,7 +280,16 @@ struct ScheduleView: View {
             names = [name]
         }
         let index = names.firstIndex(of: name) ?? 0
-        return Color(hue: Double(index) / Double(max(names.count, 1)), saturation: 0.62, brightness: 0.72)
+        let colors = [
+            Color(red: 182 / 255, green: 84 / 255, blue: 118 / 255),
+            Color(red: 181 / 255, green: 108 / 255, blue: 52 / 255),
+            Color(red: 145 / 255, green: 128 / 255, blue: 0 / 255),
+            Color(red: 62 / 255, green: 139 / 255, blue: 85 / 255),
+            Color(red: 76 / 255, green: 124 / 255, blue: 177 / 255),
+            Color(red: 80 / 255, green: 130 / 255, blue: 184 / 255),
+            Color(red: 112 / 255, green: 82 / 255, blue: 174 / 255)
+        ]
+        return colors[index % colors.count]
     }
 
     private var currentWeekdayIndex: Int {
