@@ -177,10 +177,10 @@ struct FreeClassroomView: View {
             } label: {
                 Text(model.rooms.isLoading ? "查询中..." : "开始查询空闲教室")
                     .font(.headline.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 11)
-                    .background(AndroidParityPalette.brand, in: Capsule())
+                    .background(AndroidParityPalette.primaryTone90, in: Capsule())
             }
             .buttonStyle(.plain)
             .disabled(model.rooms.isLoading || model.buildings.isEmpty)
@@ -258,10 +258,10 @@ struct FreeClassroomView: View {
         Button(action: action) {
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(selected ? Color.white : Color.primary)
+                .foregroundStyle(Color.primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(selected ? AndroidParityPalette.brand : AndroidParityPalette.background(colorScheme), in: Capsule())
+                .background(selected ? AndroidParityPalette.primaryTone90 : AndroidParityPalette.background(colorScheme), in: Capsule())
         }
         .buttonStyle(.plain)
     }

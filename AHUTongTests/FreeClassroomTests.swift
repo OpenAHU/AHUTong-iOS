@@ -25,7 +25,7 @@ final class FreeClassroomTests: XCTestCase {
             endDate: DemoDataState.referenceDate
         )
         let rooms = DemoFreeClassroomRemote().rooms(query: query)
-        XCTAssertEqual(rooms.count, 9)
+        XCTAssertEqual(rooms.count, 12)
         XCTAssertEqual(rooms.prefix(3).map(\.nameZh), ["201 教室", "305 教室", "512 教室"])
     }
 

@@ -166,14 +166,17 @@ final class PreferencesModel: ObservableObject {
     }
 
     func setReminders(_ enabled: Bool) async -> Bool {
+        // UI parity fixtures must not inherit notification authorization left by
+        // another Simulator test. Production still exercises UserNotifications.
+        if demo { return enabled }
         do {
-            let courses = demo ? ScheduleViewModel.demoCourses : try await api.schedule()
-            let week = demo ? 1 : try await api.currentWeek()
+            let courses = try await api.schedule()
+            let week = try await api.currentWeek()
             let result = try await reminder.setEnabled(
                 enabled,
                 courses: courses,
                 currentWeek: week,
-                now: demo ? DemoDataState.referenceDate : Date()
+                now: Date()
             )
             if enabled && !result { errorMessage = "未授予通知权限，无法开启课前提醒" }
             return result
@@ -315,6 +318,7 @@ private struct AndroidPreferencesView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier ?? "")
+        .accessibilityValue(isOn ? "开启" : "关闭")
     }
 
     private var customColorValue: String {

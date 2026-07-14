@@ -49,9 +49,10 @@ final class LostFoundTests: XCTestCase {
         } catch {
             XCTAssertEqual(error.localizedDescription, "只能删除自己发布的帖子")
         }
-        try await remote.delete(id: "demo-owned-1")
+        let owned = try await remote.publish(validDraft())
+        try await remote.delete(id: owned.id)
         let page = await remote.page(state: 1, page: 1, size: 20)
-        XCTAssertFalse(page.list.contains { $0.id == "demo-owned-1" })
+        XCTAssertFalse(page.list.contains { $0.id == owned.id })
     }
 
     private func validDraft() -> LostFoundPublishDraft {

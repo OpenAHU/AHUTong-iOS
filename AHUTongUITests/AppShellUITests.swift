@@ -184,14 +184,9 @@ final class AppShellUITests: XCTestCase {
         let reminder = app.buttons["preferences.course-reminders"]
         XCTAssertTrue(reminder.waitForExistence(timeout: 4))
         reminder.tap()
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        if springboard.alerts.firstMatch.waitForExistence(timeout: 3) {
-            let allow = springboard.alerts.buttons.matching(
-                NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "允许", "Allow")
-            ).firstMatch
-            XCTAssertTrue(allow.waitForExistence(timeout: 2))
-            allow.tap()
-        }
+        expectation(for: NSPredicate(format: "value == %@", "开启"), evaluatedWith: reminder)
+        waitForExpectations(timeout: 3)
+        XCTAssertEqual(reminder.value as? String, "开启")
         waitForRendering()
         capture("23-course-reminder-enabled", app: app)
     }

@@ -131,13 +131,19 @@ struct DemoFreeClassroomRemote: FreeClassroomRemote {
             ? [ClassroomBuilding(code: "LH-JX", enabled: true, id: 201, nameZh: "龙河教学主楼")]
             : [
                 ClassroomBuilding(code: "BXN", enabled: true, id: 101, nameZh: "博学南楼"),
-                ClassroomBuilding(code: "DXB", enabled: true, id: 102, nameZh: "笃行北楼"),
-                ClassroomBuilding(code: "WDG", enabled: true, id: 103, nameZh: "文典阁")
+                ClassroomBuilding(code: "SYZX", enabled: true, id: 104, nameZh: "实验中心"),
+                ClassroomBuilding(code: "WDG", enabled: true, id: 103, nameZh: "文典阁"),
+                ClassroomBuilding(code: "DXB", enabled: true, id: 102, nameZh: "笃行北楼")
             ]
     }
 
     func rooms(query: FreeClassroomQuery) -> [FreeClassroomRoom] {
-        let buildings: [(Int, String, String)] = [(101, "博学南楼", "BXN"), (102, "笃行北楼", "DXB"), (103, "文典阁", "WDG")]
+        let buildings: [(Int, String, String)] = [
+            (101, "博学南楼", "BXN"),
+            (104, "实验中心", "SYZX"),
+            (103, "文典阁", "WDG"),
+            (102, "笃行北楼", "DXB")
+        ]
         let rooms: [(Int, Int, Int)] = [(201, 2, 72), (305, 3, 48), (512, 5, 96)]
         let candidates = buildings.flatMap { building in
             rooms.map { room in

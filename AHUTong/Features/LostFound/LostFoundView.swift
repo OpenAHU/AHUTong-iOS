@@ -149,8 +149,13 @@ struct LostFoundView: View {
                 ScrollView {
                     LazyVStack(spacing: 24) {
                         header
-                        if searchExpanded { AndroidSearchField(text: $model.searchQuery, prompt: "搜索帖子") }
-                        filters
+                        if searchExpanded {
+                            AndroidSearchField(text: $model.searchQuery, prompt: "搜索全部信息")
+                                .padding(.horizontal, 24)
+                        } else {
+                            filters
+                        }
+                        summary
                         content
                     }
                     .padding(.bottom, 104)
@@ -160,9 +165,13 @@ struct LostFoundView: View {
                 Button { showPublish = true } label: {
                     Image(systemName: "plus")
                         .font(.title.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AndroidParityPalette.systemTheme)
                         .frame(width: 64, height: 64)
-                        .background(AndroidParityPalette.brand, in: Circle())
+                        .background(
+                            AndroidParityPalette.primaryTone90,
+                            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        )
+                        .shadow(color: .black.opacity(0.22), radius: 10, y: 6)
                 }
                 .buttonStyle(.plain)
                 .padding(24)
@@ -171,9 +180,21 @@ struct LostFoundView: View {
             }
         }
         .task { await model.load() }
-        .sheet(item: $selectedItem) { LostFoundDetailView(item: $0) }
-        .sheet(isPresented: $showPublish) { LostFoundPublishView(model: model, isPresented: $showPublish) }
-        .sheet(isPresented: $showMyPosts) { LostFoundMyPostsView(model: model) }
+        .sheet(item: $selectedItem) {
+            LostFoundDetailView(item: $0)
+                .presentationDetents([.fraction(0.6)])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showPublish) {
+            LostFoundPublishView(model: model, isPresented: $showPublish)
+                .presentationDetents([.fraction(0.6)])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showMyPosts) {
+            LostFoundMyPostsView(model: model)
+                .presentationDetents([.fraction(0.6)])
+                .presentationDragIndicator(.visible)
+        }
         .alert("操作结果", isPresented: mutationAlert) {
             Button("确定", role: .cancel) { model.clearMutation() }
         } message: { Text(mutationMessage) }
@@ -181,48 +202,72 @@ struct LostFoundView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            stateChip("失物招领", value: 1)
-            stateChip("寻物启事", value: 2)
-            Spacer()
-            HStack(spacing: 0) {
-                AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") { Task { await model.load() } }
-                AndroidIconButton(systemName: searchExpanded ? "xmark" : "magnifyingglass", accessibilityLabel: "搜索") {
-                    searchExpanded.toggle()
-                    if !searchExpanded { model.searchQuery = "" }
+        HStack(spacing: 0) {
+            HStack { stateChip("失物招领", value: 1); Spacer() }
+                .frame(maxWidth: .infinity)
+            HStack { Spacer(); stateChip("寻物启事", value: 2); Spacer() }
+                .frame(maxWidth: .infinity)
+            HStack {
+                Spacer()
+                HStack(spacing: 0) {
+                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") { Task { await model.load() } }
+                    AndroidIconButton(systemName: searchExpanded ? "xmark" : "magnifyingglass", accessibilityLabel: "搜索") {
+                        searchExpanded.toggle()
+                        if !searchExpanded { model.searchQuery = "" }
+                    }
                 }
-                AndroidIconButton(systemName: "person.crop.rectangle.stack", accessibilityLabel: "管理我的帖子") { showMyPosts = true }
+                .padding(2)
+                .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
             }
-            .padding(2)
-            .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
+            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, 24)
         .padding(.top, 24)
     }
 
     private var filters: some View {
-        VStack(spacing: 8) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    filterChip("全部校区", selected: model.selectedCampusID == nil) { model.selectedCampusID = nil }
-                    ForEach(model.catalog.campuses) { campus in
-                        filterChip(campus.campusName, selected: model.selectedCampusID == campus.id) { model.selectedCampusID = campus.id }
-                    }
+        VStack(spacing: 24) {
+            filterContainer {
+                filterChip("全部校区", selected: model.selectedCampusID == nil) { model.selectedCampusID = nil }
+                ForEach(model.catalog.campuses) { campus in
+                    filterChip(campus.campusName, selected: model.selectedCampusID == campus.id) { model.selectedCampusID = campus.id }
                 }
-                .padding(.horizontal, 24)
             }
-            .scrollIndicators(.hidden)
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    filterChip("全部类型", selected: model.selectedTypeID == nil) { model.selectedTypeID = nil }
-                    ForEach(model.catalog.types) { type in
-                        filterChip(type.typeName, selected: model.selectedTypeID == type.id) { model.selectedTypeID = type.id }
-                    }
+            filterContainer {
+                filterChip("全部类型", selected: model.selectedTypeID == nil) { model.selectedTypeID = nil }
+                ForEach(model.catalog.types) { type in
+                    filterChip(type.typeName, selected: model.selectedTypeID == type.id) { model.selectedTypeID = type.id }
                 }
-                .padding(.horizontal, 24)
             }
-            .scrollIndicators(.hidden)
         }
+    }
+
+    private func filterContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) { content() }
+                .padding(8)
+        }
+        .scrollIndicators(.hidden)
+        .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
+        .padding(.horizontal, 16)
+    }
+
+    private var summary: some View {
+        HStack {
+            Text(summaryText).font(.headline)
+            Spacer()
+            Button("管理我的帖子") { showMyPosts = true }
+                .buttonStyle(.plain)
+                .foregroundStyle(AndroidParityPalette.systemTheme)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var summaryText: String {
+        if searchExpanded && !model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "搜索「\(model.searchQuery)」到 \(model.filteredItems.count) 条记录"
+        }
+        return "共 \(model.filteredItems.count) 条记录"
     }
 
     @ViewBuilder
@@ -260,8 +305,8 @@ struct LostFoundView: View {
     }
 
     private func itemCard(_ item: LostFoundItem) -> some View {
-        AndroidCard(radius: 32) {
-            VStack(alignment: .leading, spacing: 10) {
+        AndroidCard(radius: 4) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(item.title).font(.headline.bold())
                 Text("联系人：\(item.linkman ?? "未知")")
                 Text("联系电话：\(item.phone ?? "未知")")
@@ -271,24 +316,38 @@ struct LostFoundView: View {
                 Text(item.createtime ?? "未知时间").foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
         }
         .padding(.horizontal, 16)
     }
 
     private func stateChip(_ text: String, value: Int) -> some View {
-        filterChip(text, selected: model.currentState == value) { Task { await model.switchState(value) } }
-            .font(.title3)
+        let selected = model.currentState == value
+        return Button { Task { await model.switchState(value) } } label: {
+            Text(text)
+                .font(.system(size: 18))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(selected ? AndroidParityPalette.primaryTone90 : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    if !selected {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(AndroidParityPalette.separator(colorScheme), lineWidth: 1)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
     }
 
     private func filterChip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(text)
-                .fontWeight(selected ? .bold : .regular)
-                .foregroundStyle(selected ? Color.white : Color.primary)
+                .foregroundStyle(Color.primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(selected ? AndroidParityPalette.brand : AndroidParityPalette.surface(colorScheme), in: Capsule())
+                .background(selected ? AndroidParityPalette.primaryTone90 : Color.clear, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -319,7 +378,9 @@ private struct LostFoundDetailView: View {
         AndroidScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    AndroidHeader(title: item.title, large: true)
+                    Text(item.title)
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
                     detail("联系人", item.linkman)
                     detail("联系电话", item.phone)
                     detail("校区", item.campusName)
@@ -369,7 +430,7 @@ private struct LostFoundPublishView: View {
                     Text("*目前智慧安大图片功能有时无法使用，请大家文字描述尽量详尽")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    AndroidHeader(title: "发布帖子", large: true)
+                    Text("发布帖子").font(.title2.bold())
                     field("联系人 *", text: $draft.contact)
                     field("联系电话 *", text: $draft.phone)
                     field("描述内容 *", text: $draft.title, axis: .vertical)
@@ -396,7 +457,7 @@ private struct LostFoundPublishView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(14)
-                            .background(AndroidParityPalette.brand, in: Capsule())
+                            .background(AndroidParityPalette.systemTheme, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(model.mutation == .working)
@@ -411,7 +472,10 @@ private struct LostFoundPublishView: View {
     private func field(_ title: String, text: Binding<String>, axis: Axis = .horizontal) -> some View {
         TextField(title, text: text, axis: axis)
             .padding(16)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.secondary.opacity(0.75), lineWidth: 1)
+            }
     }
 
     private func selector<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -424,10 +488,10 @@ private struct LostFoundPublishView: View {
     private func selectionChip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(text)
-                .foregroundStyle(selected ? Color.white : Color.primary)
+                .foregroundStyle(Color.primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(selected ? AndroidParityPalette.brand : Color.secondary.opacity(0.1), in: Capsule())
+                .background(selected ? AndroidParityPalette.primaryTone90 : Color.secondary.opacity(0.1), in: Capsule())
         }
         .buttonStyle(.plain)
     }

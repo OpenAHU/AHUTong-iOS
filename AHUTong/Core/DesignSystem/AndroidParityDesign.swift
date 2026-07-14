@@ -4,6 +4,8 @@ enum AndroidParityPalette {
     static let brand = Color(red: 0 / 255, green: 127 / 255, blue: 172 / 255)
     static let accent = Color(red: 0 / 255, green: 136 / 255, blue: 255 / 255)
     static let systemTheme = Color(red: 103 / 255, green: 80 / 255, blue: 164 / 255)
+    static let primaryTone90 = Color(red: 234 / 255, green: 221 / 255, blue: 255 / 255)
+    static let primaryTone80 = Color(red: 208 / 255, green: 188 / 255, blue: 255 / 255)
     static let liquidToggle = Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255)
     static let folder = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)
     static let success = Color(red: 76 / 255, green: 175 / 255, blue: 80 / 255)
