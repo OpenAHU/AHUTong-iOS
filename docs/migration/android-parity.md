@@ -6,11 +6,11 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| 总体状态 | 实现中 |
-| 当前里程碑 | P2～P6：核心闭环、教务域、低风险校园服务与平台增强已完成核心收口 |
-| 当前焦点 | 19 个可独立验收切片已经完成代码、专项测试、macOS CI 和 Android ↔ iOS 43 屏视觉终验；本轮达到并越过 80% 停止线 |
-| 下一步 | 保持 D-005 支付安全阻断，继续 OPS-01 隐私/发布清单，并由用户在 iPhone 13 Pro 上完成 Personal Team 7 天签名、授权校园账号和系统通知/Widget 实机回归 |
-| 用户/平台功能进度 | 19 / 23 个切片满足严格完成定义（82.6%）；其余 4 个为受 D-005 阻断的 3 个支付切片和 1 个实现中的发布运维切片 |
+| 总体状态 | 外部阻塞 |
+| 当前里程碑 | P2～P7：除真实支付上线验收外，客户端迁移、隐私与发布工程均已收口 |
+| 当前焦点 | 20 个可独立验收切片已经完成代码、专项测试、macOS CI、Release Archive 和 Android ↔ iOS 视觉证据；三类支付客户端闭环已实现，但不能绕过 D-005 冒充真实支付完成 |
+| 下一步 | 支付负责人提供已轮换的服务端网关、客户端鉴权方式和受控测试账号/授权环境后，对 PAY-01～03 分别执行小额、超时、重复提交、第三方返回和服务端对账验收 |
+| 用户/平台功能进度 | 20 / 23 个切片满足严格完成定义（87.0%）；剩余 3 个均为受 D-005、R-003、R-004 外部依赖阻断的真实支付切片 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-15 |
 
@@ -44,12 +44,13 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 ### 1.4 UI 完全一致硬约束
 
 1. 固定基线表中的 Android commit 及其 Compose 实际渲染结果是唯一视觉真源；不得以“更符合 iOS”“更简洁”或个人审美为由重新设计。
-2. 页面信息架构、组件类型、内容顺序、中文文案、图标语义、颜色、字号/字重、圆角、阴影、间距、留白、对齐、卡片尺寸、列表密度、底栏和顶部栏必须与 Android 保持一致。
+2. 页面信息架构、组件类型、内容顺序、中文文案、图标语义、颜色、字号/字重、圆角、阴影、间距、留白、对齐、卡片尺寸、列表密度、底栏和顶部栏必须与 Android 保持一致；第 8 条记录的用户显式覆盖除外。
 3. 正常、加载、空数据、错误、弹窗、菜单、搜索、展开/收起、刷新和权限降级等可见状态都必须逐一对齐；不能只对齐首屏静态状态。
 4. iOS 只允许保留系统强制差异：安全区、Home Indicator、系统权限弹窗、系统返回手势、拨号/分享/Quick Look 等系统控制器。差异必须限制在系统边界内，并记录在平台差异表中。
 5. SwiftUI 可以使用等价实现，但不得用默认 `List`、`Form`、`TabView` 或系统导航样式替代 Android 已明确设计的自定义外观；需要时应以自定义组件复现 Compose 布局。
 6. 每个页面完成前必须保存同一设备尺寸、同一数据状态的 Android 与 iOS 截图，检查关键几何尺寸与颜色；主要页面必须有 UI 测试覆盖可见文案、入口和交互状态。
 7. 本约束追溯适用于此前已标记完成的 APP-01、AUTH-01、INFO-01、INFO-02、INFO-03、CONTENT-03；这些切片在 UI 复验通过前统一回到“实现中”。
+8. 2026-07-15 用户显式要求四入口底栏改用 iOS 原生 Liquid Glass。iOS 26+ 使用 `GlassEffectContainer`、`glassEffect(.regular.interactive())`、`glassEffectID` 和系统折射/触控反馈；iOS 17～25 保留 `ultraThinMaterial` 兼容层。入口顺序、图标、中文文案、选中语义和业务导航仍与 Android 一致，但底栏材质不再追求 Android 像素一致。
 
 ## 2. 固定基线
 
@@ -187,10 +188,10 @@ iOS/
 | D-002 | iOS 子仓许可证是否与 AIO 的 GPL-3.0 一致 | 待确认 | 发布前必须有明确许可证与第三方声明 |
 | D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 已完成 spike | 固定 SDK 已在 macOS CI 同时产出 Simulator/device `staticlib` 并链接到 Swift；本阶段不额外封装 XCFramework，构建脚本按 Apple target 选择静态库 |
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 已确定开发期方案 | C ABI 负责启动、停止和生命周期；业务请求使用带随机 token 的 localhost Rust server + Swift `URLSession`，只开放 loopback，保留未来逐接口直连 FFI 的替换边界 |
-| D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞支付 | 完成安全整改前禁止进入支付上线验收 |
-| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | Simulator、截图和未签名 IPA 均已通过 | 最终 CI `29353937788` 使用 Xcode 26.5（17F42）、自建 iPhone 13 Pro / iOS 26.5 Simulator，通过 87 个单元测试、3 个 UI 测试并上传 43 张截图；设备 run `29353938071` 上传 `AHUTong-unsigned-ipa-46`；物理 iPhone 13 Pro 验证由用户执行 |
+| D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞支付 | 2026-07-15 对 OpenAHU 可见仓库和组织代码执行只读检索，未找到可接入的服务端支付签名/对账网关；必须由支付负责人完成已暴露材料轮换并提供网关 URL、鉴权契约及授权测试环境后，才能进入三类真实支付验收 |
+| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator 复验中；未签名 IPA 与 Release Archive 已通过 | CI `29361297708` 已通过编译和全部单元测试，但暴露页面级 accessibility identifier 覆盖底栏/支付子按钮的问题；标识已收窄到标题节点，并新增贡献名单站内页回归，等待同一 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 重跑。设备 run `29361297806` 与 Archive run `29361297830` 已成功；物理 iPhone 13 Pro 验证由用户执行 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
-| D-007 | 崩溃上报、灰度、统计与广告方案 | 待确认 | 必须先完成隐私清单、数据用途和 App Store 合规评估 |
+| D-007 | 崩溃上报、灰度、统计与广告方案 | 已确定当前方案 | 当前不集成第三方崩溃、统计或广告 SDK；灰度只向自有端点发送不可逆账号摘要并提供本地兜底；未来新增数据收集必须先更新隐私清单和用途评估 |
 | D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
 
 ## 7. 里程碑
@@ -202,9 +203,9 @@ iOS/
 | P2 | 核心闭环 | 登录/退出/恢复会话、课表、首页今日课程、离线缓存、多账号隔离完整 | 已完成 |
 | P3 | 教务域 | 成绩/GPA、考试、空闲教室契约与 UI 完整 | 已完成（3 / 3） |
 | P4 | 低风险校园服务 | 余额/二维码、失物只读、校历、天气、电话本、学习资料完整 | 已完成 |
-| P5 | 写操作与支付 | 失物发布/删除和三类支付通过安全、幂等、失败恢复及真机验证 | 实现中（失物写操作完成；3 个支付受 D-005 阻断） |
+| P5 | 写操作与支付 | 失物发布/删除和三类支付通过安全、幂等、失败恢复及真机验证 | 外部阻塞（失物写操作与支付客户端完成；3 个真实支付验收受 D-005 阻断） |
 | P6 | 平台增强 | WidgetKit、课程提醒、可选 Live Activity、后台刷新与辅助功能完整 | 核心完成（WidgetKit / 普通提醒；Live Activity 保持可选） |
-| P7 | 发布 | Release Archive、签名、权限文案、隐私清单、TestFlight/App Store 清单完整 | 未开始 |
+| P7 | 发布 | Release Archive、签名、权限文案、隐私清单、TestFlight/App Store 清单完整 | 工程收口（OPS-01 完成；正式许可证、付费签名/TestFlight 不属于当前 Personal Team 方案） |
 
 ## 8. 功能迁移矩阵
 
@@ -212,9 +213,11 @@ iOS/
 
 本轮新增完成行共享证据 `E-20260715-01`：Android 产品参考仍固定为 `2a30a54`，证据分支仅增加测试与确定性 fixture，commit `887a0c5` 的 CI `29351110964` 和 UI run `29351111083` 均成功，Artifact `AHUTong-android-ui-baseline-19` 含 43 张 1170×2532 PNG；iOS code commit `77a5ae5` 的 CI `29353937788` 在 Xcode 26.5（17F42）、iPhone 13 Pro / iOS 26.5 Simulator 上通过 87 个单元测试、3 个 UI 测试，Artifact `AHUTong-ui-parity-xcresult-46` 含同尺寸 43 张 PNG 且无缺图；设备 run `29353938071` 上传 4,211,678 bytes 的 `AHUTong-unsigned-ipa-46`，SHA-256 为 `81F454EE79F2FB343E49BEB39DE7E05CA6E9B5B79B0FC7B7D5A1B7561466FF20`，包内确认包含 `AHUTongWidget.appex`。新增空闲教室、失物列表/详情/发布、Widget 预览、提醒开关及登录/数据三态均完成双端逐屏审查；真实校园账号和物理 iPhone 只作为部署环境回归，不冒充已执行证据。
 
+收口候选证据 `E-20260715-02`：Android 产品参考继续固定为 `2a30a54`，证据分支 commit `fc150b0` 只扩展 UI 自动化，Android CI `29359831800` 与 UI run `29359831897` 均成功，Artifact `AHUTong-android-ui-baseline-20` 含 48 张 1170×2532 PNG；新增校园卡充值正常/确认弹窗、浴室正常、电控正常和隐藏 Debug 五屏已逐张目视检查。iOS commits `c091244`、`eb240cc`、`eae0cd8` 已分别完成支付/运维、原生 Liquid Glass 底栏和移除录屏遮罩；设备 run `29361297806` 上传 4,431,711 bytes 的 `AHUTong-unsigned-ipa-51`，SHA-256 为 `803C19FAE88D615CEC1EAABB8B2236D842D5A8E926E5A0A829D70D3AFF72D537`，Archive run `29361297830` 成功校验 App/Widget、双隐私清单、dSYM 与敏感信息边界。CI `29361297708` 暴露测试标识覆盖子按钮的问题后，已将液态玻璃、支付页面/弹窗标识收窄，并按 Android `Contributors.kt` / `DeveloperViewModel.kt` 将 GitHub 占位页替换为站内“加入我们 + 开发者”名单；115 个单元测试、4 个 UI 测试与 54 张截图的最终 run 待本提交推送后补录。支付截图为不可扣款 Mock，只证明客户端 UI/状态机，不替代 D-005 服务端网关与授权环境验收；Liquid Glass 底栏是用户明确批准的平台视觉例外。
+
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、自定义浮动底栏、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景均按 Compose 重做；系统 `TabView` 已移除 | `AppTabTests` 2 项、`LoadableStateTests` 3 项和 2 条全路径 UI 测试通过；29 屏双端对照见 `E-20260714-01`；Commits `d15a207`、`3682aab`、`c174fcd`、`6561f25` | 2026-07-14 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏在 iOS 26+ 改用原生交互式 Liquid Glass 与流体选中胶囊，iOS 17～25 使用系统材质兼容层，仍不使用 `TabView` 接管业务导航 | `AppTabTests` 2 项、`LoadableStateTests` 3 项和 4 条全路径 UI 测试通过；原双端对照见 `E-20260714-01`，Liquid Glass 分支与更新截图见 `E-20260715-02`；Commits `d15a207`、`3682aab`、`c174fcd`、`6561f25`、`eb240cc` | 2026-07-15 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
 | AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 已完成 | 固定 Rust SDK 的验证码/CAS/Cookie 链路以 Apple staticlib 接入；Cookie 从 Rust 扁平同步到内存请求层，冷启动优先恢复会话，过期时使用 ThisDeviceOnly Keychain 凭据重登，无凭据时安全清理，退出同时清理会话与 Widget 快照 | `CampusSessionStoreTests` 4 项、`CredentialStoreTests` 4 项及登录正常/工作中/错误状态在 `E-20260715-01` 全通过；授权校园账号与物理机属于部署回归，不替代已验证契约；Commits `d8516f2`、`77a5ae5` | 2026-07-15 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 已完成 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入 cache-first/refresh/stale-cache Repository；单双周、损坏恢复、账号隔离、Widget 快照与提醒刷新统一从同一份课表结果驱动 | 课表 Repository、文件缓存、周次和模型共 12 项测试及全状态 UI 在 `E-20260715-01` 通过；授权账号的当期响应保留为外部服务回归；Commit `d8516f2` | 2026-07-15 |
@@ -223,20 +226,20 @@ iOS/
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/grade`、递归兼容解析、学籍摘要、GPA/排名、学期筛选、全文搜索、加载/空/错态和 Android 卡片 UI 已实现 | `CampusGradeParserTests` 2 项通过；成绩正常、加载、空、错误双端证据见 `E-20260714-01`；Commits `bbabd5e`、`9e605b6`、`b3c098c` | 2026-07-14 |
 | ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和加载/空/错态均已实现；状态排序使用与 Android 相同的确定性基准时间 | `CampusExamDisplayStatusTests` 2 项通过；考试正常、加载、空、错误双端证据见 `E-20260714-01`，首卡均为“操作系统 / 进行中 / 09:40~11:20”；Commits `bbabd5e`、`ffe9887`、`6561f25` | 2026-07-14 |
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 已完成 | 真实楼栋 GET 与空闲列表 POST 契约、校区/楼栋多选、节次、日期范围、查询结果和加载/空/错状态完整；页面标题、紫色查询按钮、12 间确定性结果和卡片密度与 Android 对齐 | `FreeClassroomTests` 4 项及双端正常/加载/空/错误截图在 `E-20260715-01` 通过；Commits `d8516f2`、`1c0f950` | 2026-07-15 |
-| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 已完成 | 余额刷新、动态二维码、凭据过期、刷新/关闭工具栏和录屏遮罩已实现；iOS 平台不承诺完全禁止静态截图 | `CampusCardResponseParserTests` 3 项覆盖余额、二维码和失败响应；付款码双端证据见 `E-20260714-01`；测试二维码为确定性非生产 fixture；Commits `85959a6`、`feb82b8`、`7907702` | 2026-07-14 |
-| PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/CardRecharge/` | P5 / CARD-01、D-005 | 未开始 | 金额校验、支付状态机、校内银行卡和支付宝跳转/降级、回到 App 后结果核验完整 | — | 2026-07-14 |
-| PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/Bathroom/` | P5 / CARD-01、D-005 | 未开始 | 手机号查询、浴室选择、金额和六位支付密码流程完整；失败不提前提示成功 | — | 2026-07-14 |
-| PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/Electricity/` | P5 / CARD-01、D-005 | 未开始 | 校区→楼栋→楼层→房间、余额、历史选择、金额/密码、结果核验完整；无敏感请求日志 | — | 2026-07-14 |
+| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 已完成 | 余额刷新、动态二维码、凭据过期和刷新/关闭工具栏完整；按用户要求移除录屏状态监听及付款码遮罩，录屏时余额与二维码保持可见 | `CampusCardResponseParserTests` 3 项覆盖余额、二维码和失败响应；付款码 UI 回归见 `E-20260715-02`；测试二维码为确定性非生产 fixture；Commits `85959a6`、`feb82b8`、`7907702`、`eae0cd8` | 2026-07-15 |
+| PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 金额校验、幂等订单、银行卡/支付宝选择、第三方返回与服务端对账状态机、取消/超时/未知状态和未安装降级已实现；生产默认使用不扣款的安全阻断网关，不复制 Android 剪贴板隐私缺陷 | `PaymentTests` 17 项共享覆盖；iOS 正常/弹窗/成功 Mock 截图和 macOS CI 见 `E-20260715-02`；解除条件是服务端签名网关、凭据轮换和受控支付验收 | 2026-07-15 |
+| PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 浴室选择、11 位手机号查询、金额、仅内存六位支付密码、服务端确认后成功及失败/取消/超时恢复均已实现；未确认结果保持待对账 | `PaymentTests` 17 项共享覆盖；iOS 正常/密码弹窗/成功 Mock 截图和 macOS CI 见 `E-20260715-02`；解除条件同 PAY-01，并需授权浴室账户 | 2026-07-15 |
+| PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 校区→楼栋→楼层→房间级联、余额/累计充值、金额、仅内存六位密码和服务端结果核验已实现；无完整请求体或签名日志 | `PaymentTests` 17 项共享覆盖；iOS 正常/密码弹窗/成功 Mock 截图和 macOS CI 见 `E-20260715-02`；解除条件同 PAY-01，并需授权房间/电表 | 2026-07-15 |
 | INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、Quick Look/分享及权限降级完整；黑色全屏、校历居中、右下保存/退出与加载/错误态按 Android 重做 | `SchoolCalendarRepositoryTests` 4 项覆盖缓存、回退和损坏恢复；校历双端证据见 `E-20260714-01`；物理机手势属于后续设备回归，不改变已验证功能逻辑；Commits `6a84c55`、`d15a207`、`6561f25` | 2026-07-14 |
 | INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 本地分类、搜索、校区号码和拨号确认完整；Android 标题/搜索、横向分类胶囊、列表密度和拨号对话框已重做 | `PhoneBookTests` 4 项覆盖目录、搜索和安全拨号 URL；电话本双端证据见 `E-20260714-01`；Commits `6a84c55`、`c40eb24`、`6561f25` | 2026-07-14 |
 | INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 已完成 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；默认 `List/searchable` 已替换为 Android 标题/搜索/卡片/设置面板 | `WeatherRepositoryTests` 6 项覆盖解析、三类查询、缓存隔离、偏好和拒绝定位降级；天气双端证据见 `E-20260714-01`；Commits `8186920`、`d15a207`、`6561f25` | 2026-07-14 |
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 已完成 | 认证请求层复用 Rust 会话 Cookie 并识别 401/403/登录重定向；真实 campus/type/list 端点、失物/寻物双列表、校区/类型/全文筛选、分页、详情和受控图片加载完整 | `LostFoundTests` 的契约解码、跨字段筛选和无重复分页 3 项及双端列表/详情/三态截图在 `E-20260715-01` 通过；Commits `d8516f2`、`7b688b7`、`aeda622`、`1c0f950` | 2026-07-15 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；所有权由可靠用户标识判定，“我的帖子”、字段校验和失败提示完整；未确认的图片上传能力不伪造 | `LostFoundTests` 的草稿校验、远端确认后可见、拒绝删除他人/成功删除本人 3 项及双端 60% 发布面板在 `E-20260715-01` 通过；Commits `d8516f2`、`aeda622`、`77a5ae5` | 2026-07-15 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 仓库/目录浏览、缓存、进度、Quick Look/分享、单个和批量删除完整；Android 仓库选择、标题/返回/刷新/已下载、文件卡、类型徽章和下载管理页已重做 | `StudyRepositoryServiceTests` 6 项覆盖六仓契约、目录缓存、双源下载进度和删除；资料页双端证据见 `E-20260714-01`；Commits `6a84c55`、`c40eb24`、`6561f25` | 2026-07-14 |
-| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、流体材质、Android 主题色四个偏好块与 Android 同序同样式；账号、清缓存、协议、许可证和贡献者入口完整，偏好持久化生效 | `AndroidThemeColorTests` 3 项通过；设置/偏好双端证据见 `E-20260714-01`；Android 专属岛卡权限在 iOS 显示平台说明，见第 9 节；Commits `85959a6`、`c96a856`、`6561f25` | 2026-07-14 |
+| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、流体材质、Android 主题色四个偏好块与 Android 同序同样式；贡献名单不再跳 GitHub，站内按 Android 顺序展示“加入我们”、五位开发者头像/职责/QQ，成员点击继续使用 Android 对应 QQ 联系语义；偏好持久化生效 | `AndroidThemeColorTests` 3 项、`ContributorsCatalogTests` 3 项；设置/偏好双端证据见 `E-20260714-01`，贡献名单 iOS UI 证据纳入 `E-20260715-02`；Android 专属岛卡权限在 iOS 显示平台说明，见第 9 节 | 2026-07-15 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 已完成 | App Group 原子共享课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、30 分钟时间线和点击回 App 完整；App 内预览保持 Android Glance 卡片结构 | `ScheduleWidgetSnapshotTests` 4 项、双端 Widget 预览及 IPA 内 `AHUTongWidget.appex` 检查在 `E-20260715-01` 通过；Commits `d8516f2`、`d30f8e3` | 2026-07-15 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、本周过滤、时区日期、移除旧托管请求并重排完整；关闭只清理本 App 课程提醒；Live Activity 明确保持可选且不阻塞普通提醒切片 | `CourseReminderPlannerTests` 5 项和提醒开启 UI 状态在 `E-20260715-01` 通过；物理机到时投递受系统调度约束，保留为部署回归；Commit `d8516f2` | 2026-07-15 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/FeatureFlags/`、`.github/workflows/` | P0→P7 | 实现中 | macOS build/test、脱敏日志、崩溃/灰度策略、辅助功能、隐私清单、Archive 和发布清单完整 | 双端 CI、43 屏证据和含 Widget Extension 的未签名 IPA 均通过，见 `E-20260715-01`；剩余物理机 7 天签名、隐私清单、正式 Archive/分发；Commits `c1a1630`、`c174fcd`、`77a5ae5` | 2026-07-15 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | Android 同算法灰度、本地兜底/Debug 覆盖、不可逆账号摘要、脱敏日志、隐私清单/数据地图、敏感信息扫描、Release Archive、未签名 IPA 与 Personal Team 发布清单完整；第三方崩溃/统计/广告保持关闭 | `ReleaseOperationsTests` 8 项、Debug 双端 UI、Archive/IPA/全套 macOS CI 见 `E-20260715-02`；物理机 7 天签名是部署回归，不冒充已执行证据；Commit `c091244` | 2026-07-15 |
 
 ## 9. 平台差异与已知 Android 缺口
 
@@ -251,6 +254,10 @@ iOS/
 | 会话续期 | 302 检测、全局状态、同步锁及本地密码重登 | 使用 `AuthSession` actor 统一刷新、并发去重、过期通知与显式重新认证 |
 | 网络安全 | 存在全局明文流量配置 | 默认严格 ATS；仅对经论证的本地通信做最小例外 |
 | 客户端凭据 | Android 支付链存在硬编码客户端凭据/签名材料及敏感日志 | 不记录具体值；先轮换并迁到服务端签名/安全配置，清理敏感日志，否则支付阻塞 |
+| 支付生产边界 | Android 客户端直接生成/提交签名请求，并在电控链路输出可能包含业务参数的调试日志 | iOS 仓库不包含签名材料，生产默认 `SafetyBlockedPaymentGateway` 明确拒绝扣款；只在 `--demo-session` 使用不可支付的确定性 Mock。服务端签名网关和受控测试环境到位前，三类支付保持“阻塞” |
+| 校园卡支付宝引导 | Android 将本地姓名/学号复制到剪贴板后跳转支付宝校园卡小程序 | iOS 保持同信息与支付方式弹窗，但不把身份信息写入系统剪贴板；只尝试白名单 URL Scheme，未安装时保留页面并明确提示，回到 App 后必须向服务端对账 |
+| 支付密码与待处理订单 | Android 三类支付分别实现，失败/日志/恢复语义不完全一致 | iOS 使用统一状态机；六位密码仅存于提交调用栈并立即清空，持久化只保存不含个人信息的功能类型与订单号；重复提交、取消、超时、未知状态和外部 App 返回均有测试 |
+| 灰度身份 | Android 支持服务端灰度、本地 SHA-256 分桶和 Debug 覆盖 | iOS 保持相同 SHA-256 分桶向量、开关和 Debug 页面；请求前先哈希账号，游客不生成可跨启动跟踪的设备标识，远端失败回退本地结果 |
 | 课表 | 主要功能成熟；当前时间指示线有显式 TODO | 先完成行为对齐；时间线作为独立增强项，不阻塞首个课表切片 |
 | 课程数据格式 | 旧 `Course` 缓存把 weekday/周次/节次保存为字符串，新教务 Activity 使用整数和 `weekIndexes`；空 weekIndexes 的 Activity 会被丢弃 | iOS `Course` 解码同时接受字符串和整数；存在 `weekIndexes` 时以去重排序后的精确周为准，否则兼容旧起止周范围；畸形数据不触发强制转换崩溃 |
 | 课表缓存隔离 | 大部分当前学期缓存带用户前缀，但 `next.schedule` 仍是共享键 | iOS 持久化协议从入口要求 `UserScopedStore`，当前/下一学期均不得绕过用户命名空间 |
@@ -271,9 +278,10 @@ iOS/
 | 浴室数据源 | `SdkDataSource.getBathRooms()` 当前为空响应，部分功能走其他直连接口 | 以实际接口契约和 fixture 为准，不复制空实现 |
 | APK/热更新 | Android 有完整自更新、分段下载和安装流程 | 完全排除，走 App Store/TestFlight |
 | 开发期真机安装 | Android 可直接安装调试 APK | 当前无付费 Apple Developer Program 账号；GitHub Actions 生成未签名 IPA，本机以 Personal Team 完成 7 天签名和刷新，不将 Apple ID、密码、证书或描述文件上传 GitHub |
-| UI 截图基线 | Android 仓内三张旧图与固定 SHA 不一致 | 旧图仅作历史辅助；Android run `29351111083` 与 iOS run `29353937788` 已分别生成 43 张 1170×2532 同数据截图并逐屏终验，后续 UI 改动必须继续更新两侧证据 |
+| UI 截图基线 | Android 仓内三张旧图与固定 SHA 不一致 | 旧图仅作历史辅助；Android run `29359831897` 生成 48 张。iOS 最终候选将生成 54 张 1170×2532 证据（在原 53 屏基础上新增站内贡献名单）；共同业务状态逐屏对照，额外支付密码/成功态及原生 Liquid Glass 属安全 Mock 或用户批准的平台差异，不能冒充真实支付验收 |
+| 四入口底栏材质 | Android 使用 Compose 自定义浮动胶囊和静态/自定义材质 | 用户于 2026-07-15 显式覆盖原像素一致要求：iOS 26+ 使用原生 `GlassEffectContainer`、交互式 `glassEffect` 与 `glassEffectID` 流体选中态，随底层内容折射并响应触控；iOS 17～25 回退 `ultraThinMaterial`。入口顺序、图标、文案和选中语义不变 |
 | QQ/支付宝跳转 | 依赖 Android Intent/deep link | 使用 iOS URL Scheme/Universal Link 白名单，并提供未安装时降级路径 |
-| 防截屏 | Android 登录/付款码可使用窗口安全标志 | iOS 只能做录屏检测、遮罩或风险提示，不承诺完全禁止截图 |
+| 防截屏/录屏 | Android 登录/付款码可使用窗口安全标志 | 用户于 2026-07-15 明确要求移除校园卡余额/付款码录屏遮罩；iOS 不监听 `UIScreen.capturedDidChangeNotification`，录屏和截图时保持原内容可见。测试码仅为不可支付 fixture，真实码的展示风险由产品决策接受 |
 | 系统栏与安全区 | Android 显示状态栏和三键/手势导航栏 | iOS 保留系统状态栏、安全区、Dynamic Island/Home Indicator；App 内容区域的颜色、尺寸、顺序和密度仍按 Android 对齐 |
 
 ## 10. 安全门槛
@@ -282,11 +290,11 @@ iOS/
 
 - [ ] 确认并轮换 Android 中已暴露的客户端凭据和支付签名材料；iOS 仓库不得复制其值。
 - [ ] 将签名或不可公开的业务能力迁到受控服务端，客户端只持有最小权限配置。
-- [ ] 密码、Token、Cookie 全部进入 Keychain；缓存清理、退出登录和账号切换行为有测试。
-- [ ] 建立脱敏日志策略，禁止输出 Cookie、Token、密码、完整请求体和可识别账号信息。
-- [ ] `AuthSession` 统一处理 Cookie、Token、刷新、并发去重和过期事件。
-- [ ] 默认启用 ATS，仅为必要域名或经论证的本地通信配置最小例外。
-- [ ] 支付状态机覆盖重复提交、超时、取消、第三方 App 返回、服务端未知状态和结果对账。
+- [x] 密码、Token、Cookie 全部进入 Keychain；缓存清理、退出登录和账号切换行为有测试。
+- [x] 建立脱敏日志策略，禁止输出 Cookie、Token、密码、完整请求体和可识别账号信息。
+- [x] `AuthSession` 统一处理 Cookie、Token、刷新、并发去重和过期事件。
+- [x] 默认启用 ATS，仅为必要域名或经论证的本地通信配置最小例外。
+- [x] 支付状态机覆盖重复提交、超时、取消、第三方 App 返回、服务端未知状态和结果对账。
 - [ ] 真机测试使用经授权账号，并记录测试范围，不把测试数据或截图中的敏感信息入库。
 
 ## 11. 测试与验证策略
@@ -346,6 +354,16 @@ iOS/
 - [x] SYS-01 完成 WidgetKit Extension、小/中/大尺寸、状态、时间线和深链。
 - [x] SYS-02 完成普通课程提醒授权、提前量、本周/时区过滤、替换和关闭清理。
 - [ ] 使用授权校园账号和物理 iPhone 13 Pro 回归真实外部服务、通知投递与桌面 Widget；此项不冒充 Simulator 证据。
+
+### P5-P7-W2：100% 收口与外部解除条件
+
+- [x] PAY-01～03 完成统一金额/密码校验、幂等订单、超时/取消/未知状态、第三方返回和服务端对账客户端状态机。
+- [x] 三类支付完成 Android 对齐入口、表单、确认弹窗、Mock 成功态与专项单元/UI 测试；生产构建默认安全拒绝扣款。
+- [x] OPS-01 完成 Android 同算法灰度、Debug 诊断、账号摘要、脱敏日志、隐私清单、数据地图、敏感信息扫描、Release Archive 和 Personal Team 发布手册。
+- [x] GitHub Actions 生成含 Widget 与双隐私清单的未签名 IPA/Archive；仓库和产物不含签名证书、描述文件或 Apple ID。
+- [ ] 支付负责人轮换 Android 已暴露材料，并提供受控的服务端签名网关 URL 与最小权限客户端鉴权方式。
+- [ ] 为校园卡、浴室和电控分别提供可审计的测试账号/房间或明确授权的小额真实环境，并完成成功、拒绝、超时、重复提交、第三方返回和对账验收。
+- [ ] 上述两项完成后将 PAY-01～03 从“阻塞”逐项推进为“已完成”；在此之前严格完成度保持 20 / 23（87.0%），不以 Mock 或未扣款 UI 伪造 100%。
 
 ### P0-W1：工程与契约起点
 
@@ -427,3 +445,11 @@ iOS/
 | 2026-07-15 | SYS-002 | SYS-01 完成共享课表快照、WidgetKit 小/中/大尺寸、会话/空状态、30 分钟时间线和深链 | `ScheduleWidgetSnapshotTests` 4 项、Widget 预览及 IPA 扩展检查见 `E-20260715-01` | `d8516f2`、`d30f8e3` |
 | 2026-07-15 | SYS-003 | SYS-02 完成 UserNotifications 授权、提前 10 分钟、本周/时区过滤、托管请求替换与关闭清理；Live Activity 继续作为可选增强 | `CourseReminderPlannerTests` 5 项及提醒开启截图见 `E-20260715-01` | `d8516f2` |
 | 2026-07-15 | OPS-008 | 双端 43 屏证据、iOS 87 单测 + 3 UI 测试及含 Widget Extension 的未签名 IPA 全绿；严格完成数由 12 增至 19 / 23（82.6%），达到本轮 80% 停止目标 | Android CI `29351110964`、UI `29351111083`；iOS CI `29353937788`、IPA `29353938071`；双端各 43 张 1170×2532 PNG | Android `887a0c5`；iOS `77a5ae5` |
+| 2026-07-15 | PAY-001 | PAY-01 完成金额校验、统一幂等状态机、银行卡/支付宝选择、第三方返回、取消/超时/未知结果和服务端对账客户端闭环；生产默认安全拒绝扣款，因 D-005 保持阻塞 | `PaymentTests` 17 项共享通过；iOS 正常/弹窗/Mock 成功三屏及 Android 正常/弹窗见 `E-20260715-02` | `c091244` |
+| 2026-07-15 | PAY-002 | PAY-02 完成浴室选择、手机号查询、金额、仅内存六位密码和服务端确认状态机；因签名网关与授权浴室账户缺失保持阻塞 | `PaymentTests` 17 项共享通过；iOS 正常/密码弹窗/Mock 成功三屏及 Android 正常屏见 `E-20260715-02` | `c091244` |
+| 2026-07-15 | PAY-003 | PAY-03 完成校区→楼栋→楼层→房间级联、余额/累计充值、金额、仅内存六位密码和结果核验；因签名网关与授权电表缺失保持阻塞 | `PaymentTests` 17 项共享通过；iOS 正常/密码弹窗/Mock 成功三屏及 Android 正常屏见 `E-20260715-02` | `c091244` |
+| 2026-07-15 | OPS-009 | OPS-01 完成 Android 同算法灰度、账号摘要、本地兜底/Debug 覆盖、脱敏日志、隐私清单/数据地图、敏感信息扫描、Release Archive、未签名 IPA 与 Personal Team 发布手册，严格完成数由 19 增至 20 / 23（87.0%） | `ReleaseOperationsTests` 8 项；Android CI/UI、iOS CI/IPA/Archive 及产物见 `E-20260715-02` | `c091244` |
+| 2026-07-15 | UI-004 | 按用户显式要求将四入口底栏从模拟材质重写为 iOS 原生 Liquid Glass；iOS 26+ 使用 `GlassEffectContainer`、交互式 `glassEffect` 和 `glassEffectID`，iOS 17～25 保留系统材质兼容层 | Xcode 26 device build 与 Release Archive 已通过；最终 54 屏回归见 `E-20260715-02` | `eb240cc` |
+| 2026-07-15 | CARD-002 | 按用户显式要求移除校园卡余额/付款码的录屏监听与黑色遮罩，录屏时内容保持可见 | 源码无 `isScreenCaptured`/`capturedDidChangeNotification`/旧提示文案；付款码 UI 回归及最终三条 macOS workflow 见 `E-20260715-02` | `eae0cd8` |
+| 2026-07-15 | OPS-010 | 首轮分别发现并修复 Swift 可选值编译错误与 UI 测试错误依赖容器标识；`29361297708` 进一步发现父容器标识覆盖液态玻璃底栏和支付弹窗子按钮，已收窄标识并等待最终 115 单测、4 UI、54 屏复验。严格 100% 尚需三类真实支付的外部解除条件，未以 Mock 伪造完成 | 失败诊断：`29358477320`、`29359233070`、`29361297708`；已成功：Android `29359831800`/`29359831897`，iOS IPA `29361297806`、Archive `29361297830` | Android `fc150b0`；iOS `eae0cd8` + 本次修复 |
+| 2026-07-15 | PREF-004 | 纠正贡献名单迁移占位：移除 GitHub Contributors 外链页，按 Android `Contributors.kt` 和 `DeveloperViewModel.kt` 在 App 内展示加入我们与开发者卡片、头像、职责、QQ 和联系行为 | `ContributorsCatalogTests` 3 项；UI 路径检查页面、分组与首位开发者并新增贡献名单截图，最终 macOS run 待补录 | 本次修复 |

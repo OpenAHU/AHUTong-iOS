@@ -36,6 +36,7 @@
     <key>LSApplicationQueriesSchemes</key>
     <array>
         <string>alipays</string>
+        <string>mqqapi</string>
     </array>
     <key>NSAppTransportSecurity</key>
     <dict>

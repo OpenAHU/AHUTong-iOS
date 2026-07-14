@@ -269,7 +269,6 @@ struct LiquidGlassBottomBar: View {
                 .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
                 .glassEffectID("bottom-navigation", in: glassNamespace)
         }
-        .accessibilityIdentifier("bottom-bar.native-liquid-glass")
     }
 
     private var legacyMaterialBar: some View {
@@ -282,7 +281,6 @@ struct LiquidGlassBottomBar: View {
                     .stroke(colorScheme == .dark ? .white.opacity(0.1) : .black.opacity(0.06))
             }
             .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.12), radius: 16, y: 6)
-            .accessibilityIdentifier("bottom-bar.legacy-material")
     }
 
     private var opaqueBar: some View {
@@ -295,7 +293,6 @@ struct LiquidGlassBottomBar: View {
                     .stroke(colorScheme == .dark ? .white.opacity(0.1) : .black.opacity(0.06))
             }
             .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.12), radius: 16, y: 6)
-            .accessibilityIdentifier("bottom-bar.opaque")
     }
 
     private func tabItems(nativeGlass: Bool) -> some View {

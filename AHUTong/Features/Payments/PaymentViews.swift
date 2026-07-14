@@ -25,6 +25,7 @@ struct CardRechargeView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "校园卡充值", large: true)
+                        .accessibilityIdentifier("payment.card.screen")
                     accountCard
                     PaymentAmountCard(title: "充值金额", amount: $amount, identifier: "payment.card.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.card.state") {
@@ -40,7 +41,7 @@ struct CardRechargeView: View {
             .scrollDismissesKeyboard(.interactively)
 
             if showsMethodDialog {
-                AndroidPaymentDialog(title: "确认支付") {
+                AndroidPaymentDialog(title: "确认支付", identifier: "payment.card.method-dialog") {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("请选择支付方式。银行卡支付将从绑定的银行卡扣除￥\(amount)元；支付宝支付会跳转校园卡小程序。")
                             .foregroundStyle(.secondary)
@@ -56,10 +57,8 @@ struct CardRechargeView: View {
                         .accessibilityIdentifier("payment.card.bank")
                     Button("取消", role: .cancel) { showsMethodDialog = false }
                 }
-                .accessibilityIdentifier("payment.card.method-dialog")
             }
         }
-        .accessibilityIdentifier("payment.card.screen")
         .task {
             if demo {
                 balance = PaymentDemoCatalog.cardBalance
@@ -163,6 +162,7 @@ struct BathroomPaymentView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "浴室缴费", large: true)
+                        .accessibilityIdentifier("payment.bathroom.screen")
                     lookupCard
                     PaymentAmountCard(title: "缴费金额", amount: $amount, identifier: "payment.bathroom.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.bathroom.state") {
@@ -181,7 +181,6 @@ struct BathroomPaymentView: View {
                 }
             }
         }
-        .accessibilityIdentifier("payment.bathroom.screen")
         .task {
             await coordinator.resumePendingOrder()
         }
@@ -268,7 +267,7 @@ struct BathroomPaymentView: View {
     }
 
     private func passwordDialog(title: String, identifier: String, submit: @escaping () -> Void) -> some View {
-        AndroidPaymentDialog(title: title) {
+        AndroidPaymentDialog(title: title, identifier: identifier) {
             SecureField("密码（6 位数字）", text: $password)
                 .accessibilityIdentifier("payment.bathroom.password")
                 .keyboardType(.numberPad)
@@ -280,7 +279,6 @@ struct BathroomPaymentView: View {
             Button("确认", action: submit)
             Button("取消", role: .cancel) { password = ""; showsPasswordDialog = false }
         }
-        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -310,6 +308,7 @@ struct ElectricityPaymentView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "电控缴费", large: true)
+                        .accessibilityIdentifier("payment.electricity.screen")
                     locationCard
                     PaymentAmountCard(title: "缴费金额", amount: $amount, identifier: "payment.electricity.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.electricity.state") {
@@ -323,7 +322,10 @@ struct ElectricityPaymentView: View {
             .scrollDismissesKeyboard(.interactively)
 
             if showsPasswordDialog {
-                AndroidPaymentDialog(title: "请输入校园卡密码") {
+                AndroidPaymentDialog(
+                    title: "请输入校园卡密码",
+                    identifier: "payment.electricity.password-dialog"
+                ) {
                     SecureField("密码（6 位数字）", text: $password)
                         .accessibilityIdentifier("payment.electricity.password")
                         .keyboardType(.numberPad)
@@ -335,10 +337,8 @@ struct ElectricityPaymentView: View {
                     Button("确认") { submit() }
                     Button("取消", role: .cancel) { password = ""; showsPasswordDialog = false }
                 }
-                .accessibilityIdentifier("payment.electricity.password-dialog")
             }
         }
-        .accessibilityIdentifier("payment.electricity.screen")
         .task {
             await coordinator.resumePendingOrder()
         }
@@ -547,11 +547,18 @@ private struct PaymentStateButton: View {
 private struct AndroidPaymentDialog<Content: View, Actions: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     let title: String
+    let identifier: String
     let content: Content
     let actions: Actions
 
-    init(title: String, @ViewBuilder content: () -> Content, @ViewBuilder actions: () -> Actions) {
+    init(
+        title: String,
+        identifier: String,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder actions: () -> Actions
+    ) {
         self.title = title
+        self.identifier = identifier
         self.content = content()
         self.actions = actions()
     }
@@ -560,7 +567,9 @@ private struct AndroidPaymentDialog<Content: View, Actions: View>: View {
         ZStack {
             Color.black.opacity(0.34).ignoresSafeArea()
             VStack(alignment: .leading, spacing: 20) {
-                Text(title).font(.title3.bold())
+                Text(title)
+                    .font(.title3.bold())
+                    .accessibilityIdentifier(identifier)
                 content
                 HStack(spacing: 18) {
                     Spacer()

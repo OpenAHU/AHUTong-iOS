@@ -35,9 +35,10 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         NavigationLink { ContributorsView().androidDetailScreen() } label: {
-                            AndroidSettingRow(label: "贡献者", systemImage: "person.2")
+                            AndroidSettingRow(label: "贡献名单", systemImage: "person.2")
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.contributors")
                         AndroidSettingButton(label: "意见反馈", systemImage: "bubble.left.and.exclamationmark") {
                             openURL(URL(string: "https://github.com/OpenAHU/AHUTong-iOS/issues")!)
                         }
@@ -424,19 +425,150 @@ private struct ThirdPartyLicensesView: View {
     }
 }
 
+struct ContributorEntry: Identifiable, Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case partner
+        case developer(qq: String)
+    }
+
+    let name: String
+    let description: String
+    let kind: Kind
+
+    var id: String {
+        switch kind {
+        case .partner: "partner-\(name)"
+        case let .developer(qq): "developer-\(qq)"
+        }
+    }
+
+    var qq: String? {
+        guard case let .developer(qq) = kind else { return nil }
+        return qq
+    }
+
+    var avatarURL: URL? {
+        guard let qq else { return nil }
+        return URL(string: "https://q1.qlogo.cn/g?b=qq&nk=\(qq)&s=640")
+    }
+
+    var contactURL: URL? {
+        guard let qq else { return nil }
+        return URL(string: "mqqapi://card/show_pslcard?&uin=\(qq)")
+    }
+}
+
+enum ContributorsCatalog {
+    static let partners = [
+        ContributorEntry(
+            name: "Hello~",
+            description: "We are waiting for you!\nGet connection with us now!\nClick me for more info!",
+            kind: .partner
+        )
+    ]
+
+    static let developers = [
+        ContributorEntry(name: "高玉灿（20级）", description: "架构规划、页面设计、爬虫", kind: .developer(qq: "468766131")),
+        ContributorEntry(name: "谭哲昊（21级）", description: "架构规划、小组件", kind: .developer(qq: "330771794")),
+        ContributorEntry(name: "王学雷（22级）", description: "页面设计、交互设计、新技术探索", kind: .developer(qq: "257314409")),
+        ContributorEntry(name: "徐健灿（22级）", description: "爬虫、交互设计", kind: .developer(qq: "3148336396")),
+        ContributorEntry(name: "王    钰（22级）", description: "架构规划、爬虫", kind: .developer(qq: "605606366"))
+    ]
+}
+
 private struct ContributorsView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
+    @State private var informationMessage: String?
+
     var body: some View {
         AndroidScreen {
-            VStack(alignment: .leading, spacing: 24) {
-                AndroidHeader(title: "贡献者", large: true)
-                Text("感谢 OpenAHU 社区、Android 客户端与 iOS 迁移的所有贡献者。完整、实时名单以仓库 Contributors 页面为准。")
-                    .padding(.horizontal, 24)
-                Button("查看完整贡献者名单") { openURL(URL(string: "https://github.com/OpenAHU/AHUTong-iOS/graphs/contributors")!) }
-                    .buttonStyle(.borderedProminent).padding(.horizontal, 24)
-                Spacer()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    AndroidHeader(title: "贡献名单", large: true)
+                        .accessibilityIdentifier("contributors.screen")
+                    contributorSection(title: "加入我们", entries: ContributorsCatalog.partners)
+                    contributorSection(title: "开发者", entries: ContributorsCatalog.developers)
+                }
+                .padding(.bottom, 80)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .alert("提示", isPresented: Binding(
+            get: { informationMessage != nil },
+            set: { if !$0 { informationMessage = nil } }
+        )) {
+            Button("知道了", role: .cancel) { informationMessage = nil }
+        } message: {
+            Text(informationMessage ?? "")
+        }
+    }
+
+    private func contributorSection(title: String, entries: [ContributorEntry]) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title)
+                .font(.title3.bold())
+                .padding(.horizontal, 24)
+
+            VStack(spacing: 2) {
+                ForEach(entries) { entry in
+                    Button { open(entry) } label: {
+                        HStack(spacing: 24) {
+                            if entry.avatarURL != nil {
+                                contributorAvatar(entry)
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.name)
+                                    .font(.title3.bold())
+                                Text(entry.description)
+                                    .font(.body)
+                                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+                                if let qq = entry.qq {
+                                    Text("QQ: \(qq)")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AndroidParityPalette.raisedSurface(colorScheme))
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("contributors.entry.\(entry.id)")
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func contributorAvatar(_ entry: ContributorEntry) -> some View {
+        AsyncImage(url: entry.avatarURL) { phase in
+            if case let .success(image) = phase {
+                image.resizable().scaledToFill()
+            } else {
+                ZStack {
+                    AndroidParityPalette.primaryContainer(colorScheme)
+                    Image(systemName: "person.fill")
+                        .font(.title2)
+                        .foregroundStyle(AndroidParityPalette.accent)
+                }
             }
         }
+        .frame(width: 64, height: 64)
+        .clipShape(Circle())
+    }
+
+    private func open(_ entry: ContributorEntry) {
+        guard let url = entry.contactURL else {
+            informationMessage = "请联系任意一位小伙伴"
+            return
+        }
+        openURL(url)
     }
 }
 

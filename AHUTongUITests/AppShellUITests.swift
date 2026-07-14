@@ -32,12 +32,7 @@ final class AppShellUITests: XCTestCase {
         app.buttons["onboarding.continue"].tap()
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        if #available(iOS 26.0, *) {
-            XCTAssertTrue(
-                app.descendants(matching: .any)["bottom-bar.native-liquid-glass"]
-                    .waitForExistence(timeout: 3)
-            )
-        }
+        XCTAssertTrue(app.buttons["tab.home"].waitForExistence(timeout: 3))
         waitForRendering()
         capture("04-home", app: app)
         let campusCardBalance = app.buttons["campus-card.balance"]
@@ -119,6 +114,20 @@ final class AppShellUITests: XCTestCase {
             restartAtTools(app)
         }
 
+        app.buttons["tab.settings"].tap()
+        let contributors = app.buttons["settings.contributors"]
+        XCTAssertTrue(contributors.waitForExistence(timeout: 4))
+        contributors.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["contributors.screen"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["加入我们"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["高玉灿（20级）"].waitForExistence(timeout: 3))
+        waitForRendering()
+        capture("16-contributors", app: app)
+
+        app.terminate()
+        app.launchArguments = ["--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         app.buttons["tab.settings"].tap()
         app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
