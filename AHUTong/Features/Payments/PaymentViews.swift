@@ -277,6 +277,7 @@ struct BathroomPaymentView: View {
                 }
         } actions: {
             Button("确认", action: submit)
+                .accessibilityIdentifier("payment.bathroom.confirm")
             Button("取消", role: .cancel) { password = ""; showsPasswordDialog = false }
         }
     }
@@ -335,6 +336,7 @@ struct ElectricityPaymentView: View {
                         }
                 } actions: {
                     Button("确认") { submit() }
+                        .accessibilityIdentifier("payment.electricity.confirm")
                     Button("取消", role: .cancel) { password = ""; showsPasswordDialog = false }
                 }
             }
