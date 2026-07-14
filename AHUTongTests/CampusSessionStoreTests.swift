@@ -64,8 +64,10 @@ final class CampusSessionStoreTests: XCTestCase {
         await model.restore()
 
         XCTAssertEqual(model.sessionState, .authenticated(User(name: "测试同学", studentID: "AB220001")))
-        XCTAssertEqual(try await sessionStore.load()?.cookiesJSON, "cookie-json")
-        XCTAssertEqual(await api.loginCount(), 1)
+        let restoredSession = try await sessionStore.load()
+        let performedLogins = await api.loginCount()
+        XCTAssertEqual(restoredSession?.cookiesJSON, "cookie-json")
+        XCTAssertEqual(performedLogins, 1)
     }
 
     @MainActor
@@ -89,7 +91,8 @@ final class CampusSessionStoreTests: XCTestCase {
         await model.restore()
 
         XCTAssertEqual(model.sessionState, .signedOut)
-        XCTAssertNil(try await sessionStore.load())
+        let clearedSession = try await sessionStore.load()
+        XCTAssertNil(clearedSession)
     }
 }
 

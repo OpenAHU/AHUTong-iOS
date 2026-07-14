@@ -27,8 +27,8 @@ final class LostFoundTests: XCTestCase {
 
     func testDemoRemotePaginatesWithoutDuplicates() async throws {
         let remote = DemoLostFoundRemote()
-        let first = try await remote.page(state: 1, page: 1, size: 2)
-        let second = try await remote.page(state: 1, page: 2, size: 2)
+        let first = await remote.page(state: 1, page: 1, size: 2)
+        let second = await remote.page(state: 1, page: 2, size: 2)
         XCTAssertEqual(first.list.count, 2)
         XCTAssertEqual(Set(first.list.map(\.id)).intersection(Set(second.list.map(\.id))), Set<String>())
     }
@@ -36,7 +36,7 @@ final class LostFoundTests: XCTestCase {
     func testPublishBecomesVisibleOnlyAfterSuccessfulRemoteResponse() async throws {
         let remote = DemoLostFoundRemote()
         let item = try await remote.publish(validDraft())
-        let page = try await remote.page(state: 1, page: 1, size: 20)
+        let page = await remote.page(state: 1, page: 1, size: 20)
         XCTAssertEqual(item.pubuser?.idNumber, "AB220001")
         XCTAssertEqual(page.list.first?.id, item.id)
     }
@@ -50,7 +50,7 @@ final class LostFoundTests: XCTestCase {
             XCTAssertEqual(error.localizedDescription, "只能删除自己发布的帖子")
         }
         try await remote.delete(id: "demo-owned-1")
-        let page = try await remote.page(state: 1, page: 1, size: 20)
+        let page = await remote.page(state: 1, page: 1, size: 20)
         XCTAssertFalse(page.list.contains { $0.id == "demo-owned-1" })
     }
 

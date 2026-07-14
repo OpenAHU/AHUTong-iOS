@@ -16,7 +16,7 @@ final class FreeClassroomTests: XCTestCase {
         XCTAssertEqual(room.seats, 80)
     }
 
-    func testDemoRemoteUsesAllBuildingsWhenNoFilterIsSelected() async throws {
+    func testDemoRemoteUsesAllBuildingsWhenNoFilterIsSelected() {
         let query = FreeClassroomQuery(
             campusID: 1,
             buildingIDs: [],
@@ -24,12 +24,12 @@ final class FreeClassroomTests: XCTestCase {
             startDate: DemoDataState.referenceDate,
             endDate: DemoDataState.referenceDate
         )
-        let rooms = try await DemoFreeClassroomRemote().rooms(query: query)
+        let rooms = DemoFreeClassroomRemote().rooms(query: query)
         XCTAssertEqual(rooms.count, 9)
         XCTAssertEqual(rooms.prefix(3).map(\.nameZh), ["201 教室", "305 教室", "512 教室"])
     }
 
-    func testDemoRemoteFiltersSelectedBuildings() async throws {
+    func testDemoRemoteFiltersSelectedBuildings() {
         let query = FreeClassroomQuery(
             campusID: 1,
             buildingIDs: [102],
@@ -37,7 +37,7 @@ final class FreeClassroomTests: XCTestCase {
             startDate: DemoDataState.referenceDate,
             endDate: DemoDataState.referenceDate
         )
-        let rooms = try await DemoFreeClassroomRemote().rooms(query: query)
+        let rooms = DemoFreeClassroomRemote().rooms(query: query)
         XCTAssertEqual(rooms.map(\.id), [102_201, 102_305, 102_512])
     }
 
