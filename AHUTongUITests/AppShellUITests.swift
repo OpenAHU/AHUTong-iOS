@@ -139,8 +139,13 @@ final class AppShellUITests: XCTestCase {
         waitForRendering()
         capture("20-lost-found-detail", app: app)
 
-        app.swipeDown()
-        let publish = app.descendants(matching: .any)["lost-found.publish"]
+        // The detail sheet contains its own ScrollView, so a downward gesture can
+        // scroll instead of dismissing on some Simulator versions. Re-entering
+        // the route makes the publish evidence independent of sheet physics.
+        restartAtTools(app)
+        app.buttons["tools.lost-found"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["lost-found.screen"].waitForExistence(timeout: 4))
+        let publish = app.buttons["lost-found.publish"]
         XCTAssertTrue(publish.waitForExistence(timeout: 4))
         publish.tap()
         XCTAssertTrue(app.descendants(matching: .any)["lost-found.publish.sheet"].waitForExistence(timeout: 4))
