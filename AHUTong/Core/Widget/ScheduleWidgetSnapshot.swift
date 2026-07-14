@@ -61,12 +61,22 @@ actor ScheduleWidgetSnapshotStore {
         }
     }
 
-    func load() -> ScheduleWidgetSnapshot {
-        guard let data = try? Data(contentsOf: fileURL),
-              let snapshot = try? JSONDecoder().decode(ScheduleWidgetSnapshot.self, from: data) else {
-            return .unavailable(.signedOut)
+    /// WidgetKit's callback-based provider API is synchronous. Reading this
+    /// tiny, atomically-written snapshot directly avoids sending its
+    /// non-Sendable completion handler across an actor boundary.
+    nonisolated static func loadSharedSnapshot() -> ScheduleWidgetSnapshot {
+        let fileURL: URL
+        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) {
+            fileURL = container.appendingPathComponent("schedule-widget.json")
+        } else {
+            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            fileURL = base.appendingPathComponent("AHUTong/schedule-widget.json")
         }
-        return snapshot
+        return decode(from: fileURL)
+    }
+
+    func load() -> ScheduleWidgetSnapshot {
+        Self.decode(from: fileURL)
     }
 
     func save(_ snapshot: ScheduleWidgetSnapshot) throws {
@@ -75,5 +85,14 @@ actor ScheduleWidgetSnapshotStore {
             withIntermediateDirectories: true
         )
         try JSONEncoder().encode(snapshot).write(to: fileURL, options: .atomic)
+    }
+
+
+    private nonisolated static func decode(from fileURL: URL) -> ScheduleWidgetSnapshot {
+        guard let data = try? Data(contentsOf: fileURL),
+              let snapshot = try? JSONDecoder().decode(ScheduleWidgetSnapshot.self, from: data) else {
+            return .unavailable(.signedOut)
+        }
+        return snapshot
     }
 }

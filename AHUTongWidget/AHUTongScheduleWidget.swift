@@ -15,16 +15,12 @@ struct ScheduleWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ScheduleWidgetEntry) -> Void) {
-        Task {
-            completion(ScheduleWidgetEntry(date: Date(), snapshot: await ScheduleWidgetSnapshotStore.shared.load()))
-        }
+        completion(ScheduleWidgetEntry(date: Date(), snapshot: ScheduleWidgetSnapshotStore.loadSharedSnapshot()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ScheduleWidgetEntry>) -> Void) {
-        Task {
-            let entry = ScheduleWidgetEntry(date: Date(), snapshot: await ScheduleWidgetSnapshotStore.shared.load())
-            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
-        }
+        let entry = ScheduleWidgetEntry(date: Date(), snapshot: ScheduleWidgetSnapshotStore.loadSharedSnapshot())
+        completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
     }
 
     private static let placeholderCourses = [
