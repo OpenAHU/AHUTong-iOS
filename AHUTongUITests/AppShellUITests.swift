@@ -58,7 +58,7 @@ final class AppShellUITests: XCTestCase {
         let demoCourse = app.buttons["schedule.course.demo-1"]
         XCTAssertTrue(demoCourse.waitForExistence(timeout: 4))
         demoCourse.tap()
-        XCTAssertTrue(app.otherElements["schedule.course-detail"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 3))
         waitForRendering()
         capture("13-course-detail", app: app)
         app.terminate()
