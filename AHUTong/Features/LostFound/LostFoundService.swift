@@ -110,7 +110,7 @@ struct CampusLostFoundRemote: LostFoundRemote {
 }
 
 actor DemoLostFoundRemote: LostFoundRemote {
-    private var items = Self.fixtures
+    private var items = DemoLostFoundRemote.fixtures
 
     func catalog() -> LostFoundCatalog {
         LostFoundCatalog(
