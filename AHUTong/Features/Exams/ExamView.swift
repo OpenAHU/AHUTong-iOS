@@ -94,6 +94,14 @@ struct ExamView: View {
         _model = StateObject(wrappedValue: ExamViewModel(api: appModel.campusAPI))
     }
 
+    private var isDemo: Bool {
+        ProcessInfo.processInfo.arguments.contains("--demo-session")
+    }
+
+    private var statusReferenceDate: Date {
+        isDemo ? DemoDataState.referenceDate : Date()
+    }
+
     var body: some View {
         AndroidScreen {
             ScrollView {
@@ -105,8 +113,8 @@ struct ExamView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .task { await model.load(demo: ProcessInfo.processInfo.arguments.contains("--demo-session")) }
-        .refreshable { await model.load() }
+        .task { await model.load(demo: isDemo) }
+        .refreshable { await model.load(demo: isDemo) }
         .accessibilityIdentifier("exams.screen")
     }
 
@@ -126,7 +134,7 @@ struct ExamView: View {
             AndroidHeader(title: "考场查询", large: true) {
                 AndroidIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索") { isSearching = true }
                 AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") {
-                    Task { await model.load() }
+                    Task { await model.load(demo: isDemo) }
                 }
             }
         }
@@ -165,13 +173,13 @@ struct ExamView: View {
 
     private func examSort(_ lhs: CampusExam, _ rhs: CampusExam) -> Bool {
         let order: [CampusExamDisplayStatus] = [.ongoing, .notStarted, .finished, .invalid]
-        let left = order.firstIndex(of: .resolve(time: lhs.time, isFinished: lhs.isFinished)) ?? 3
-        let right = order.firstIndex(of: .resolve(time: rhs.time, isFinished: rhs.isFinished)) ?? 3
+        let left = order.firstIndex(of: .resolve(time: lhs.time, isFinished: lhs.isFinished, now: statusReferenceDate)) ?? 3
+        let right = order.firstIndex(of: .resolve(time: rhs.time, isFinished: rhs.isFinished, now: statusReferenceDate)) ?? 3
         return left == right ? lhs.time < rhs.time : left < right
     }
 
     private func examCard(_ exam: CampusExam) -> some View {
-        let status = CampusExamDisplayStatus.resolve(time: exam.time, isFinished: exam.isFinished)
+        let status = CampusExamDisplayStatus.resolve(time: exam.time, isFinished: exam.isFinished, now: statusReferenceDate)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(exam.course).font(.headline.bold()).lineLimit(1)
