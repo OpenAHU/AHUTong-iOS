@@ -52,12 +52,30 @@ jobs:
       - name: Select an available iOS Simulator
         shell: bash
         run: |
+          runtime_identifier="$(
+            xcrun simctl list runtimes available --json |
+              jq -r '[.runtimes[] | select(.identifier | contains("iOS"))][-1].identifier'
+          )"
+          device_type_identifier="$(
+            xcrun simctl list devicetypes --json |
+              jq -r '([.devicetypes[] | select(.name == "iPhone 13 Pro")][0].identifier) // empty'
+          )"
           simulator_udid="$(
             xcrun simctl list devices available --json |
-              jq -r '(
-                [.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name == "iPhone 13 Pro")][0].udid
-              ) // ([.devices | to_entries[] | select(.key | contains("iOS")) | .value[]][0].udid)'
+              jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[]][0].udid // empty'
           )"
+
+          if [[ -n "$device_type_identifier" && -n "$runtime_identifier" ]]; then
+            existing_13_pro="$(
+              xcrun simctl list devices available --json |
+                jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name == "iPhone 13 Pro")][0].udid // empty'
+            )"
+            if [[ -n "$existing_13_pro" ]]; then
+              simulator_udid="$existing_13_pro"
+            else
+              simulator_udid="$(xcrun simctl create "AHUTong iPhone 13 Pro" "$device_type_identifier" "$runtime_identifier")"
+            fi
+          fi
 
           if [[ -z "$simulator_udid" || "$simulator_udid" == "null" ]]; then
             echo "No available iOS Simulator was found." >&2

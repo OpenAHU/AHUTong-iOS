@@ -29,6 +29,16 @@ cargo rustc \
   -- \
   --crate-type staticlib
 
-source_library="$CARGO_TARGET_DIR/$rust_target/release/libahutong_rs.a"
-test -f "$source_library"
+source_library="$(
+  find "$CARGO_TARGET_DIR/$rust_target/release" \
+    -type f \
+    \( -name 'libahutong_rs.a' -o -name 'libahutong_rs-*.a' \) \
+    -print \
+    -quit
+)"
+if [[ -z "$source_library" ]]; then
+  echo "Rust static library was not found under $CARGO_TARGET_DIR/$rust_target/release" >&2
+  find "$CARGO_TARGET_DIR/$rust_target/release" -maxdepth 2 -type f -name '*ahutong*' -print >&2
+  exit 1
+fi
 cp "$source_library" "$BUILT_PRODUCTS_DIR/libahutong_rs.a"
