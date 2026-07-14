@@ -89,7 +89,6 @@ struct CampusCardPanel: View {
     @StateObject private var model: CampusCardViewModel
     @State private var showsQRCode = false
     @State private var showsFullQRCode = false
-    @State private var isScreenCaptured = UIScreen.main.isCaptured
     private let demo: Bool
     private let onRecharge: () -> Void
 
@@ -106,19 +105,7 @@ struct CampusCardPanel: View {
         .frame(height: showsQRCode ? 400 : 140)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            if showsQRCode && isScreenCaptured {
-                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.black.opacity(0.88))
-                    .overlay {
-                        Text("正在录屏，付款码已隐藏")
-                            .font(.caption.bold()).foregroundStyle(.white)
-                    }
-            }
-        }
         .task { await model.load(demo: demo) }
-        .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
-            isScreenCaptured = UIScreen.main.isCaptured
-        }
         .fullScreenCover(isPresented: $showsFullQRCode) {
             ZStack {
                 Color.black.opacity(0.82).ignoresSafeArea()
