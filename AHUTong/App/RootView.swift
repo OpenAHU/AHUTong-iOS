@@ -38,7 +38,7 @@ struct RootView: View {
                     .id(selectedTab)
 
                     if !isDetailVisible {
-                        AndroidBottomBar(selection: $selectedTab)
+                        LiquidGlassBottomBar(selection: $selectedTab)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }

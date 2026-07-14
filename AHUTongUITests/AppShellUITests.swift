@@ -32,6 +32,12 @@ final class AppShellUITests: XCTestCase {
         app.buttons["onboarding.continue"].tap()
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        if #available(iOS 26.0, *) {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["bottom-bar.native-liquid-glass"]
+                    .waitForExistence(timeout: 3)
+            )
+        }
         waitForRendering()
         capture("04-home", app: app)
         let campusCardBalance = app.buttons["campus-card.balance"]
