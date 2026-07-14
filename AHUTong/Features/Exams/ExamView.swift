@@ -67,7 +67,7 @@ final class ExamViewModel: ObservableObject {
         day.timeZone = .current
         day.dateFormat = "yyyy-MM-dd"
         let calendar = Calendar(identifier: .gregorian)
-        let today = Date()
+        let today = DemoDataState.referenceDate
         func date(_ offset: Int) -> String {
             day.string(from: calendar.date(byAdding: .day, value: offset, to: today) ?? today)
         }
