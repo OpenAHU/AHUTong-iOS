@@ -10,7 +10,12 @@ final class GradeViewModel: ObservableObject {
     func load(demo: Bool = false) async {
         state = .loading
         if demo {
-            state = .loaded(Self.demoReport)
+            switch DemoDataState.current {
+            case .normal: state = .loaded(Self.demoReport)
+            case .loading: return
+            case .empty: state = .empty
+            case .error: state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
+            }
             return
         }
         do {

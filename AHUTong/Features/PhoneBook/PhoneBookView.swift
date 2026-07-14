@@ -120,7 +120,7 @@ private struct PhoneBookEntryRow: View {
             Text(entry.name).font(.headline)
             HStack(spacing: 8) {
                 ForEach(entry.numbers) { number in
-                    if let campus = number.campus {
+                    if entry.numbers.count > 1, let campus = number.campus {
                         Text(campus.rawValue)
                             .font(.caption2)
                             .padding(.horizontal, 8)

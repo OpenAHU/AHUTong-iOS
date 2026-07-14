@@ -263,11 +263,12 @@ private struct RepositorySelectorRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "folder").font(.system(size: 28)).foregroundStyle(AndroidParityPalette.folder)
-            Text(repository.name).font(.body)
+            Text(repository.name).font(.body).lineLimit(1).layoutPriority(1)
             Text(repository.repository)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)

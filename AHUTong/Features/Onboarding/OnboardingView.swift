@@ -17,7 +17,7 @@ final class OnboardingViewModel: ObservableObject {
         consent.hasAcceptedRequiredDocuments
     }
 
-    func load(resetForUITesting: Bool = false) async {
+    func load(resetForUITesting: Bool = false, acceptForUITesting: Bool = false) async {
         guard !isLoaded else {
             return
         }
@@ -25,7 +25,14 @@ final class OnboardingViewModel: ObservableObject {
             if resetForUITesting {
                 try await store.reset()
             }
-            consent = try await store.load()
+            if acceptForUITesting {
+                for document in AgreementDocument.allCases {
+                    _ = try await store.setAccepted(true, document: document)
+                }
+                consent = try await store.confirmRequiredDocuments()
+            } else {
+                consent = try await store.load()
+            }
             errorMessage = nil
         } catch {
             consent = .empty

@@ -1,3 +1,5 @@
+import Foundation
+
 enum LoadableState<Value: Sendable>: Sendable {
     case idle
     case loading
@@ -23,3 +25,18 @@ enum LoadableState<Value: Sendable>: Sendable {
 }
 
 extension LoadableState: Equatable where Value: Equatable {}
+
+enum DemoDataState: String {
+    case normal
+    case loading
+    case empty
+    case error
+
+    static var current: Self {
+        let prefix = "--demo-state="
+        let value = ProcessInfo.processInfo.arguments
+            .first(where: { $0.hasPrefix(prefix) })
+            .map { String($0.dropFirst(prefix.count)) }
+        return value.flatMap(Self.init(rawValue:)) ?? .normal
+    }
+}

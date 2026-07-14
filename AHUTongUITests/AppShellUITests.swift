@@ -115,6 +115,45 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testAndroidParityLoadingEmptyAndErrorStates() {
+        let app = XCUIApplication()
+        for state in ["loading", "empty", "error"] {
+            let arguments = ["--demo-session", "--demo-consent", "--demo-state=\(state)"]
+            app.launchArguments = arguments
+            app.launch()
+            XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+            waitForRendering()
+            capture("state-\(state)-home", app: app)
+
+            app.buttons["tab.schedule"].tap()
+            XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 3))
+            waitForRendering()
+            capture("state-\(state)-schedule", app: app)
+
+            app.terminate()
+            app.launchArguments = arguments
+            app.launch()
+            XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+            app.buttons["tab.tools"].tap()
+            app.buttons["tools.grade"].tap()
+            XCTAssertTrue(app.descendants(matching: .any)["grades.screen"].waitForExistence(timeout: 4))
+            waitForRendering()
+            capture("state-\(state)-grades", app: app)
+
+            app.terminate()
+            app.launchArguments = arguments
+            app.launch()
+            XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+            app.buttons["tab.tools"].tap()
+            app.buttons["tools.exam"].tap()
+            XCTAssertTrue(app.descendants(matching: .any)["exams.screen"].waitForExistence(timeout: 4))
+            waitForRendering()
+            capture("state-\(state)-exams", app: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     private func capture(_ name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "android-parity-\(name)"

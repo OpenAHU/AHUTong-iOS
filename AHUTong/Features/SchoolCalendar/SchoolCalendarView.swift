@@ -40,7 +40,22 @@ struct SchoolCalendarView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Color.black.ignoresSafeArea()
-            switch model.state {
+            if demo {
+                Color.gray
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 304)
+                    .frame(maxHeight: .infinity)
+                    .accessibilityIdentifier("school-calendar.demo")
+
+                HStack(spacing: 24) {
+                    Button("保存") { }
+                    Button("退出") { dismiss() }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .padding(16)
+            } else {
+                switch model.state {
             case .idle, .loading:
                 VStack(spacing: 16) {
                     ProgressView().tint(.white)
@@ -90,11 +105,14 @@ struct SchoolCalendarView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 .padding(32)
+                }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task { await model.load() }
+        .task { if !demo { await model.load() } }
     }
+
+    private var demo: Bool { ProcessInfo.processInfo.arguments.contains("--demo-session") }
 }
 
 private struct SchoolCalendarZoomView: View {

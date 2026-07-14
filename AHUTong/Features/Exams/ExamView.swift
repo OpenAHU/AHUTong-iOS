@@ -44,7 +44,12 @@ final class ExamViewModel: ObservableObject {
     func load(demo: Bool = false) async {
         state = .loading
         if demo {
-            state = .loaded(Self.demoExams)
+            switch DemoDataState.current {
+            case .normal: state = .loaded(Self.demoExams)
+            case .loading: return
+            case .empty: state = .empty
+            case .error: state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
+            }
             return
         }
         do {

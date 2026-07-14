@@ -52,7 +52,8 @@ struct RootView: View {
         }
         .task {
             async let onboarding: Void = onboardingModel.load(
-                resetForUITesting: ProcessInfo.processInfo.arguments.contains("--reset-onboarding")
+                resetForUITesting: ProcessInfo.processInfo.arguments.contains("--reset-onboarding"),
+                acceptForUITesting: ProcessInfo.processInfo.arguments.contains("--demo-consent")
             )
             async let session: Void = appModel.restore(
                 demoSession: ProcessInfo.processInfo.arguments.contains("--demo-session")

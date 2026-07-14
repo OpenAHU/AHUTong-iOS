@@ -42,8 +42,15 @@ final class CampusCardViewModel: ObservableObject {
     func load(demo: Bool, force: Bool = false) async {
         if case .loaded = balanceState, !force { return }
         if demo {
-            defaults.set(126.35, forKey: cacheKey)
-            balanceState = .loaded(126.35)
+            switch DemoDataState.current {
+            case .normal, .empty:
+                defaults.set(126.35, forKey: cacheKey)
+                balanceState = .loaded(126.35)
+            case .loading:
+                balanceState = .loading(nil)
+            case .error:
+                balanceState = .failed("Mock 场景：接口返回 500", nil)
+            }
             return
         }
         let cached = cachedBalance

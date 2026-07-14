@@ -23,7 +23,12 @@ final class ScheduleViewModel: ObservableObject {
     func load(demo: Bool = false) async {
         if demo {
             currentWeek = 1
-            state = .loaded(Self.demoCourses)
+            switch DemoDataState.current {
+            case .normal: state = .loaded(Self.demoCourses)
+            case .loading: state = .loading
+            case .empty: state = .empty
+            case .error: state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
+            }
             source = .cache
             return
         }
@@ -172,14 +177,12 @@ struct ScheduleView: View {
                     .accessibilityIdentifier("schedule.error")
                 }
         case .empty:
-            scheduleGrid(courses: [])
-                .overlay { ContentUnavailableView("本周没有课程", systemImage: "calendar") }
+            scheduleGrid(courses: []).accessibilityIdentifier("schedule.empty")
         case let .loaded(courses):
             scheduleGrid(courses: courses)
                 .overlay {
                     if courses.isEmpty {
-                        ContentUnavailableView("本周没有课程", systemImage: "calendar")
-                            .accessibilityIdentifier("schedule.empty")
+                        EmptyView().accessibilityIdentifier("schedule.empty")
                     }
                 }
         }
