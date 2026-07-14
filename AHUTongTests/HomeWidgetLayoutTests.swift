@@ -33,6 +33,7 @@ final class HomeWidgetLayoutTests: XCTestCase {
         XCTAssertEqual(layout.slots.compactMap { $0 }.count, Set(layout.slots.compactMap { $0 }).count)
     }
 
+    @MainActor
     func testCourseSummaryMatchesAndroidOngoingCourseAtFixedBaselineTime() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -48,6 +49,7 @@ final class HomeWidgetLayoutTests: XCTestCase {
         XCTAssertEqual(summary.focusedCourseID, "demo-3")
     }
 
+    @MainActor
     func testCourseSummaryReportsNextAndFinishedStates() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
