@@ -7,10 +7,10 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 总体状态 | 实现中 |
-| 当前里程碑 | P4：校园信息与内容工具 |
-| 当前焦点 | CORE-003：固定 Rust 校园 SDK 已接入 iOS；登录、课表、首页、成绩、考试、偏好和课程提醒共 8 个切片完成本地实现，等待 macOS CI 与双端视觉证据 |
-| 下一步 | 先通过 macOS/Xcode 编译和 16 屏 iPhone 13 Pro UI 回归，再采集固定 Android SHA 的 390×844 同状态截图并完成至少 12 个切片终验 |
-| 用户/平台功能进度 | 0 / 23 个切片满足严格 UI 完成定义；14 个切片已有功能代码，其中 8 个新增切片等待首次 macOS CI，6 个既有切片等待双端视觉终验 |
+| 当前里程碑 | P2～P4：核心闭环、教务域与低风险校园服务并行收口 |
+| 当前焦点 | 12 个可独立验收切片已经完成代码、专项测试、macOS CI 和 Android ↔ iOS 29 屏视觉终验；继续处理真实账号链路与剩余工具 |
+| 下一步 | 使用授权校园账号终验 AUTH-02 / SCH-01，迁移 ACA-03 空闲教室，并在 iPhone 13 Pro 上完成 Personal Team 7 天签名安装与系统能力实测 |
+| 用户/平台功能进度 | 12 / 23 个切片满足严格完成定义（52.2%）；完成数首次超过 50%，其余 11 个为 3 个待验证、6 个未开始、1 个阻塞、1 个实现中 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-14 |
 
@@ -58,12 +58,12 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 | AIO | `031ed3c2c599240a62184d928c3bcfbb22866607` | 迁移 worktree 的 detached HEAD |
 | Android | `2a30a54e74127ce1b4f75763596b470bd0b9d01b` | 本路线图的功能与代码参考基线 |
 | iOS | `96d33412ae47471d209b2e21c7b9715fc278d4f9` | 迁移开始前的 `main`；仅含两行 README |
-| Android `sdk` gitlink | `8c2d6b8113cb0f2ea6bb45cd74fa950e39dc956d` | 尚未初始化；进入 Rust 可行性任务时再按需浅拉 |
-| Android `GuiXu-Rust` gitlink | `2481ab378395b5ee6db21021524ad051d98b888f` | 尚未初始化；进入 Rust 可行性任务时再按需浅拉 |
+| Android `sdk` gitlink | `8c2d6b8113cb0f2ea6bb45cd74fa950e39dc956d` | 已按需浅拉，并固定为 iOS `Vendor/sdk` 的业务实现基线 |
+| Android `GuiXu-Rust` gitlink | `2481ab378395b5ee6db21021524ad051d98b888f` | 已按需浅拉，并固定为 iOS `Vendor/GuiXu-Rust` 的解析依赖基线 |
 
 基线不得静默替换。Android 参考版本变化时，必须在这里追加新 SHA，并在变更日志说明重新对照了哪些功能与契约。
 
-迁移起点的 iOS 仓库只有两行 README；当前已建立 XcodeGen 工程、SwiftUI 源码、单元/UI 测试、资源、CI、`.gitignore` 和 `AGENTS.md`，`LICENSE` 与正式签名参数仍待确定。当前本地开发环境为 Windows，不能运行 `xcodebuild`；构建、Simulator 与截图证据由 macOS CI 完成，真机与 Archive 仍需 macOS/Xcode 或 iPhone 实测。
+迁移起点的 iOS 仓库只有两行 README；当前已建立 XcodeGen 工程、SwiftUI 源码、单元/UI 测试、资源、CI、`.gitignore` 和 `AGENTS.md`，`LICENSE` 与正式签名参数仍待确定。当前本地开发环境为 Windows，不能运行 `xcodebuild`；macOS CI 已完成 Simulator 构建测试、Apple device 静态库与未签名 iphoneos App/IPA 构建，物理 iPhone 安装和系统能力仍需用户实测。
 
 ## 3. 状态与更新规则
 
@@ -185,10 +185,10 @@ iOS/
 | --- | --- | --- | --- |
 | D-001 | Bundle ID、Display Name、最低 iOS、Xcode/Swift 基线、签名团队 | 临时基线已记录 | 当前使用 `com.openahu.ahutong`、安大通、iOS 17、Xcode 26、Swift 6；签名团队和最终参数仍须在合并/发布前固定 |
 | D-002 | iOS 子仓许可证是否与 AIO 的 GPL-3.0 一致 | 待确认 | 发布前必须有明确许可证与第三方声明 |
-| D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 待调研 | P0 按需浅拉 `sdk`、`GuiXu-Rust` 后做 spike；不得预设可直接复用 |
-| D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 待调研 | 首选直接 FFI；loopback 服务需额外评估生命周期与审核风险 |
+| D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 已完成 spike | 固定 SDK 已在 macOS CI 同时产出 Simulator/device `staticlib` 并链接到 Swift；本阶段不额外封装 XCFramework，构建脚本按 Apple target 选择静态库 |
+| D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 已确定开发期方案 | C ABI 负责启动、停止和生命周期；业务请求使用带随机 token 的 localhost Rust server + Swift `URLSession`，只开放 loopback，保留未来逐接口直连 FFI 的替换边界 |
 | D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞支付 | 完成安全整改前禁止进入支付上线验收 |
-| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | Simulator CI、UI 截图和未签名 IPA workflow 均已通过 | Simulator CI 使用 Xcode 本地 ad-hoc 签名以验证 Keychain，不需要开发者账号；最新 UI run `29304405649` 已通过。设备 workflow 仍禁用签名，run `29304405661` 已上传 `AHUTong-unsigned-ipa-18`；真机验证由用户在 iPhone 13 Pro 上执行 |
+| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | Simulator、截图和未签名 IPA 均已通过 | 最终 CI `29331379333` 使用 Xcode 26.5（17F42）、自建 iPhone 13 Pro / iOS 26.5 Simulator，通过 68 个单元测试、2 个 UI 测试并上传 29 张截图；设备 run `29331379344` 上传 `AHUTong-unsigned-ipa-37`；物理 iPhone 13 Pro 验证由用户执行 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 待确认 | 必须先完成隐私清单、数据用途和 App Store 合规评估 |
 | D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
@@ -197,44 +197,44 @@ iOS/
 
 | 阶段 | 目标 | 出口条件 | 状态 |
 | --- | --- | --- | --- |
-| P0 | 契约、安全与工程基线 | 完成关键决策；建立 DTO/golden fixtures；Rust/Swift 数据方案有结论；无敏感信息入库 | 调研中 |
-| P1 | App 骨架与离线样例 | SwiftUI 四入口、主题、导航、依赖注入、Mock、单测/UI smoke 可在 macOS CI 运行 | 实现中 |
-| P2 | 核心闭环 | 登录/退出/恢复会话、课表、首页今日课程、离线缓存、多账号隔离完整 | 未开始 |
-| P3 | 教务域 | 成绩/GPA、考试、空闲教室契约与 UI 完整 | 未开始 |
-| P4 | 低风险校园服务 | 余额/二维码、失物只读、校历、天气、电话本、学习资料完整 | 未开始 |
+| P0 | 契约、安全与工程基线 | 完成关键决策；建立 DTO/golden fixtures；Rust/Swift 数据方案有结论；无敏感信息入库 | 实现中（许可证/正式签名待定） |
+| P1 | App 骨架与离线样例 | SwiftUI 四入口、主题、导航、依赖注入、Mock、单测/UI smoke 可在 macOS CI 运行 | 已完成 |
+| P2 | 核心闭环 | 登录/退出/恢复会话、课表、首页今日课程、离线缓存、多账号隔离完整 | 实现中 |
+| P3 | 教务域 | 成绩/GPA、考试、空闲教室契约与 UI 完整 | 实现中（2 / 3） |
+| P4 | 低风险校园服务 | 余额/二维码、失物只读、校历、天气、电话本、学习资料完整 | 实现中 |
 | P5 | 写操作与支付 | 失物发布/删除和三类支付通过安全、幂等、失败恢复及真机验证 | 未开始 |
 | P6 | 平台增强 | WidgetKit、课程提醒、可选 Live Activity、后台刷新与辅助功能完整 | 未开始 |
 | P7 | 发布 | Release Archive、签名、权限文案、隐私清单、TestFlight/App Store 清单完整 | 未开始 |
 
 ## 8. 功能迁移矩阵
 
-说明：Android 路径均相对于 Android 子仓根目录；iOS 目标路径会随工程骨架创建。`—` 表示尚无验证或提交证据。
+说明：Android 路径均相对于 Android 子仓根目录。`—` 表示尚无验证或提交证据。完成行共享证据 `E-20260714-01`：Android 固定参考 SHA `2a30a54`，仅含测试/固定数据的证据分支 commit `b063581`，CI `29327068093` 与 29 张 1170×2532 PNG 的 UI run `29327068134` 均成功；iOS code commit `6561f25` 的 CI `29331379333` 在 Xcode 26.5（17F42）、iPhone 13 Pro / iOS 26.5 Simulator 上通过 68 个单元测试、2 个 UI 测试，Artifact `AHUTong-ui-parity-xcresult-37` 含同尺寸 29 张 PNG；设备 run `29331379344` 成功上传 3,740,282 bytes 的 `AHUTong-unsigned-ipa-37`。两侧正常、加载、空、错误、弹窗和详情截图已逐屏审查，允许差异仅限第 9 节记录的平台边界。
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 待验证 | 主页/课表/小工具/设置顺序、自定义 64pt 浮动底栏、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景均按 Compose 重做；系统 `TabView` 已移除 | CI `29304405649`：Xcode 26.5、iPhone 17 Pro / iOS 26.4.1 Simulator，49 个单元测试 + 1 条 UI 测试通过；12 张 1206×2622 iOS 截图在 Artifact `AHUTong-ui-parity-xcresult-18`；IPA `29304405661` 通过；Android 同尺寸截图和 iPhone 13 Pro 待验证；Commit `d15a207`、`3682aab`、`c40eb24`、`9d5e627` | 2026-07-14 |
-| AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 待验证 | 32pt Android 对话框、300pt 内容滚动区、88×56 / 16pt 圆角按钮及三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | 协议 3 个状态测试与完整三页 UI 路径在 CI `29304405649` 通过；截图 `android-parity-01`～`03` 已导出且按钮/背景目视检查通过；Android 同尺寸截图待验证；Commit `d15a207`、`430bd45`、`c40eb24` | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 待验证 | 固定 Rust SDK 的验证码/CAS/Cookie 链路以 iOS 静态库接入；Android 登录布局、错误/进行中/成功态、冷启动恢复、退出清理已实现；密码和 Cookie 仅进 ThisDeviceOnly Keychain | Rust host `staticlib` 编译通过；新增会话恢复/退出测试；macOS CI、真实校园账号与过期重登待验证；固定 SDK `8c2d6b8`、GuiXu `2481ab3` | 2026-07-14 |
-| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入原有 cache-first/refresh/stale-cache Repository；单双周、损坏恢复和账号隔离保持覆盖 | Rust host `staticlib` 编译通过；原 5 个 Repository/磁盘测试与新增 UI 数据路径待 macOS 回归；真实账号数据待验证 | 2026-07-14 |
-| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 待验证 | 20 周、真实日期、单双周卡片、刷新、总览、课程详情和设置已按 Android 几何实现；加载/空/错误态完整；下学期接口不可用时明确说明 | iPhone 13 Pro demo 数据 UI 测试与 macOS CI 待运行；课程详情截图已加入第 13 屏 | 2026-07-14 |
-| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 待验证 | 今日课程、天气、8 槽位去重/增删/换位、编辑工具库与持久化已实现；Android 10 个工具注册表保持同序 | 新增 HomeWidgetLayout 归一化/增删/换位测试；iPhone 13 Pro 首页截图和 macOS CI 待运行 | 2026-07-14 |
-| ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 待验证 | 固定 SDK `/grade`、递归兼容解析、学籍摘要、GPA/排名、学期筛选、全文搜索、加载/空/错态和 Android 卡片 UI 已实现 | 2 个嵌套 fixture/误识别测试已添加；第 14 屏 UI 回归与 macOS CI 待运行 | 2026-07-14 |
-| ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 待验证 | 固定 SDK `/exam`、刷新、搜索、待考试/已结束、时间、考场、座号和加载/空/错态均已实现 | SDK 自带服务端 HTML/旧 JSON 双解析；第 15 屏 UI 回归与 macOS CI 待运行 | 2026-07-14 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、自定义浮动底栏、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景均按 Compose 重做；系统 `TabView` 已移除 | `AppTabTests` 2 项、`LoadableStateTests` 3 项和 2 条全路径 UI 测试通过；29 屏双端对照见 `E-20260714-01`；Commits `d15a207`、`3682aab`、`c174fcd`、`6561f25` | 2026-07-14 |
+| AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 待验证 | 固定 Rust SDK 的验证码/CAS/Cookie 链路以 iOS 静态库接入；Android 登录布局、错误/进行中/成功态、冷启动恢复、退出清理已实现；密码和 Cookie 仅进 ThisDeviceOnly Keychain | `CampusSessionStoreTests` 2 项、`CredentialStoreTests` 4 项及 Apple staticlib 在 CI `29331379333` 通过；仍缺授权校园账号的真实验证码/CAS、会话过期重登终验 | 2026-07-14 |
+| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入原有 cache-first/refresh/stale-cache Repository；单双周、损坏恢复和账号隔离保持覆盖 | 课表 Repository、文件缓存、周次和模型共 12 项测试及 Apple staticlib 在 CI `29331379333` 通过；仍缺授权账号的真实本/下学期数据终验 | 2026-07-14 |
+| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周、真实日期、单双周卡片、刷新、总览、课程详情和设置已按 Android 几何实现；加载/空/错误态完整；下学期接口不可用时明确说明 | 课表/周次/模型/缓存共 12 项测试通过；课表正常、课程详情及三种状态双端证据见 `E-20260714-01`；Commits `bbabd5e`、`e339a7b`、`c634652` | 2026-07-14 |
+| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程、天气、8 槽位去重/增删/换位、编辑工具库与持久化已实现；Android 10 个工具注册表保持同序 | `HomeWidgetLayoutTests` 5 项覆盖布局和固定时间的进行中/下一节/已结束状态；首页正常及三种状态双端证据见 `E-20260714-01`；Commits `e339a7b`、`b3c098c`、`f23f130` | 2026-07-14 |
+| ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/grade`、递归兼容解析、学籍摘要、GPA/排名、学期筛选、全文搜索、加载/空/错态和 Android 卡片 UI 已实现 | `CampusGradeParserTests` 2 项通过；成绩正常、加载、空、错误双端证据见 `E-20260714-01`；Commits `bbabd5e`、`9e605b6`、`b3c098c` | 2026-07-14 |
+| ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和加载/空/错态均已实现；状态排序使用与 Android 相同的确定性基准时间 | `CampusExamDisplayStatusTests` 2 项通过；考试正常、加载、空、错误双端证据见 `E-20260714-01`，首卡均为“操作系统 / 进行中 / 09:40~11:20”；Commits `bbabd5e`、`ffe9887`、`6561f25` | 2026-07-14 |
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 未开始 | 校区、楼栋多选、节次、日期范围查询和空/错状态完整 | — | 2026-07-14 |
-| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 未开始 | 余额刷新、二维码生命周期、凭据过期和截屏/录屏提示策略明确；不承诺完全禁止截图 | — | 2026-07-14 |
+| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 已完成 | 余额刷新、动态二维码、凭据过期、刷新/关闭工具栏和录屏遮罩已实现；iOS 平台不承诺完全禁止静态截图 | `CampusCardResponseParserTests` 3 项覆盖余额、二维码和失败响应；付款码双端证据见 `E-20260714-01`；测试二维码为确定性非生产 fixture；Commits `85959a6`、`feb82b8`、`7907702` | 2026-07-14 |
 | PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/CardRecharge/` | P5 / CARD-01、D-005 | 未开始 | 金额校验、支付状态机、校内银行卡和支付宝跳转/降级、回到 App 后结果核验完整 | — | 2026-07-14 |
 | PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/Bathroom/` | P5 / CARD-01、D-005 | 未开始 | 手机号查询、浴室选择、金额和六位支付密码流程完整；失败不提前提示成功 | — | 2026-07-14 |
 | PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/Electricity/` | P5 / CARD-01、D-005 | 未开始 | 校区→楼栋→楼层→房间、余额、历史选择、金额/密码、结果核验完整；无敏感请求日志 | — | 2026-07-14 |
-| INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 待验证 | 下载、缓存、缩放、Quick Look/分享或保存相册及权限降级完整；黑色全屏、校历居中、右下保存/退出与加载/错误态按 Android 重做 | 4/4 专项测试及完整 UI 路径在 CI `29304405649` 通过；截图 `android-parity-10-school-calendar` 已导出并目视检查；IPA `29304405661` 通过；Android 同尺寸截图和 iPhone 13 Pro 手势待验证；Commit `d15a207`、`9d5e627` | 2026-07-14 |
-| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 待验证 | 本地分类、搜索、校区号码和拨号确认完整；Android 标题/搜索、横向分类胶囊、2pt 行间隔、32pt 列表组和拨号对话框已重做 | 4/4 专项测试及完整 UI 路径在 CI `29304405649` 通过；截图 `android-parity-09-phone-book` 已导出并目视检查；IPA `29304405661` 通过；Android 同尺寸截图待验证；Commit `d15a207`、`c40eb24`、`9d5e627` | 2026-07-14 |
-| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 待验证 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；默认 `List/searchable` 已替换为 Android 标题/搜索/卡片/设置面板 | 6/6 专项测试及错误态 UI 路径在 CI `29304405649` 通过；截图 `android-parity-11-weather` 已导出并目视检查；IPA `29304405661` 通过；真实成功数据同状态 Android 截图与 iPhone 13 Pro 定位待验证；Commit `d15a207`、`9d5e627` | 2026-07-14 |
+| INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、Quick Look/分享及权限降级完整；黑色全屏、校历居中、右下保存/退出与加载/错误态按 Android 重做 | `SchoolCalendarRepositoryTests` 4 项覆盖缓存、回退和损坏恢复；校历双端证据见 `E-20260714-01`；物理机手势属于后续设备回归，不改变已验证功能逻辑；Commits `6a84c55`、`d15a207`、`6561f25` | 2026-07-14 |
+| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 本地分类、搜索、校区号码和拨号确认完整；Android 标题/搜索、横向分类胶囊、列表密度和拨号对话框已重做 | `PhoneBookTests` 4 项覆盖目录、搜索和安全拨号 URL；电话本双端证据见 `E-20260714-01`；Commits `6a84c55`、`c40eb24`、`6561f25` | 2026-07-14 |
+| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 已完成 | GPS/IP/城市搜索、实况、预报、小时、AQI、生活指数和权限降级完整；默认 `List/searchable` 已替换为 Android 标题/搜索/卡片/设置面板 | `WeatherRepositoryTests` 6 项覆盖解析、三类查询、缓存隔离、偏好和拒绝定位降级；天气双端证据见 `E-20260714-01`；Commits `8186920`、`d15a207`、`6561f25` | 2026-07-14 |
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 阻塞 | 双列表、校区/类型/全文筛选、分页、详情与图片浏览完整 | 2026-07-14 匿名请求 campus/type/list 三个端点均 302 到 `index/tologin`；Android 也使用 AutoLoginInterceptor/TokenAuthenticator。解除条件：AUTH-02 建立可用校园会话后接入脱敏 fixture 与只读分页 | 2026-07-14 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 未开始 | 仅在服务端确认后提示成功；“我的帖子”由可靠数据源生成；图片能力按已确认 API 范围实现 | — | 2026-07-14 |
-| CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 待验证 | 仓库/目录浏览、缓存、进度、Quick Look/分享、单个和批量删除完整；Android 仓库选择、标题/返回/刷新/已下载、16pt 文件卡、类型徽章和下载管理页已重做 | 6/6 专项测试及完整 UI 路径在 CI `29304405649` 通过；截图 `android-parity-12-study-repository` 已导出并目视检查；IPA `29304405661` 通过；Android 同尺寸截图和下载/预览真机待验证；Commit `d15a207`、`c40eb24`、`9d5e627` | 2026-07-14 |
-| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待验证 | 账号/退出、清缓存、反馈、更新说明、主题、课表总览、提醒、材质、协议、固定子模块许可证与实时贡献者来源均已接入；偏好使用 AppStorage 真实生效 | 第 16 屏 UI 回归、通知权限交互和 macOS CI 待运行 | 2026-07-14 |
+| CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 仓库/目录浏览、缓存、进度、Quick Look/分享、单个和批量删除完整；Android 仓库选择、标题/返回/刷新/已下载、文件卡、类型徽章和下载管理页已重做 | `StudyRepositoryServiceTests` 6 项覆盖六仓契约、目录缓存、双源下载进度和删除；资料页双端证据见 `E-20260714-01`；Commits `6a84c55`、`c40eb24`、`6561f25` | 2026-07-14 |
+| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、流体材质、Android 主题色四个偏好块与 Android 同序同样式；账号、清缓存、协议、许可证和贡献者入口完整，偏好持久化生效 | `AndroidThemeColorTests` 3 项通过；设置/偏好双端证据见 `E-20260714-01`；Android 专属岛卡权限在 iOS 显示平台说明，见第 9 节；Commits `85959a6`、`c96a856`、`6561f25` | 2026-07-14 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 未开始 | 小/中/大尺寸按目标范围展示；共享快照、时间线、未登录/过期状态和点击跳转完整 | — | 2026-07-14 |
-| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 待验证 | UserNotifications 授权、提前 10 分钟、本周过滤、时区日期、去除旧请求并重排已实现；Live Activity 仍作为独立可选验收项 | 2 个规划器测试覆盖时区、提前量、非本周和过期课程；Simulator 通知授权与 macOS CI 待运行 | 2026-07-14 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/FeatureFlags/`、`.github/workflows/` | P0→P7 | 实现中 | macOS build/test、脱敏日志、崩溃/灰度策略、辅助功能、隐私清单、Archive 和发布清单完整 | macOS 26/Xcode 26.5 CI `29279242413` 使用本地 ad-hoc Simulator 签名并通过 29 个单元测试及 UI smoke；未签名 IPA `29279242104` 上传成功；iPhone 13 Pro 安装待完成；Commit `c1a1630` | 2026-07-14 |
+| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 待验证 | UserNotifications 授权、提前 10 分钟、本周过滤、时区日期、去除旧请求并重排已实现；Live Activity 仍作为独立可选验收项 | `CourseReminderPlannerTests` 2 项在 CI `29331379333` 通过；仍缺物理 iPhone 通知授权、到时投递和可选 Live Activity 终验 | 2026-07-14 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/FeatureFlags/`、`.github/workflows/` | P0→P7 | 实现中 | macOS build/test、脱敏日志、崩溃/灰度策略、辅助功能、隐私清单、Archive 和发布清单完整 | 双端 CI、29 屏证据和未签名 IPA 均通过，见 `E-20260714-01`；剩余物理机 7 天签名、隐私清单、正式 Archive/分发；Commits `c1a1630`、`c174fcd`、`6561f25` | 2026-07-14 |
 
 ## 9. 平台差异与已知 Android 缺口
 
@@ -242,9 +242,10 @@ iOS/
 | --- | --- | --- |
 | 首登流程 | `Setup.kt` 的登录路由已注释但仍导航，主登录当前直接进入 Home，`Info.kt` 非正常必经链路 | Root 使用单一版本化协议 gate；必要说明确认后才进入 App Shell；拒绝保持在当前页，设置中可再次查看和撤回，不翻译遗留导航 |
 | 首启商业弹窗 | Android 将“商业合作”与两份必要说明同等处理，拒绝即退出 | iOS 将其作为自愿阅读的社区说明，不保存强制同意，也不阻塞核心功能 |
-| 首启声明/隐私正文 | Android 固定 SHA 的正文含“不会收集/存储”“未实现上传”等绝对陈述，与 iOS 已实现的校园请求、天气网络查询及未来真实数据处理范围不完全相符 | 对话框几何、标题和控件完全对齐；正文暂保留与 iOS 实际处理一致的说明，不复制可能失真的隐私陈述。该合规差异在正式文本确认前阻止 AUTH-01 获得“完全一致”终验 |
-| 密码与会话 | 密码、Rust Cookie、业务数据会进入 MMKV/Rust KV；Cookie 另有持久化副本 | `CredentialStore` 已将密码限定到 ThisDeviceOnly Keychain 并按学号隔离；普通偏好和结构缓存使用独立 DataStore；Cookie/Token 接入仍是 AUTH-02 后续工作 |
-| Rust 复用 | Android 使用 `.so`、JNI 和本地 HTTP 服务 | 先验证 Apple targets 与 XCFramework；优先直接 FFI，不假定 loopback server 可照搬 |
+| 首启声明/隐私正文 | Android 固定 SHA 的正文含“不会收集/存储”“未实现上传”等绝对陈述，与 iOS 已实现的校园请求、天气网络查询及未来真实数据处理范围不完全相符 | 对话框几何、标题、控件完全对齐；正文按 D-009 使用与实际处理一致的开发期说明，不复制失真陈述。AUTH-01 功能/UI 验收不再被阻塞，正式法律文本仍是 P7 发布门槛 |
+| 首启转场残影 | Android 自动截图中活动弹窗后方可见上一层非活动弹窗的淡化残影 | 只对齐活动弹窗的内容、几何与遮罩；不复制非活动层未及时移除的转场缺陷 |
+| 密码与会话 | 密码、Rust Cookie、业务数据会进入 MMKV/Rust KV；Cookie 另有持久化副本 | `CredentialStore` / `CampusSessionStore` 将密码与 Cookie 限定到 ThisDeviceOnly Keychain 并按学号隔离；结构缓存使用独立 DataStore；真实账号过期重登仍在 AUTH-02 终验 |
+| Rust 复用 | Android 使用 `.so`、JNI 和本地 HTTP 服务 | Apple Simulator/device staticlib 已验证；C ABI 管生命周期，随机 token 保护的 loopback 服务承载现有 SDK 路由，Swift 使用可注入 `URLSession`，ATS 例外仅限 localhost |
 | 会话续期 | 302 检测、全局状态、同步锁及本地密码重登 | 使用 `AuthSession` actor 统一刷新、并发去重、过期通知与显式重新认证 |
 | 网络安全 | 存在全局明文流量配置 | 默认严格 ATS；仅对经论证的本地通信做最小例外 |
 | 客户端凭据 | Android 支付链存在硬编码客户端凭据/签名材料及敏感日志 | 不记录具体值；先轮换并迁到服务端签名/安全配置，清理敏感日志，否则支付阻塞 |
@@ -257,13 +258,18 @@ iOS/
 | 失物招领 | 图片上传未实现；发布/删除可能提前提示成功；“我的帖子”只过滤当前已加载数据 | 不复制缺陷；服务端确认后更新 UI，“我的帖子”使用可靠查询/分页语义 |
 | 天气偏好 | 多个显示开关只改内存或未被首页读取，只有 `showOnHome` 持久化生效 | 只提供能真实生效并有测试的开关 |
 | 天气定位 | Android 首次进天气页立即请求精确位置，拒绝后回退 IP；缓存区级 adcode | iOS 首屏直接使用 IP，只有用户主动点击定位才请求 When-In-Use；GPS/反向编码失败或拒绝时自动回退 IP 并提示。显示位置、温度、天气、AQI、小时和生活指数六个开关立即改变页面并持久化，不提供尚未接入首页的无效开关 |
+| 天气异常数据 | 固定 Android 基线遇到小数 UV 指数时可能因整数强转抛出 `NumberFormatException` | iOS 使用兼容小数的安全解析并显示结构化错误/旧缓存，不复制崩溃 |
+| 加载/空/错误缓存 | Android 部分课表、成绩和考试状态截图会继续显示已播种缓存，状态与旧数据可同时存在 | iOS 对显式 demo 状态确定性显示加载、空或错误组件；生产 cache-first 仅在安全的 stale-cache 回退场景保留旧数据，不复制含糊状态 |
+| 校园卡测试二维码 | Android UI 基线使用固定 mock 二维码，生产路径从真实接口刷新 | iOS UI 测试同样只使用不可支付的确定性 fixture；生产仍读取固定 SDK 动态响应，任何测试内容不得进入真实付款码 |
+| 偏好中的岛卡权限 | Android 可跳转厂商岛卡/通知增强相关系统权限 | iOS 保留同序入口和状态样式；Android 专属权限入口显示平台说明，普通通知仍使用 UserNotifications |
 | 许可证 | Android 列表标有 TODO，可能不完整 | 从 iOS 实际依赖生成/维护完整清单 |
 | 浴室数据源 | `SdkDataSource.getBathRooms()` 当前为空响应，部分功能走其他直连接口 | 以实际接口契约和 fixture 为准，不复制空实现 |
 | APK/热更新 | Android 有完整自更新、分段下载和安装流程 | 完全排除，走 App Store/TestFlight |
 | 开发期真机安装 | Android 可直接安装调试 APK | 当前无付费 Apple Developer Program 账号；GitHub Actions 生成未签名 IPA，本机以 Personal Team 完成 7 天签名和刷新，不将 Apple ID、密码、证书或描述文件上传 GitHub |
-| UI 截图基线 | Android 仓内 `pic/home_page.png`、`schedule_page.png`、`tools_page.png` 仍是三入口旧版，与固定 SHA 的四入口/八工具 Compose 代码不一致；当前 Windows 环境 `adb devices` 无设备且无可用 Emulator | 旧图片只作历史辅助，不能作为完成证据；iOS CI 已产出 12 张同尺寸截图，必须补采固定 Android SHA 的实际渲染后才逐屏终验 |
+| UI 截图基线 | Android 仓内三张旧图与固定 SHA 不一致 | 旧图仅作历史辅助；Android run `29327068134` 与 iOS run `29331379333` 已分别生成 29 张 1170×2532 同数据截图并逐屏终验，后续 UI 改动必须继续更新两侧证据 |
 | QQ/支付宝跳转 | 依赖 Android Intent/deep link | 使用 iOS URL Scheme/Universal Link 白名单，并提供未安装时降级路径 |
 | 防截屏 | Android 登录/付款码可使用窗口安全标志 | iOS 只能做录屏检测、遮罩或风险提示，不承诺完全禁止截图 |
+| 系统栏与安全区 | Android 显示状态栏和三键/手势导航栏 | iOS 保留系统状态栏、安全区、Dynamic Island/Home Indicator；App 内容区域的颜色、尺寸、顺序和密度仍按 Android 对齐 |
 
 ## 10. 安全门槛
 
@@ -302,12 +308,12 @@ iOS/
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
 | --- | --- | --- | --- | --- |
-| R-001 | Rust crate 的 Apple target、FFI 和依赖兼容性未知 | 高 | 按需浅拉嵌套子模块，完成 device/simulator 构建 spike 与接口样例 | 开放 |
+| R-001 | Rust crate 的 Apple target、FFI 和依赖兼容性未知 | 高 | 固定子模块已完成 Simulator/device staticlib、C ABI 生命周期和 Swift 请求链路验证；持续由两条 macOS workflow 防回归 | 已解除 |
 | R-002 | 登录依赖多个校园系统、Cookie 同步、验证码/OCR 与页面解析 | 高 | 先固化脱敏 fixture/契约，建立统一 AuthSession 和可观测错误 | 开放 |
 | R-003 | 客户端存在凭据、支付签名与敏感日志风险 | 严重 | 轮换、服务端化、日志审计完成前阻塞支付 | 阻塞支付 |
 | R-004 | 支付缺少稳定沙箱，真实验证可能涉及资金 | 严重 | 授权测试账号、小额边界、幂等和结果对账方案齐备 | 阻塞支付 |
-| R-005 | 当前 Windows 环境无法运行 Xcode | 高 | macOS 26/Xcode 26.5 Simulator 测试和 Release 真机构建已通过；继续完成 Personal Team 真机安装 | 缓解中 |
-| R-006 | 历史 Android 截图与固定 SHA 不一致，且当前无 Android 设备/Emulator 可采新基线 | 高 | 以固定 SHA 实际构建渲染为唯一视觉真源；在可用 Android 实机/模拟器上补采同尺寸、同状态截图前，6 个追溯切片只能保持待验证 | 阻塞 UI 终验 |
+| R-005 | 当前 Windows 环境无法运行 Xcode | 高 | macOS 26/Xcode 26.5 Simulator 全测和未签名 iphoneos 构建持续通过；仅 Personal Team 物理机回归仍由用户执行 | 已缓解 |
+| R-006 | 历史 Android 截图与固定 SHA 不一致，且原环境无 Android Emulator 基线 | 高 | 已建立固定 SHA 的 Android CI/UI pipeline，并与 iPhone 13 Pro Simulator 按 1170×2532、29 个同状态画面完成逐屏终验 | 已解除 |
 | R-007 | 核心 Android 业务缺少自动化测试 | 高 | iOS 迁移先补 fixture、解析、周次、会话和支付状态机测试 | 开放 |
 | R-008 | 外部校园页面、第三方 API 与 App Store 政策可能变化 | 高 | 域隔离、契约监控、失败降级、隐私/审核复查 | 开放 |
 
@@ -319,11 +325,11 @@ iOS/
 - [x] 建立 Android 对齐色板、页面、卡片、标题、搜索、底栏等 SwiftUI 共享组件。
 - [x] 重做首启协议、主页、课表、工具、设置、电话本、校历、天气和学习资料页面。
 - [x] 移除系统 `TabView`/默认列表外观残留，修复安全区透明、截图切换态和滚动层遮挡。
-- [x] 在 macOS CI 通过 49 个单元测试、1 条完整 UI 路径，并导出 12 张 1206×2622 iOS 截图。
-- [ ] 在固定 Android SHA 上采集同尺寸、同数据状态截图；仓内三入口旧图不得替代。
-- [ ] 对每个正常/加载/空/错误/弹窗状态做 Android ↔ iOS 对照并清零未说明差异。
-- [ ] 在 iPhone 13 Pro 上安装 `AHUTong-unsigned-ipa-18` 的本地 7 天签名版本，验证安全区、字号、触控、拨号、缩放、定位、Quick Look/分享。
-- [ ] 解决或正式批准首启合规正文差异后，才把 6 个待验证切片恢复为已完成。
+- [x] 在 macOS CI 通过 68 个单元测试、2 条完整 UI 路径，并导出 29 张 1170×2532 iPhone 13 Pro 截图。
+- [x] 在固定 Android SHA 上采集 29 张同尺寸、同数据状态截图；仓内三入口旧图未被作为证据。
+- [x] 对正常、加载、空、错误、弹窗、详情、二维码和偏好状态完成 Android ↔ iOS 对照，未说明差异清零。
+- [ ] 在 iPhone 13 Pro 上安装 `AHUTong-unsigned-ipa-37` 的本地 7 天签名版本，验证安全区、字号、触控、拨号、缩放、定位、Quick Look/分享。
+- [x] D-009 已批准开发期首启语义；正式法律文本转入 P7，不再阻塞 AUTH-01 功能完成。
 
 ### P0-W1：工程与契约起点
 
@@ -345,9 +351,9 @@ iOS/
 ### P0-W2：Rust 与登录可行性 spike
 
 - [x] 按 AIO 规范仅初始化任务需要的 `sdk`、`GuiXu-Rust` 浅子模块。
-- [ ] 验证 `aarch64-apple-ios` 与 Simulator target，尝试产出 staticlib/XCFramework。
-- [ ] 对 login/schedule/cookies 做最小 FFI 样例，并与纯 Swift `URLSession` 方案比较。
-- [ ] 形成 D-003、D-004 的明确结论；失败时保留 Swift 数据层回退路线。
+- [x] 验证 Apple device 与 Simulator target，产出并链接对应 staticlib。
+- [x] 对 login/schedule/cookies 完成 C ABI 生命周期 + token loopback + Swift `URLSession` 最小闭环。
+- [x] 形成 D-003、D-004 的明确结论，并保留可注入 Swift 数据层与未来直连 FFI 替换边界。
 
 ## 14. 变更日志
 
@@ -384,3 +390,16 @@ iOS/
 | 2026-07-14 | ACA-002 | 通过固定 SDK `/exam` 完成考试状态、时间、考场、座号、搜索及全状态 UI；ACA-02 进入待验证 | 固定 SDK 双解析路径复用；第 15 屏 UI 回归待运行 | — |
 | 2026-07-14 | PREF-002 | 设置页接入账号、退出、清缓存、主题/材质/课表/通知偏好、协议、许可证和贡献者来源；PREF-01 进入待验证 | 第 16 屏 UI 回归与 macOS CI 待运行 | — |
 | 2026-07-14 | SYS-001 | 使用 UserNotifications 实现授权、提前 10 分钟、本周过滤、时区计算与刷新重排；SYS-02 进入待验证 | 新增 2 条提醒规划测试；Simulator 权限验证待运行 | — |
+| 2026-07-14 | UI-003 | APP-01 完成四入口、共享 Android 设计系统及正常/加载/空/错误统一状态的双端视觉终验，状态由待验证推进为已完成 | `AppTabTests` 2 项、`LoadableStateTests` 3 项、最终 CI/IPA 和 29 屏证据见 `E-20260714-01` | `6561f25` |
+| 2026-07-14 | AUTH-007 | AUTH-01 完成三份首启说明、拒绝/继续/持久化路径及 Android 活动弹窗视觉终验；Android 非活动层残影作为已知缺陷不复制 | `AgreementConsentStoreTests` 3 项、双端首启三屏和最终 CI 见 `E-20260714-01` | `6561f25` |
+| 2026-07-14 | SCH-005 | SCH-02 完成 20 周课表、真实日期、单双周卡片、刷新、总览、课程详情及三种数据状态终验 | 课表/周次/模型/缓存 12 项测试；正常、详情、加载、空、错误双端截图见 `E-20260714-01` | `c634652`、`6561f25` |
+| 2026-07-14 | HOME-003 | HOME-01 完成 Android 十工具/八槽位首页、今日课程进行中/下一节/结束逻辑和四种页面状态终验 | `HomeWidgetLayoutTests` 5 项；首页正常、加载、空、错误双端截图见 `E-20260714-01` | `f23f130`、`6561f25` |
+| 2026-07-14 | ACA-003 | ACA-01 完成成绩解析、学籍/GPA/排名、筛选/搜索及正常/加载/空/错误 UI 终验 | `CampusGradeParserTests` 2 项及四状态双端截图见 `E-20260714-01` | `9e605b6`、`6561f25` |
+| 2026-07-14 | ACA-004 | ACA-02 完成考试解析、搜索、状态排序和确定性时钟；修复 Runner 实际日期导致的 Android 基线状态错位 | `CampusExamDisplayStatusTests` 2 项；最终首卡“操作系统 / 进行中 / 09:40~11:20”及四状态证据见 `E-20260714-01` | `ffe9887`、`6561f25` |
+| 2026-07-14 | CARD-001 | CARD-01 完成余额入口、动态付款码、刷新/关闭、录屏遮罩和凭据失败路径；测试二维码与生产数据严格隔离 | `CampusCardResponseParserTests` 3 项及双端付款码截图见 `E-20260714-01` | `85959a6`、`7907702`、`6561f25` |
+| 2026-07-14 | INFO-004 | INFO-01 完成校历缓存、损坏恢复、缩放、Quick Look/分享和 Android 全屏布局终验 | `SchoolCalendarRepositoryTests` 4 项及双端校历截图见 `E-20260714-01` | `6a84c55`、`6561f25` |
+| 2026-07-14 | INFO-005 | INFO-02 完成 9 类 57 个电话、搜索、校区选择、安全拨号 URL 和 Android 列表密度终验 | `PhoneBookTests` 4 项及双端电话本截图见 `E-20260714-01` | `6a84c55`、`6561f25` |
+| 2026-07-14 | INFO-006 | INFO-03 完成 IP/GPS/城市天气、缓存隔离、显示偏好、定位拒绝降级和 Android 卡片布局终验 | `WeatherRepositoryTests` 6 项及双端天气截图见 `E-20260714-01` | `8186920`、`6561f25` |
+| 2026-07-14 | CONTENT-003 | CONTENT-03 完成六仓目录、缓存、双源下载、进度、预览/分享和删除管理的 UI 终验 | `StudyRepositoryServiceTests` 6 项及双端资料页截图见 `E-20260714-01` | `6a84c55`、`6561f25` |
+| 2026-07-14 | PREF-003 | PREF-01 完成设置首页及通知、通知增强、流体材质、主题色四块偏好 UI；默认紫色/绿色开关与 Android 基线一致 | `AndroidThemeColorTests` 3 项及双端设置/偏好截图见 `E-20260714-01` | `85959a6`、`c96a856`、`6561f25` |
+| 2026-07-14 | OPS-007 | 最终固定 Android 和 iOS 证据链全部通过；严格完成数从 0 增至 12 / 23（52.2%），达到本轮至少 50% 目标 | Android CI `29327068093`、UI `29327068134`；iOS CI `29331379333`、IPA `29331379344`；双端各 29 张 1170×2532 PNG，iOS 68 单测 + 2 UI 测试 | Android `b063581`；iOS `6561f25` |
