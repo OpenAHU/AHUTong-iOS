@@ -84,7 +84,6 @@ struct SettingsView: View {
         } message: {
             Text("当前为迁移测试版本，请通过 GitHub Actions 获取最新构建。")
         }
-        .accessibilityIdentifier("screen.settings")
     }
 
     private var appCard: some View {

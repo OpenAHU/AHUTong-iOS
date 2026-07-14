@@ -25,7 +25,6 @@ struct ToolsView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .accessibilityIdentifier("screen.tools")
     }
 
     @ViewBuilder

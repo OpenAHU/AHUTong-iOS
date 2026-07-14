@@ -167,7 +167,6 @@ private struct AndroidAgreementDialog: View {
             AndroidParityPalette.surface(colorScheme),
             in: RoundedRectangle(cornerRadius: 32, style: .continuous)
         )
-        .accessibilityIdentifier("agreement.dialog.\(document.id)")
     }
 }
 

@@ -23,7 +23,6 @@ struct WeatherView: View {
                 .presentationDragIndicator(.visible)
         }
         .task { await model.start() }
-        .accessibilityIdentifier("screen.weather")
     }
 
     @ViewBuilder

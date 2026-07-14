@@ -25,7 +25,6 @@ struct HomeView: View {
             .scrollIndicators(.hidden)
         }
         .task { await weatherModel.start() }
-        .accessibilityIdentifier("screen.home")
     }
 
     private var atAGlance: some View {
@@ -40,6 +39,7 @@ struct HomeView: View {
                 Text("今日课程")
                     .font(.body)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("screen.home")
                 Text("已全部上完")
                     .font(.system(size: 40, weight: .bold))
                     .lineLimit(2)

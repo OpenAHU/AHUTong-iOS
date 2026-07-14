@@ -44,7 +44,9 @@ struct SchoolCalendarView: View {
             case .idle, .loading:
                 VStack(spacing: 16) {
                     ProgressView().tint(.white)
-                    Text("正在获取校历...").foregroundStyle(.white)
+                    Text("正在获取校历...")
+                        .foregroundStyle(.white)
+                        .accessibilityIdentifier("school-calendar.loading")
                 }
             case let .loaded(snapshot):
                 SchoolCalendarZoomView(fileURL: snapshot.fileURL)
@@ -72,10 +74,15 @@ struct SchoolCalendarView: View {
                         .allowsHitTesting(false)
                     }
             case .empty:
-                Text("暂无校历").foregroundStyle(.white)
+                Text("暂无校历")
+                    .foregroundStyle(.white)
+                    .accessibilityIdentifier("school-calendar.empty")
             case let .failed(error):
                 VStack(spacing: 16) {
-                    Text(error.title).font(.headline).foregroundStyle(.white)
+                    Text(error.title)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .accessibilityIdentifier("school-calendar.error")
                     Text(error.message).foregroundStyle(.white.opacity(0.8)).multilineTextAlignment(.center)
                     Button("重试") {
                         Task { await model.load(policy: .refresh) }
@@ -87,7 +94,6 @@ struct SchoolCalendarView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await model.load() }
-        .accessibilityIdentifier("screen.school-calendar")
     }
 }
 
@@ -111,6 +117,7 @@ private struct SchoolCalendarZoomView: View {
                     .gesture(magnificationGesture.simultaneously(with: dragGesture))
                     .onTapGesture(count: 2, perform: resetTransform)
                     .accessibilityLabel("安徽大学校历，可双指缩放")
+                    .accessibilityIdentifier("school-calendar.image")
             } else {
                 ContentUnavailableView(
                     "校历文件不可读",

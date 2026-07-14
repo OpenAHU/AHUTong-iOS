@@ -59,7 +59,6 @@ struct PhoneBookView: View {
                 .padding(32)
             }
         }
-        .accessibilityIdentifier("screen.phone-book")
     }
 
     @ViewBuilder

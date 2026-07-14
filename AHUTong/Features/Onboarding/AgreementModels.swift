@@ -12,9 +12,9 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
         case .disclaimer:
             "温馨提示与免责声明"
         case .privacy:
-            "隐私说明"
+            "隐私政策"
         case .community:
-            "社区与商业合作"
+            "商业合作"
         }
     }
 

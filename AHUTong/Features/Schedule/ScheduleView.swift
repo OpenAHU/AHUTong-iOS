@@ -21,7 +21,6 @@ struct ScheduleView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .accessibilityIdentifier("screen.schedule")
     }
 
     private var controls: some View {

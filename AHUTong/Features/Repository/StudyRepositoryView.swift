@@ -131,7 +131,6 @@ struct StudyRepositoryView: View {
         } message: {
             Text(model.alertMessage ?? "")
         }
-        .accessibilityIdentifier("screen.study-repository")
     }
 
     private var repositoryHeader: some View {
@@ -148,6 +147,7 @@ struct StudyRepositoryView: View {
             Text(headerTitle)
                 .font(.title2)
                 .fontWeight(.semibold)
+                .accessibilityIdentifier("screen.study-repository")
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
