@@ -21,7 +21,7 @@ final class WeatherViewModel: ObservableObject {
         self.locationProvider = locationProvider
     }
 
-    func start() async {
+    func start(autoLocate: Bool = false) async {
         preferences = await preferencesStore.load()
         guard case .idle = state else { return }
         if AppRuntime.isDemoSession, let response = DebugRuntimeSettings.decode("weather", as: WeatherResponse.self) {
@@ -30,7 +30,11 @@ final class WeatherViewModel: ObservableObject {
                 : .empty
             return
         }
-        await load(query: .ip)
+        if autoLocate {
+            await useCurrentLocation()
+        } else {
+            await load(query: .ip)
+        }
     }
 
     func search(city: String) async {

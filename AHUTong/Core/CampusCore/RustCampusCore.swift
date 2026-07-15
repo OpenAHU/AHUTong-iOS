@@ -183,8 +183,18 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         do {
             return try await request(path: path, method: method, body: body)
         } catch CampusCoreError.unauthorized {
-            try await refreshSession()
-            return try await request(path: path, method: method, body: body)
+            do {
+                try await refreshSession()
+                return try await request(path: path, method: method, body: body)
+            } catch {
+                if let coreError = error as? CampusCoreError,
+                   coreError == .credentialsUnavailable || coreError == .unauthorized {
+                    await MainActor.run {
+                        NotificationCenter.default.post(name: .campusSessionExpired, object: nil)
+                    }
+                }
+                throw error
+            }
         }
     }
 

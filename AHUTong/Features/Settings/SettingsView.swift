@@ -179,7 +179,7 @@ private struct AndroidAppMark: View {
     var body: some View {
         VStack(spacing: 2) {
             Text("安大通")
-                .font(.system(size: 12, weight: .bold))
+                .androidScaledFont(size: 12, relativeTo: .caption, weight: .bold)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 6).padding(.vertical, 3)
                 .background(Color(red: 240 / 255, green: 112 / 255, blue: 62 / 255), in: RoundedRectangle(cornerRadius: 3))

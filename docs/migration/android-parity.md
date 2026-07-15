@@ -251,11 +251,11 @@ iOS/
 
 | 覆盖切片 | 状态 | 本轮补齐内容 | 预定自动验证 |
 | --- | --- | --- | --- |
-| APP-01、PREF-01、OPS-01 | 待验证 | UIKit 原生导航栏、原生左边缘返回、iOS 26 内容区域返回；可见 Debug 的 Mock 场景/时间/端点 JSON、灰度、缓存/会话、普通通知和 Live Activity 测试；真实检查更新、QQ 反馈、完整许可证与可生效主题 | 原生导航 UI 手势、Debug 路由、更新语义、图标与主题单测、全路径 UI |
-| AUTH-02、CONTENT-01 | 待验证 | Cookie 父域/Path/Secure/HttpOnly、响应 Cookie 持久化、401/403/登录重定向自动续期；网络/5xx 不误退出且保留离线缓存 | Cookie 匹配/响应/重试契约、离线恢复与会话测试 |
+| APP-01、PREF-01、OPS-01 | 待验证 | UIKit 原生导航栏、原生左边缘返回、iOS 26 内容区域返回；可见 Debug 的 Mock 场景/时间/端点 JSON、灰度、缓存/会话、普通通知和 Live Activity 测试；真实检查更新、QQ 反馈、完整许可证与可生效主题；小字号在默认尺寸保持 Android 几何并随 Dynamic Type 缩放 | 原生导航 UI 手势、Debug 路由、更新语义、图标与主题单测、全路径 UI |
+| AUTH-02、CONTENT-01 | 待验证 | Cookie 父域/Path/Secure/HttpOnly、响应 Cookie 持久化、401/403/登录重定向自动续期；网络/5xx 不误退出且保留离线缓存；续期凭据被拒时清理失效材料并由根导航回到登录页 | Cookie 匹配/响应/重试契约、离线恢复、续期拒绝与会话测试 |
 | SCH-01、SCH-02、HOME-01 | 待验证 | 当前学期按真实日期推导、真实下学期 SDK 接口、重叠课程分栏；首页课程入口、拖放编辑、灰度门、账号隔离布局和已放工具过滤 | Semester、布局、课表 Repository/UI 回归；Rust server feature 编译 |
 | ACA-01、ACA-02、ACA-03 | 待验证 | 多学籍切换、真实学期排名、账号隔离成绩/考试缓存；空闲教室默认全楼栋与日期约束 | Rust 多学籍/排名解析、Swift 成绩/考试/空教室单测与全状态 UI |
-| CARD-01、INFO-03、CONTENT-03 | 待验证 | 二维码显示时亮度提升并恢复；首页天气开关；学习资料流式临时文件落盘与系统分享 | Simulator 构建、现有服务契约/缓存测试、Release device 构建 |
+| CARD-01、INFO-01、INFO-03、CONTENT-03 | 待验证 | 校园卡缓存键改为不可逆账号摘要，二维码显示时亮度提升并恢复；天气页首次进入先请求定位、拒绝后降级 IP，首页显示开关生效；校历用 PhotoKit 真正保存照片；学习资料流式临时文件落盘与系统分享 | 账号摘要、定位优先/拒绝降级、PhotoKit adapter、现有服务契约/缓存测试、Release device 构建 |
 | SYS-01、SYS-02 | 待验证 | Widget 随跨周时间线推进课程与周次；未来三周通知重排；前台/时区变化维护；ActivityKit 锁屏与灵动岛实现 | 跨周 Widget/提醒单测、Widget Extension 编译、IPA/Archive 扩展检查 |
 
 外部支付网关仍然是唯一不能由客户端代码闭环的产品阻断；生产支付目录不再回退演示数据，待 D-005 解除后再做真实扣款和对账验收。
@@ -480,3 +480,4 @@ iOS/
 | 2026-07-15 | PREF-005 | 按用户显式要求补回设置首页可见 `Debug` 行，并保留 Android 连续点击 App 卡片 8 次的兼容入口；UI 测试改走可发现入口 | CI `29366676954` 中 `settings.debug` → `operations.debug.screen` 路径及第 33 屏截图通过，并已目视复核 | `edfd219` |
 | 2026-07-15 | UI-005 | 修复小工具“失物招领”和设置“意见反馈”的无效 SF Symbols：前者按 Android 原图分层组合包与问号，后者使用有效的感叹号气泡；新增共享符号清单、系统可用性单测与反馈入口 UI 断言 | CI `29369377322`：118 单测 + 4 UI 全绿，54 张 PNG 无失败附件；`06-tools` 目视通过；IPA `29369377575`、Archive `29369377896` 成功，证据见 `E-20260715-03` | `53cb7fd` |
 | 2026-07-15 | AUDIT-001 | 对固定 Android 基线重新执行功能/路由/数据/平台完整复查并实现候选修复：原生导航和双返回手势、完整 Debug、自动续期与离线会话、真实下学期、多学籍排名、账号隔离缓存、首页拖放、跨周 Widget/提醒、Live Activity、主题/反馈/更新/许可证、流式下载分享和 AppIcon | Windows `git diff --check` 通过；SDK `cargo test` 7/7、`cargo check --features server` 通过；首轮 `29387602851/822/819` 修复 Widget opaque return，第二轮 `29387867202/188/195` 继续定位并修复两个 Mock 分支显式返回；等待复跑 | SDK `1177864`；iOS `565671e`、`a0d4855`、待回填 |
+| 2026-07-15 | AUDIT-002 | 继续收口低优先级复查项：天气页首入定位、PhotoKit 校历保存、Dynamic Type 缩放、不可逆校园卡缓存键、统一脱敏日志实际接入，以及续期凭据拒绝后的全局登录回退 | 新增定位优先、照片保存 adapter、缓存键和续期拒绝测试；macOS CI/IPA/Archive 待候选提交 | iOS 待回填 |

@@ -1,4 +1,5 @@
 import CoreImage.CIFilterBuiltins
+import CryptoKit
 import SwiftUI
 import UIKit
 
@@ -28,7 +29,14 @@ final class CampusCardViewModel: ObservableObject {
     init(api: any CampusCoreAPI, userID: String, defaults: UserDefaults = .standard) {
         self.api = api
         self.defaults = defaults
-        cacheKey = "campus-card.balance.\(userID)"
+        cacheKey = Self.cacheKey(for: userID)
+    }
+
+    static func cacheKey(for userID: String) -> String {
+        let digest = SHA256.hash(data: Data("campus-card:\(userID)".utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "campus-card.balance.\(digest)"
     }
 
     var balance: Double? {

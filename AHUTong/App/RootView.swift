@@ -75,6 +75,9 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
             Task { await reloadGrayGate() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .campusSessionExpired)) { _ in
+            Task { await appModel.signOut() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
             Task { await rescheduleCourseRemindersIfNeeded() }
         }

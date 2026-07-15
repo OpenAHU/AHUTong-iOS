@@ -282,7 +282,7 @@ struct ScheduleView: View {
                 HStack(spacing: spacing) {
                     VStack(spacing: 1) {
                         Text("\(index + 1)").font(.caption.bold())
-                        Text(time).font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text(time).androidScaledFont(size: 9, relativeTo: .caption2).foregroundStyle(.secondary)
                     }
                     .frame(width: timeWidth, height: 48)
                     ForEach(0..<7, id: \.self) { _ in Color.clear.frame(width: dayWidth, height: 48) }
@@ -305,10 +305,10 @@ struct ScheduleView: View {
         let resolvedWidth = (dayWidth - CGFloat(resolvedCount - 1) * 1) / CGFloat(resolvedCount)
         return Button { selectedCourse = course } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text(course.name).font(.system(size: 11, weight: .bold)).lineLimit(3)
+                Text(course.name).androidScaledFont(size: 11, relativeTo: .caption2, weight: .bold).lineLimit(3)
                 Spacer(minLength: 0)
                 Text(active ? shortLocation(course.location) : "非本周")
-                    .font(.system(size: 10, weight: .bold))
+                    .androidScaledFont(size: 10, relativeTo: .caption2, weight: .bold)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity)
                     .padding(2)

@@ -1,5 +1,29 @@
 import SwiftUI
 
+private struct AndroidScaledFontModifier: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    let weight: Font.Weight
+
+    init(size: CGFloat, relativeTo textStyle: Font.TextStyle, weight: Font.Weight) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: textStyle)
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
+    }
+}
+
+extension View {
+    func androidScaledFont(
+        size: CGFloat,
+        relativeTo textStyle: Font.TextStyle = .body,
+        weight: Font.Weight = .regular
+    ) -> some View {
+        modifier(AndroidScaledFontModifier(size: size, relativeTo: textStyle, weight: weight))
+    }
+}
+
 enum AndroidParityPalette {
     private static var selectedTheme: Color {
         AndroidThemeColor.color(for: UserDefaults.standard.string(forKey: "theme.color") ?? "default")

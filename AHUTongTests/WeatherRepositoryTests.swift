@@ -122,6 +122,22 @@ final class WeatherRepositoryTests: XCTestCase {
         XCTAssertFalse(model.preferences.showAirQuality)
     }
 
+    @MainActor
+    func testFirstWeatherScreenEntryRequestsLocationBeforeIPFallback() async {
+        let remote = WeatherRemoteStub(response: Self.fixture)
+        let model = WeatherViewModel(
+            repository: WeatherRepository(remote: remote, cache: InMemoryDataStore()),
+            preferencesStore: WeatherPreferencesStore(store: InMemoryDataStore()),
+            locationProvider: WeatherLocationStub(city: "芜湖市")
+        )
+
+        await model.start(autoLocate: true)
+        let queries = await remote.queries
+
+        XCTAssertEqual(queries, [.city("芜湖市")])
+        XCTAssertTrue(model.notice?.contains("当前位置") == true)
+    }
+
     private static let fixtureData = Data(
         #"""
         {
@@ -184,7 +200,8 @@ private actor WeatherRemoteStub: WeatherRemoteDataSource {
 
 @MainActor
 private final class WeatherLocationStub: WeatherLocationProviding {
-    let error: WeatherError
-    init(error: WeatherError) { self.error = error }
-    func requestCity() async throws -> String { throw error }
+    private let result: Result<String, WeatherError>
+    init(error: WeatherError) { result = .failure(error) }
+    init(city: String) { result = .success(city) }
+    func requestCity() async throws -> String { try result.get() }
 }

@@ -1,14 +1,47 @@
+import Photos
 import SwiftUI
 import UIKit
+
+enum SchoolCalendarPhotoError: LocalizedError, Equatable {
+    case permissionDenied
+
+    var errorDescription: String? {
+        switch self {
+        case .permissionDenied: "没有照片添加权限，请在系统设置中允许后重试。"
+        }
+    }
+}
+
+protocol SchoolCalendarPhotoSaving: Sendable {
+    func saveImage(at fileURL: URL) async throws
+}
+
+struct PhotoKitSchoolCalendarSaver: SchoolCalendarPhotoSaving {
+    func saveImage(at fileURL: URL) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw SchoolCalendarPhotoError.permissionDenied
+        }
+        try await PHPhotoLibrary.shared().performChanges {
+            PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
+        }
+    }
+}
 
 @MainActor
 final class SchoolCalendarViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<SchoolCalendarSnapshot> = .idle
+    @Published var saveMessage: String?
 
     private let repository: SchoolCalendarRepository
+    private let photoSaver: any SchoolCalendarPhotoSaving
 
-    init(repository: SchoolCalendarRepository = .live()) {
+    init(
+        repository: SchoolCalendarRepository = .live(),
+        photoSaver: any SchoolCalendarPhotoSaving = PhotoKitSchoolCalendarSaver()
+    ) {
         self.repository = repository
+        self.photoSaver = photoSaver
     }
 
     func load(policy: SchoolCalendarLoadPolicy = .cacheFirst) async {
@@ -23,6 +56,15 @@ final class SchoolCalendarViewModel: ObservableObject {
                     message: "请检查网络后重试；已下载的校历仍可离线使用。"
                 )
             )
+        }
+    }
+
+    func savePhoto(at fileURL: URL) async {
+        do {
+            try await photoSaver.saveImage(at: fileURL)
+            saveMessage = "校历已保存到系统照片"
+        } catch {
+            saveMessage = error.localizedDescription
         }
     }
 }
@@ -48,7 +90,7 @@ struct SchoolCalendarView: View {
                     .accessibilityIdentifier("school-calendar.demo")
 
                 HStack(spacing: 24) {
-                    Button("保存") { }
+                    Button("保存") { model.saveMessage = "演示模式不会写入系统照片" }
                     Button("退出") { dismiss() }
                 }
                 .buttonStyle(.plain)
@@ -67,10 +109,11 @@ struct SchoolCalendarView: View {
                 SchoolCalendarZoomView(fileURL: snapshot.fileURL)
 
                 HStack(spacing: 12) {
-                    ShareLink(item: snapshot.fileURL) {
-                        Text("保存").foregroundStyle(.white)
+                    Button("保存") {
+                        Task { await model.savePhoto(at: snapshot.fileURL) }
                     }
                     .buttonStyle(.plain)
+                    .foregroundStyle(.white)
                     Button("退出") { dismiss() }
                         .buttonStyle(.plain)
                         .foregroundStyle(.white)
@@ -110,6 +153,14 @@ struct SchoolCalendarView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { if !demo { await model.load() } }
+        .alert("校历", isPresented: Binding(
+            get: { model.saveMessage != nil },
+            set: { if !$0 { model.saveMessage = nil } }
+        )) {
+            Button("知道了", role: .cancel) { model.saveMessage = nil }
+        } message: {
+            Text(model.saveMessage ?? "")
+        }
     }
 
     private var demo: Bool { AppRuntime.isDemoSession }

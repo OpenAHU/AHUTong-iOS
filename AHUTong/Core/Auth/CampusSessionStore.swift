@@ -84,6 +84,14 @@ final class AppModel: ObservableObject {
                     let cookies = try await campusAPI.dumpCookies()
                     try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
                     sessionState = .authenticated(user)
+                } catch CampusCoreError.unauthorized {
+                    try? await credentialStore.removeCredentials(for: snapshot.user.studentID)
+                    try? await sessionStore.clear()
+                    sessionState = .signedOut
+                } catch CampusCoreError.credentialsUnavailable {
+                    try? await credentialStore.removeCredentials(for: snapshot.user.studentID)
+                    try? await sessionStore.clear()
+                    sessionState = .signedOut
                 } catch {
                     // A campus outage must not make local, user-scoped caches
                     // inaccessible. Keep the last authenticated identity and

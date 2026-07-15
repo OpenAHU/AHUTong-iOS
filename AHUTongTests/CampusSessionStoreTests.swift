@@ -118,16 +118,46 @@ final class CampusSessionStoreTests: XCTestCase {
         let persisted = try await sessionStore.load()
         XCTAssertEqual(persisted, snapshot)
     }
+
+    @MainActor
+    func testRestoreSignsOutWhenCredentialReauthenticationIsRejected() async throws {
+        let secureStore = InMemorySecureStore()
+        let api = CampusCoreAPIStub()
+        let sessionStore = CampusSessionStore(secureStore: secureStore)
+        let credentials = CredentialStore(secureStore: secureStore)
+        let snapshot = CampusSessionSnapshot(
+            user: User(name: "旧会话", studentID: "AB220001"),
+            cookiesJSON: "expired-cookie"
+        )
+        try await sessionStore.save(snapshot)
+        try await credentials.save(LoginCredentials(studentID: "AB220001", password: "expired"))
+        await api.expireNextValidation()
+        await api.rejectNextLogin()
+        let model = AppModel(campusAPI: api, sessionStore: sessionStore, credentialStore: credentials)
+
+        await model.restore()
+        let persistedSession = try await sessionStore.load()
+        let persistedCredentials = try await credentials.credentials(for: "AB220001")
+
+        XCTAssertEqual(model.sessionState, .signedOut)
+        XCTAssertNil(persistedSession)
+        XCTAssertNil(persistedCredentials)
+    }
 }
 
 private actor CampusCoreAPIStub: CampusCoreAPI {
     private var cookies = ""
     private var shouldExpireNextValidation = false
     private var shouldFailNextValidationOffline = false
+    private var shouldRejectNextLogin = false
     private var performedLogins = 0
     func initialize(cookiesJSON: String) { cookies = cookiesJSON }
-    func login(studentID: String, password: String) -> User {
+    func login(studentID: String, password: String) throws -> User {
         performedLogins += 1
+        if shouldRejectNextLogin {
+            shouldRejectNextLogin = false
+            throw CampusCoreError.unauthorized
+        }
         return User(name: "测试同学", studentID: studentID)
     }
     func dumpCookies() -> String { "cookie-json" }
@@ -151,5 +181,6 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     func lastInitializedCookies() -> String { cookies }
     func expireNextValidation() { shouldExpireNextValidation = true }
     func failNextValidationWithTransportError() { shouldFailNextValidationOffline = true }
+    func rejectNextLogin() { shouldRejectNextLogin = true }
     func loginCount() -> Int { performedLogins }
 }

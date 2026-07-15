@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    static let campusSessionExpired = Notification.Name("AHUTong.campusSessionExpired")
+}
+
 enum CampusWebError: LocalizedError, Equatable, Sendable {
     case unauthorized
     case invalidResponse
@@ -40,6 +44,7 @@ struct CampusCookie: Codable, Equatable, Sendable {
 actor CampusAuthenticatedClient {
     private let campusAPI: any CampusCoreAPI
     private let session: URLSession
+    private let logger = RedactingLogger(category: "campus-web")
 
     init(campusAPI: any CampusCoreAPI, session: URLSession = .shared) {
         self.campusAPI = campusAPI
@@ -89,7 +94,16 @@ actor CampusAuthenticatedClient {
         let finalPath = response.url?.path.lowercased() ?? ""
         if response.statusCode == 401 || response.statusCode == 403 || finalPath.contains("tologin") || finalPath.contains("/cas/login") {
             if mayRefreshSession {
-                try await campusAPI.refreshSession()
+                logger.notice("Campus web session expired; refreshing path=\(url.path)")
+                do {
+                    try await campusAPI.refreshSession()
+                } catch {
+                    if let coreError = error as? CampusCoreError,
+                       coreError == .credentialsUnavailable || coreError == .unauthorized {
+                        await notifySessionExpired()
+                    }
+                    throw error
+                }
                 return try await self.data(
                     url: url,
                     method: method,
@@ -98,9 +112,11 @@ actor CampusAuthenticatedClient {
                     mayRefreshSession: false
                 )
             }
+            await notifySessionExpired()
             throw CampusWebError.unauthorized
         }
         guard (200..<300).contains(response.statusCode) else {
+            logger.notice("Campus web request failed status=\(response.statusCode) path=\(url.path)")
             throw CampusWebError.server("校园服务请求失败（\(response.statusCode)）")
         }
         return data
@@ -138,6 +154,12 @@ actor CampusAuthenticatedClient {
         let json = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
         try await campusAPI.initialize(cookiesJSON: json)
         try await campusAPI.persistSessionCookies()
+    }
+
+    private func notifySessionExpired() async {
+        await MainActor.run {
+            NotificationCenter.default.post(name: .campusSessionExpired, object: nil)
+        }
     }
 }
 

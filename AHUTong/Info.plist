@@ -45,6 +45,8 @@
     </dict>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>用于按当前位置查询本地天气；拒绝后仍可使用 IP 定位或城市搜索。</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>用于将安徽大学校历图片保存到系统照片。</string>
     <key>NSSupportsLiveActivities</key>
     <true/>
     <key>UIApplicationSupportsIndirectInputEvents</key>

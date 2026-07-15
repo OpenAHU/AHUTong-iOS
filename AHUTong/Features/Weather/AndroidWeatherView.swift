@@ -22,7 +22,7 @@ struct WeatherView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .task { await model.start() }
+        .task { await model.start(autoLocate: true) }
     }
 
     @ViewBuilder
@@ -221,7 +221,7 @@ private struct AndroidForecastCard: View {
                 Text(androidTemperature(day.tempMax)).font(.system(size: 18, weight: .bold))
                 Text(androidTemperature(day.tempMin)).font(.system(size: 14)).foregroundStyle(.secondary)
                 Spacer().frame(height: 4)
-                Text(day.weatherDay ?? "").font(.system(size: 12)).lineLimit(1)
+                Text(day.weatherDay ?? "").androidScaledFont(size: 12, relativeTo: .caption).lineLimit(1)
             }
             .frame(width: 76)
             .padding(12)
@@ -297,11 +297,11 @@ private struct AndroidHourlyCard: View {
     var body: some View {
         AndroidCard {
             VStack(spacing: 2) {
-                Text(androidHourLabel(hour.time)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Text(androidHourLabel(hour.time)).androidScaledFont(size: 11, relativeTo: .caption2).foregroundStyle(.secondary).lineLimit(1)
                 Spacer().frame(height: 4)
                 Text(androidTemperature(hour.temperature)).font(.system(size: 15, weight: .bold))
                 Spacer().frame(height: 2)
-                Text(hour.weather ?? "").font(.system(size: 11)).lineLimit(1)
+                Text(hour.weather ?? "").androidScaledFont(size: 11, relativeTo: .caption2).lineLimit(1)
             }
             .frame(width: 72)
             .padding(8)
