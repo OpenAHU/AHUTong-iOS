@@ -33,7 +33,7 @@ final class AppShellUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 3), "四入口必须由系统 Tab Bar 承载")
-        XCTAssertTrue(app.buttons["tab.home"].waitForExistence(timeout: 3))
+        XCTAssertTrue(tabButton("home", app: app).waitForExistence(timeout: 3))
         waitForRendering()
         capture("04-home", app: app)
         let campusCardBalance = app.buttons["campus-card.balance"]
@@ -50,7 +50,7 @@ final class AppShellUITests: XCTestCase {
             ("home", "08-home-return")
         ]
         for (tabID, screenshotName) in tabs {
-            let tab = app.buttons["tab.\(tabID)"]
+            let tab = tabButton(tabID, app: app)
             XCTAssertTrue(tab.waitForExistence(timeout: 2))
             tab.tap()
             switch tabID {
@@ -65,7 +65,7 @@ final class AppShellUITests: XCTestCase {
             capture(screenshotName, app: app)
         }
 
-        app.buttons["tab.schedule"].tap()
+        tabButton("schedule", app: app).tap()
         let demoCourse = app.buttons["schedule.course.demo-3"]
         XCTAssertTrue(demoCourse.waitForExistence(timeout: 4))
         demoCourse.tap()
@@ -77,7 +77,7 @@ final class AppShellUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
 
-        app.buttons["tab.tools"].tap()
+        tabButton("tools", app: app).tap()
         let routes = [
             ("tools.phone-book", "搜索电话或部门", "09-phone-book"),
             ("tools.school-calendar", "school-calendar.", "10-school-calendar"),
@@ -117,7 +117,7 @@ final class AppShellUITests: XCTestCase {
             restartAtTools(app)
         }
 
-        app.buttons["tab.settings"].tap()
+        tabButton("settings", app: app).tap()
         let contributors = app.buttons["settings.contributors"]
         XCTAssertTrue(contributors.waitForExistence(timeout: 4))
         contributors.tap()
@@ -131,7 +131,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = ["--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        app.buttons["tab.settings"].tap()
+        tabButton("settings", app: app).tap()
         app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
         waitForRendering()
@@ -174,7 +174,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = ["--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        app.buttons["tab.tools"].tap()
+        tabButton("tools", app: app).tap()
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["添加桌面课表微件"].waitForExistence(timeout: 4))
         waitForRendering()
@@ -202,7 +202,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = ["--demo-consent", "--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        app.buttons["tab.settings"].tap()
+        tabButton("settings", app: app).tap()
         app.buttons["settings.preferences"].tap()
         let reminder = app.buttons["preferences.course-reminders"]
         XCTAssertTrue(reminder.waitForExistence(timeout: 4))
@@ -225,7 +225,7 @@ final class AppShellUITests: XCTestCase {
             waitForRendering()
             capture("state-\(state)-home", app: app)
 
-            app.buttons["tab.schedule"].tap()
+            tabButton("schedule", app: app).tap()
             XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 6))
             waitForRendering()
             capture("state-\(state)-schedule", app: app)
@@ -234,7 +234,7 @@ final class AppShellUITests: XCTestCase {
             app.launchArguments = arguments
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            app.buttons["tab.tools"].tap()
+            tabButton("tools", app: app).tap()
             app.buttons["tools.grade"].tap()
             XCTAssertTrue(app.descendants(matching: .any)["grades.screen"].waitForExistence(timeout: 4))
             waitForRendering()
@@ -244,12 +244,12 @@ final class AppShellUITests: XCTestCase {
             app.launchArguments = arguments
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            app.buttons["tab.tools"].tap()
+            tabButton("tools", app: app).tap()
             let toolsExam = app.buttons["tools.exam"]
             if toolsExam.waitForExistence(timeout: 2) {
                 toolsExam.tap()
             } else {
-                app.buttons["tab.home"].tap()
+                tabButton("home", app: app).tap()
                 let homeExam = app.buttons["home.widget.exam"]
                 XCTAssertTrue(homeExam.waitForExistence(timeout: 4))
                 homeExam.tap()
@@ -262,7 +262,7 @@ final class AppShellUITests: XCTestCase {
             app.launchArguments = arguments
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            app.buttons["tab.tools"].tap()
+            tabButton("tools", app: app).tap()
             app.buttons["tools.free-classroom"].tap()
             XCTAssertTrue(app.buttons["free-classroom.search"].waitForExistence(timeout: 4))
             app.buttons["free-classroom.search"].tap()
@@ -275,7 +275,7 @@ final class AppShellUITests: XCTestCase {
             app.launchArguments = arguments
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            app.buttons["tab.tools"].tap()
+            tabButton("tools", app: app).tap()
             app.buttons["tools.lost-found"].tap()
             let lostFoundState = app.descendants(matching: .any)["lost-found.\(state)"]
             XCTAssertTrue(lostFoundState.waitForExistence(timeout: 4))
@@ -291,7 +291,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = ["--demo-consent", "--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        app.buttons["tab.tools"].tap()
+        tabButton("tools", app: app).tap()
 
         func openPhoneBook() {
             let link = app.buttons["tools.phone-book"]
@@ -300,6 +300,7 @@ final class AppShellUITests: XCTestCase {
             XCTAssertTrue(app.buttons["搜索电话或部门"].waitForExistence(timeout: 4))
             XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 3))
             XCTAssertTrue(app.navigationBars.buttons.firstMatch.exists)
+            XCTAssertFalse(app.tabBars.firstMatch.isHittable)
         }
 
         openPhoneBook()
@@ -311,6 +312,7 @@ final class AppShellUITests: XCTestCase {
             thenHoldForDuration: 0
         )
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 4))
+        XCTAssertTrue(tabButton("tools", app: app).waitForExistence(timeout: 3))
 
         openPhoneBook()
         for y in [0.68, 0.82] where !app.buttons["tools.phone-book"].exists {
@@ -323,6 +325,7 @@ final class AppShellUITests: XCTestCase {
             _ = app.buttons["tools.phone-book"].waitForExistence(timeout: 2)
         }
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 4))
+        XCTAssertTrue(tabButton("tools", app: app).waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -383,7 +386,7 @@ final class AppShellUITests: XCTestCase {
         capture("32-electricity-payment-success", app: app)
 
         launchDemo(app)
-        app.buttons["tab.settings"].tap()
+        tabButton("settings", app: app).tap()
         let debug = app.buttons["settings.debug"]
         XCTAssertTrue(debug.waitForExistence(timeout: 4))
         debug.tap()
@@ -406,7 +409,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = ["--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        let toolsTab = app.buttons["tab.tools"]
+        let toolsTab = tabButton("tools", app: app)
         XCTAssertTrue(toolsTab.waitForExistence(timeout: 3))
         toolsTab.tap()
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
@@ -418,6 +421,17 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = ["--demo-consent", "--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func tabButton(_ identifier: String, app: XCUIApplication) -> XCUIElement {
+        let titles = [
+            "home": "主页",
+            "schedule": "课表",
+            "tools": "小工具",
+            "settings": "设置"
+        ]
+        return app.tabBars.buttons[titles[identifier] ?? identifier]
     }
 
     @MainActor
