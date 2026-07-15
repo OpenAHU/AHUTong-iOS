@@ -2,6 +2,7 @@ import XCTest
 @testable import AHUTong
 
 final class CampusCardResponseParserTests: XCTestCase {
+    @MainActor
     func testBalanceCacheKeyIsStableAndDoesNotExposeStudentID() {
         let studentID = "AB220001"
         let key = CampusCardViewModel.cacheKey(for: studentID)
