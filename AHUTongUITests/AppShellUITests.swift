@@ -304,13 +304,15 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 4))
 
         openPhoneBook()
-        let content = app.coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: 0.55))
-        content.press(
-            forDuration: 0.05,
-            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.55)),
-            withVelocity: .fast,
-            thenHoldForDuration: 0
-        )
+        for y in [0.68, 0.82] where !app.buttons["tools.phone-book"].exists {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: y)).press(
+                forDuration: 0.12,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: y)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.05
+            )
+            _ = app.buttons["tools.phone-book"].waitForExistence(timeout: 2)
+        }
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 4))
     }
 

@@ -22,7 +22,7 @@ struct WeatherView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .task { await model.start(autoLocate: true) }
+        .task { await model.start(autoLocate: !AppRuntime.isDemoSession) }
     }
 
     @ViewBuilder
