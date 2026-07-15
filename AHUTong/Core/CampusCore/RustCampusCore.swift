@@ -48,22 +48,46 @@ protocol CampusCoreAPI: Sendable {
     func dumpCookies() async throws -> String
     func cookiesFlat() async throws -> String
     func schedule() async throws -> [Course]
+    func nextSchedule() async throws -> [Course]
     func currentWeek() async throws -> Int
     func exams() async throws -> [CampusExam]
     func grades() async throws -> CampusGradeReport
+    func grades(studentID: String) async throws -> CampusGradeReport
+    func gradeProfiles() async throws -> [CampusGradeStudentProfile]
+    func gradeRank(studentID: String) async throws -> CampusGradeRankInfo?
     func cardBalance() async throws -> Double
     func cardQRCode() async throws -> String
+    func refreshSession() async throws
+    func persistSessionCookies() async throws
+}
+
+extension CampusCoreAPI {
+    func nextSchedule() async throws -> [Course] { try await schedule() }
+    func grades(studentID: String) async throws -> CampusGradeReport { try await grades() }
+    func gradeProfiles() async throws -> [CampusGradeStudentProfile] { [] }
+    func gradeRank(studentID: String) async throws -> CampusGradeRankInfo? { nil }
+    func refreshSession() async throws { throw CampusCoreError.credentialsUnavailable }
+    func persistSessionCookies() async throws {}
 }
 
 actor RustCampusCoreAPI: CampusCoreAPI {
     private let server: RustLocalServer
     private let session: URLSession
+    private let sessionStore: CampusSessionStore
+    private let credentialStore: CredentialStore
     private let gradeParser = CampusGradeParser()
     private let cardParser = CampusCardResponseParser()
 
-    init(server: RustLocalServer = .shared, session: URLSession = .shared) {
+    init(
+        server: RustLocalServer = .shared,
+        session: URLSession = .shared,
+        sessionStore: CampusSessionStore = CampusSessionStore(),
+        credentialStore: CredentialStore = CredentialStore()
+    ) {
         self.server = server
         self.session = session
+        self.sessionStore = sessionStore
+        self.credentialStore = credentialStore
     }
 
     func initialize(cookiesJSON: String) async throws {
@@ -90,36 +114,90 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func schedule() async throws -> [Course] {
-        let data = try await request(path: "/schedule")
+        let data = try await authenticatedRequest(path: "/schedule")
+        return try JSONDecoder().decode([Course].self, from: data)
+    }
+
+    func nextSchedule() async throws -> [Course] {
+        let data = try await authenticatedRequest(path: "/schedule/next")
         return try JSONDecoder().decode([Course].self, from: data)
     }
 
     func currentWeek() async throws -> Int {
-        let data = try await request(path: "/schedule/current-week")
+        let data = try await authenticatedRequest(path: "/schedule/current-week")
         let object = try JSONSerialization.jsonObject(with: data)
         return Self.findWeek(in: object) ?? 1
     }
 
     func exams() async throws -> [CampusExam] {
-        let data = try await request(path: "/exam")
+        let data = try await authenticatedRequest(path: "/exam")
         return try JSONDecoder().decode([CampusExam].self, from: data)
     }
 
     func grades() async throws -> CampusGradeReport {
-        try gradeParser.parse(try await request(path: "/grade"))
+        try gradeParser.parse(try await authenticatedRequest(path: "/grade"))
+    }
+
+    func grades(studentID: String) async throws -> CampusGradeReport {
+        let encoded = studentID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? studentID
+        return try gradeParser.parse(try await authenticatedRequest(path: "/grade?student_id=\(encoded)"))
+    }
+
+    func gradeProfiles() async throws -> [CampusGradeStudentProfile] {
+        let data = try await authenticatedRequest(path: "/grade/profiles")
+        return try JSONDecoder().decode([CampusGradeStudentProfile].self, from: data)
+    }
+
+    func gradeRank(studentID: String) async throws -> CampusGradeRankInfo? {
+        let encoded = studentID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? studentID
+        let data = try await authenticatedRequest(path: "/grade/rank?student_id=\(encoded)")
+        return try JSONDecoder().decode(CampusGradeRankInfo.self, from: data)
     }
 
     func cardBalance() async throws -> Double {
-        try cardParser.balance(from: try await request(path: "/ycard/balance"))
+        try cardParser.balance(from: try await authenticatedRequest(path: "/ycard/balance"))
     }
 
     func cardQRCode() async throws -> String {
-        try cardParser.qrPayload(from: try await request(path: "/ycard/qrcode"))
+        try cardParser.qrPayload(from: try await authenticatedRequest(path: "/ycard/qrcode"))
+    }
+
+    func refreshSession() async throws {
+        guard let snapshot = try await sessionStore.load(),
+              let credentials = try await credentialStore.credentials(for: snapshot.user.studentID) else {
+            throw CampusCoreError.credentialsUnavailable
+        }
+        try await initialize(cookiesJSON: "")
+        let user = try await login(studentID: credentials.studentID, password: credentials.password)
+        let cookies = try await dumpCookies()
+        try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+    }
+
+    func persistSessionCookies() async throws {
+        guard let snapshot = try await sessionStore.load() else { return }
+        let cookies = try await dumpCookies()
+        try await sessionStore.save(CampusSessionSnapshot(user: snapshot.user, cookiesJSON: cookies))
+    }
+
+    private func authenticatedRequest(path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+        do {
+            return try await request(path: path, method: method, body: body)
+        } catch CampusCoreError.unauthorized {
+            try await refreshSession()
+            return try await request(path: path, method: method, body: body)
+        }
     }
 
     private func request(path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
         let service = try await server.start()
-        var request = URLRequest(url: service.baseURL.appendingPathComponent(path))
+        let pieces = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+        var components = URLComponents(
+            url: service.baseURL.appendingPathComponent(String(pieces[0])),
+            resolvingAgainstBaseURL: false
+        )
+        if pieces.count == 2 { components?.percentEncodedQuery = String(pieces[1]) }
+        guard let endpoint = components?.url else { throw CampusCoreError.invalidResponse }
+        var request = URLRequest(url: endpoint)
         request.httpMethod = method
         request.httpBody = body
         request.setValue(service.token, forHTTPHeaderField: "X-AHUTONG-TOKEN")
@@ -158,14 +236,23 @@ actor RustCampusCoreAPI: CampusCoreAPI {
 }
 
 struct RustScheduleRemoteDataSource: ScheduleRemoteDataSource {
-    let api: any CampusCoreAPI
+    enum Scope: Sendable {
+        case current
+        case next
+    }
 
-    init(api: any CampusCoreAPI = RustCampusCoreAPI()) {
+    let api: any CampusCoreAPI
+    let scope: Scope
+
+    init(api: any CampusCoreAPI = RustCampusCoreAPI(), scope: Scope = .current) {
         self.api = api
+        self.scope = scope
     }
 
     func fetchCourses(for semester: Semester) async throws -> [Course] {
-        _ = semester
-        return try await api.schedule()
+        switch scope {
+        case .current: try await api.schedule()
+        case .next: try await api.nextSchedule()
+        }
     }
 }

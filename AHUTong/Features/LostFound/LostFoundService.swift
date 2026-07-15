@@ -113,6 +113,9 @@ actor DemoLostFoundRemote: LostFoundRemote {
     private var items = DemoLostFoundRemote.fixtures
 
     func catalog() -> LostFoundCatalog {
+        if let catalog = DebugRuntimeSettings.decode("lost-found", as: DebugLostFoundPayload.self)?.catalog {
+            return catalog
+        }
         LostFoundCatalog(
             campuses: [LostFoundCampus(id: "1", campusName: "磬苑校区"), LostFoundCampus(id: "2", campusName: "龙河校区")],
             types: [
@@ -125,6 +128,10 @@ actor DemoLostFoundRemote: LostFoundRemote {
     }
 
     func page(state: Int, page: Int, size: Int) -> LostFoundPage {
+        if let custom = DebugRuntimeSettings.decode("lost-found", as: DebugLostFoundPayload.self)?.items {
+            let matching = custom.filter { $0.state == state }
+            return LostFoundPage(pageNum: 1, pageSize: size, total: matching.count, pages: 1, list: matching)
+        }
         let matching = items.filter { $0.state == state }
         let start = min((page - 1) * size, matching.count)
         let end = min(start + size, matching.count)
@@ -176,4 +183,9 @@ actor DemoLostFoundRemote: LostFoundRemote {
         LostFoundItem(id: "demo-lost-3", title: "磬苑食堂捡到钥匙 - 可在晚自习后联系", phone: "13900001003", linkman: "Mock 同学", createtime: "2026-07-14 07:00:00", state: 1, typeid: "4", campusid: "2", num1: "磬苑食堂二楼", campusName: "龙河校区", imgs: [], pubuser: LostFoundUser(idNumber: "U20261003", userName: "Mock 同学"), lostType: LostFoundType(typeId: "4", typeName: "生活用品")),
         LostFoundItem(id: "demo-found-1", title: "寻找黑色 U 盘 - 内有课程资料", phone: "13900001003", linkman: "Mock 同学", createtime: "2026-07-14 07:00:00", state: 2, typeid: "2", campusid: "1", num1: "龙河教学楼 204", campusName: "磬苑校区", imgs: [], pubuser: LostFoundUser(idNumber: "U20261003", userName: "Mock 同学"), lostType: LostFoundType(typeId: "2", typeName: "电子设备"))
     ]
+}
+
+private struct DebugLostFoundPayload: Codable {
+    let catalog: LostFoundCatalog?
+    let items: [LostFoundItem]?
 }

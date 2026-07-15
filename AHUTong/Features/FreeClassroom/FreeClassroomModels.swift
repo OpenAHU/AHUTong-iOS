@@ -89,11 +89,14 @@ struct CampusFreeClassroomRemote: FreeClassroomRemote {
     }
 
     func rooms(query: FreeClassroomQuery) async throws -> [FreeClassroomRoom] {
-        let buildings = query.buildingIDs.isEmpty ? [0] : query.buildingIDs
+        guard !query.buildingIDs.isEmpty else {
+            throw CampusWebError.server("请选择至少一栋教学楼")
+        }
+        let buildings = query.buildingIDs
         var collected: [FreeClassroomRoom] = []
         for buildingID in buildings {
             let request = FreeRoomRequest(
-                buildingId: buildingID == 0 ? "" : String(buildingID),
+                buildingId: String(buildingID),
                 campusId: String(query.campusID),
                 dateTimeSegmentCmd: .init(
                     endDateTime: Self.date(query.endDate),
@@ -127,6 +130,9 @@ struct CampusFreeClassroomRemote: FreeClassroomRemote {
 
 struct DemoFreeClassroomRemote: FreeClassroomRemote {
     func buildings(campusID: Int) -> [ClassroomBuilding] {
+        if let custom = DebugRuntimeSettings.decode("free-classroom", as: DebugFreeClassroomPayload.self)?.buildings {
+            return custom.filter { $0.enabled }
+        }
         campusID == 2
             ? [ClassroomBuilding(code: "LH-JX", enabled: true, id: 201, nameZh: "龙河教学主楼")]
             : [
@@ -138,6 +144,9 @@ struct DemoFreeClassroomRemote: FreeClassroomRemote {
     }
 
     func rooms(query: FreeClassroomQuery) -> [FreeClassroomRoom] {
+        if let custom = DebugRuntimeSettings.decode("free-classroom", as: DebugFreeClassroomPayload.self)?.rooms {
+            return query.buildingIDs.isEmpty ? custom : custom.filter { query.buildingIDs.contains($0.building.id) }
+        }
         let buildings: [(Int, String, String)] = [
             (101, "博学南楼", "BXN"),
             (104, "实验中心", "SYZX"),
@@ -160,4 +169,9 @@ struct DemoFreeClassroomRemote: FreeClassroomRemote {
         }
         return query.buildingIDs.isEmpty ? candidates : candidates.filter { query.buildingIDs.contains($0.building.id) }
     }
+}
+
+private struct DebugFreeClassroomPayload: Codable {
+    let buildings: [ClassroomBuilding]?
+    let rooms: [FreeClassroomRoom]?
 }

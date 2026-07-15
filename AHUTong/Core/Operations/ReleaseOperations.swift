@@ -1,4 +1,5 @@
 import CryptoKit
+import Combine
 import Foundation
 import OSLog
 
@@ -26,6 +27,36 @@ enum GrayFeatures {
     )
 
     static let all = [homeEdit]
+}
+
+extension Notification.Name {
+    static let grayFeatureOverrideChanged = Notification.Name("AHUTong.grayFeatureOverrideChanged")
+}
+
+@MainActor
+final class GrayFeatureGateModel: ObservableObject {
+    @Published private(set) var homeEditEnabled = false
+    private let service = GrayReleaseService()
+
+    func load(userID: String?, demo: Bool = false) async {
+        let feature = GrayFeatures.homeEdit
+        let stored = UserDefaults.standard.string(forKey: "debug.gray.\(feature.key)")
+        let overrideMode = stored.flatMap(GrayOverride.init(rawValue:)) ?? .follow
+        let diagnostics = ReleaseDiagnostics.current()
+        let state: GrayFeatureState
+        if demo {
+            state = await service.localState(feature: feature, userID: userID, overrideMode: overrideMode)
+        } else {
+            state = await service.state(
+                feature: feature,
+                userID: userID,
+                versionCode: Int(diagnostics.build) ?? 0,
+                versionName: diagnostics.version,
+                overrideMode: overrideMode
+            )
+        }
+        homeEditEnabled = state.enabled
+    }
 }
 
 enum GrayOverride: String, CaseIterable, Sendable {

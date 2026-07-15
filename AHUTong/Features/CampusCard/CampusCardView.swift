@@ -89,6 +89,7 @@ struct CampusCardPanel: View {
     @StateObject private var model: CampusCardViewModel
     @State private var showsQRCode = false
     @State private var showsFullQRCode = false
+    @State private var previousBrightness: CGFloat?
     private let demo: Bool
     private let onRecharge: () -> Void
 
@@ -114,6 +115,14 @@ struct CampusCardPanel: View {
                     .background(.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             }
             .onTapGesture { showsFullQRCode = false }
+            .onAppear {
+                previousBrightness = UIScreen.main.brightness
+                UIScreen.main.brightness = 1
+            }
+            .onDisappear {
+                if let previousBrightness { UIScreen.main.brightness = previousBrightness }
+                previousBrightness = nil
+            }
         }
     }
 

@@ -491,6 +491,9 @@ private struct DownloadedFileRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if !isManaging {
                 Button(action: open) { Image(systemName: "doc.text.magnifyingglass") }.buttonStyle(.plain)
+                ShareLink(item: file.localURL) { Image(systemName: "square.and.arrow.up") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("用其他 App 打开或分享")
                 Button(action: delete) { Image(systemName: "trash").foregroundStyle(AndroidParityPalette.error) }.buttonStyle(.plain)
             }
         }

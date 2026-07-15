@@ -38,8 +38,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: AHUTong/Info.plist
-        # Keep device builds installable until the real iOS app icon set is migrated.
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SWIFT_OBJC_BRIDGING_HEADER: AHUTong/Support/AHUTong-Bridging-Header.h
         CODE_SIGN_ENTITLEMENTS: AHUTong/AHUTong.entitlements
@@ -66,6 +65,7 @@ targets:
       - path: AHUTongWidget
       - path: AHUTong/Core/Widget
       - path: AHUTong/Core/Models/Course.swift
+      - path: AHUTong/Core/LiveActivity/CourseActivityAttributes.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.openahu.ahutong.widget

@@ -37,8 +37,52 @@ enum DemoDataState: String {
         let value = ProcessInfo.processInfo.arguments
             .first(where: { $0.hasPrefix(prefix) })
             .map { String($0.dropFirst(prefix.count)) }
-        return value.flatMap(Self.init(rawValue:)) ?? .normal
+        if let value, let state = Self(rawValue: value) { return state }
+        return Self(rawValue: UserDefaults.standard.string(forKey: DebugRuntimeSettings.scenarioKey) ?? "") ?? .normal
     }
 
-    static let referenceDate = Date(timeIntervalSince1970: 1_784_023_200) // 2026-07-14 10:00:00 UTC
+    static var referenceDate: Date {
+        let stored = UserDefaults.standard.double(forKey: DebugRuntimeSettings.timeKey)
+        return stored > 0 ? Date(timeIntervalSince1970: stored) : Date(timeIntervalSince1970: 1_784_023_200)
+    }
+}
+
+enum AppRuntime {
+    static var isDemoSession: Bool {
+        ProcessInfo.processInfo.arguments.contains("--demo-session")
+            || UserDefaults.standard.bool(forKey: DebugRuntimeSettings.mockEnabledKey)
+    }
+}
+
+enum DebugRuntimeSettings {
+    static let mockEnabledKey = "debug.mock.enabled"
+    static let scenarioKey = "debug.mock.scenario"
+    static let timeKey = "debug.mock.time"
+    static let endpointKeyPrefix = "debug.mock.endpoint."
+
+    static let endpoints = ["schedule", "grade", "exam", "free-classroom", "lost-found", "weather"]
+
+    static func endpointJSON(_ endpoint: String) -> String {
+        UserDefaults.standard.string(forKey: endpointKeyPrefix + endpoint) ?? "{}"
+    }
+
+    static func setEndpointJSON(_ value: String, endpoint: String) throws {
+        let data = Data(value.utf8)
+        _ = try JSONSerialization.jsonObject(with: data)
+        UserDefaults.standard.set(value, forKey: endpointKeyPrefix + endpoint)
+    }
+
+    static func decode<Value: Decodable>(_ endpoint: String, as type: Value.Type = Value.self) -> Value? {
+        let value = endpointJSON(endpoint).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value != "{}" else { return nil }
+        return try? JSONDecoder().decode(Value.self, from: Data(value.utf8))
+    }
+
+    static func reset() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: mockEnabledKey)
+        defaults.removeObject(forKey: scenarioKey)
+        defaults.removeObject(forKey: timeKey)
+        endpoints.forEach { defaults.removeObject(forKey: endpointKeyPrefix + $0) }
+    }
 }

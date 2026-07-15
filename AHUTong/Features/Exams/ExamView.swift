@@ -38,25 +38,37 @@ enum CampusExamDisplayStatus: Equatable {
 final class ExamViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<[CampusExam]> = .idle
     private let api: any CampusCoreAPI
+    private let cache: JSONStore<[CampusExam]>
 
-    init(api: any CampusCoreAPI) { self.api = api }
+    init(api: any CampusCoreAPI, userID: String) {
+        self.api = api
+        cache = JSONStore(
+            store: UserScopedStore(store: AppPersistence.migratingFileCache(), userID: userID),
+            key: "exams.v1"
+        )
+    }
 
     func load(demo: Bool = false) async {
         state = .loading
         if demo {
             switch DemoDataState.current {
-            case .normal: state = .loaded(Self.demoExams)
+            case .normal:
+                let exams = DebugRuntimeSettings.decode("exam", as: [CampusExam].self) ?? Self.demoExams
+                state = exams.isEmpty ? .empty : .loaded(exams)
             case .loading: return
             case .empty: state = .empty
             case .error: state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
             }
             return
         }
+        let cached = try? await cache.load()
+        if let cached { state = cached.isEmpty ? .empty : .loaded(cached) }
         do {
             let exams = try await api.exams()
+            try await cache.save(exams)
             state = exams.isEmpty ? .empty : .loaded(exams)
         } catch {
-            state = .failed(AppErrorState(message: error.localizedDescription))
+            if cached == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
         }
     }
 
@@ -91,11 +103,12 @@ struct ExamView: View {
     @State private var isSearching = false
 
     init(appModel: AppModel) {
-        _model = StateObject(wrappedValue: ExamViewModel(api: appModel.campusAPI))
+        let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
+        _model = StateObject(wrappedValue: ExamViewModel(api: appModel.campusAPI, userID: userID))
     }
 
     private var isDemo: Bool {
-        ProcessInfo.processInfo.arguments.contains("--demo-session")
+        AppRuntime.isDemoSession
     }
 
     private var statusReferenceDate: Date {

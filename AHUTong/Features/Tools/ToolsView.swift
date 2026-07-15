@@ -5,11 +5,25 @@ struct ToolsView: View {
     private let tools = AndroidToolItem.all
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
     let appModel: AppModel
+    let homeEditEnabled: Bool
     let onEditHome: () -> Void
+    @State private var showsWidgetGuide = false
+    @State private var homeLayout = HomeWidgetLayout()
+    private let layoutStore: JSONStore<HomeWidgetLayout>
 
-    init(appModel: AppModel, onEditHome: @escaping () -> Void = {}) {
+    init(
+        appModel: AppModel,
+        homeEditEnabled: Bool = true,
+        onEditHome: @escaping () -> Void = {}
+    ) {
         self.appModel = appModel
+        self.homeEditEnabled = homeEditEnabled
         self.onEditHome = onEditHome
+        let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "guest" }
+        layoutStore = JSONStore(
+            store: UserScopedStore(store: AppPersistence.migratingDefaults(), userID: userID),
+            key: "home.widget-layout.v2"
+        )
     }
 
     var body: some View {
@@ -17,15 +31,22 @@ struct ToolsView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "小工具") {
-                        AndroidIconButton(systemName: "pencil", accessibilityLabel: "编辑首页", action: onEditHome)
+                        if homeEditEnabled {
+                            AndroidIconButton(systemName: "pencil", accessibilityLabel: "编辑首页", action: onEditHome)
+                        }
                     }
 
                     LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(tools) { tool in
+                        ForEach(visibleTools) { tool in
                             destination(for: tool)
                         }
                     }
                     .padding(.horizontal, 16)
+
+                    if visibleTools.isEmpty {
+                        AndroidEmptyState(text: "所有工具都已放到首页")
+                            .padding(.horizontal, 16)
+                    }
 
                     desktopWidgetCard
                         .padding(.horizontal, 16)
@@ -34,6 +55,33 @@ struct ToolsView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .sheet(isPresented: $showsWidgetGuide) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("添加课表小组件").font(.title2.bold())
+                    Label("长按 iPhone 主屏幕空白处", systemImage: "hand.tap")
+                    Label("点击左上角“编辑”或“+”", systemImage: "plus.circle")
+                    Label("搜索“安大通课表”，选择尺寸并添加", systemImage: "rectangle.grid.2x2")
+                    Text("iOS 不允许 App 直接固定桌面小组件，需要在系统主屏幕完成最后一步。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(24)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { showsWidgetGuide = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+        .task { homeLayout = (try? await layoutStore.load()) ?? HomeWidgetLayout() }
+    }
+
+    private var visibleTools: [AndroidToolItem] {
+        let placed = Set(homeLayout.slots.compactMap { $0 })
+        return tools.filter { !placed.contains($0.homeWidgetID) }
     }
 
     @ViewBuilder
@@ -68,7 +116,7 @@ struct ToolsView: View {
                 ScheduleWidgetPreview()
                     .padding(.horizontal, 24)
 
-                Button("添加") {}
+                Button("添加") { showsWidgetGuide = true }
                     .buttonStyle(.plain)
                     .font(.headline)
                     .foregroundStyle(Color.primary)
@@ -86,6 +134,17 @@ private struct AndroidToolItem: Identifiable {
     let title: String
     let systemImage: String
     let tint: Color
+
+    var homeWidgetID: String {
+        switch id {
+        case "phone-book": "phone_book"
+        case "school-calendar": "school_calendar"
+        case "free-classroom": "free_classroom"
+        case "lost-found": "lost_found"
+        case "study-repository": "repository"
+        default: id
+        }
+    }
 
     static let all = [
         AndroidToolItem(id: "grade", title: "成绩单", systemImage: "chart.bar.doc.horizontal", tint: .yellow),

@@ -14,10 +14,11 @@ struct CardRechargeView: View {
 
     init(appModel: AppModel, gateway: (any PaymentGateway)? = nil) {
         self.appModel = appModel
-        let isDemo = ProcessInfo.processInfo.arguments.contains("--demo-session")
+        let isDemo = AppRuntime.isDemoSession
         demo = isDemo
         let resolved = gateway ?? PaymentGatewayFactory.make(demo: isDemo)
-        _coordinator = StateObject(wrappedValue: PaymentCoordinator(feature: .cardRecharge, gateway: resolved))
+        let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
+        _coordinator = StateObject(wrappedValue: PaymentCoordinator(feature: .cardRecharge, gateway: resolved, userID: userID))
     }
 
     var body: some View {
@@ -114,8 +115,8 @@ struct CardRechargeView: View {
                     feature: .cardRecharge,
                     method: method,
                     amount: PaymentAmount(amount),
-                    accountID: PaymentDemoCatalog.cardAccountID,
-                    accountLabel: PaymentDemoCatalog.cardAccountLabel
+                    accountID: demo ? PaymentDemoCatalog.cardAccountID : user.studentID,
+                    accountLabel: demo ? PaymentDemoCatalog.cardAccountLabel : "\(user.name) 校园卡"
                 )
                 if let url = await coordinator.submit(request) {
                     if demo {
@@ -148,12 +149,14 @@ struct BathroomPaymentView: View {
     @State private var validationMessage: String?
     private let demo: Bool
 
-    init(gateway: (any PaymentGateway)? = nil) {
-        let isDemo = ProcessInfo.processInfo.arguments.contains("--demo-session")
+    init(appModel: AppModel, gateway: (any PaymentGateway)? = nil) {
+        let isDemo = AppRuntime.isDemoSession
         demo = isDemo
+        let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(
             feature: .bathroom,
-            gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo)
+            gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo),
+            userID: userID
         ))
     }
 
@@ -295,12 +298,14 @@ struct ElectricityPaymentView: View {
     @State private var validationMessage: String?
     private let demo: Bool
 
-    init(gateway: (any PaymentGateway)? = nil) {
-        let isDemo = ProcessInfo.processInfo.arguments.contains("--demo-session")
+    init(appModel: AppModel, gateway: (any PaymentGateway)? = nil) {
+        let isDemo = AppRuntime.isDemoSession
         demo = isDemo
+        let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(
             feature: .electricity,
-            gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo)
+            gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo),
+            userID: userID
         ))
     }
 
@@ -311,6 +316,12 @@ struct ElectricityPaymentView: View {
                     AndroidHeader(title: "电控缴费", large: true)
                         .accessibilityIdentifier("payment.electricity.screen")
                     locationCard
+                    if !demo {
+                        Text(PaymentGatewayError.safetyServiceUnavailable.localizedDescription)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 24)
+                    }
                     PaymentAmountCard(title: "缴费金额", amount: $amount, identifier: "payment.electricity.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.electricity.state") {
                         validateAndShowPassword()
@@ -372,23 +383,24 @@ struct ElectricityPaymentView: View {
     }
 
     private var campuses: [String] {
-        unique(PaymentDemoCatalog.electricityRooms.map(\.campus))
+        demo ? unique(PaymentDemoCatalog.electricityRooms.map(\.campus)) : []
     }
 
     private var buildings: [String] {
-        unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus }.map(\.building))
+        demo ? unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus }.map(\.building)) : []
     }
 
     private var floors: [String] {
-        unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus && $0.building == building }.map(\.floor))
+        demo ? unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus && $0.building == building }.map(\.floor)) : []
     }
 
     private var rooms: [String] {
-        unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus && $0.building == building && $0.floor == floor }.map(\.room))
+        demo ? unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus && $0.building == building && $0.floor == floor }.map(\.room)) : []
     }
 
     private var selectedRoom: ElectricityRoom? {
-        PaymentDemoCatalog.electricityRooms.first {
+        guard demo else { return nil }
+        return PaymentDemoCatalog.electricityRooms.first {
             $0.campus == campus && $0.building == building && $0.floor == floor && $0.room == room
         }
     }

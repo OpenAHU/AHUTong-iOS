@@ -3,28 +3,108 @@ import SwiftUI
 @MainActor
 final class GradeViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<CampusGradeReport> = .idle
+    @Published private(set) var profiles: [CampusGradeStudentProfile] = []
+    @Published private(set) var selectedProfileID = ""
+    @Published private(set) var rank: CampusGradeRankInfo?
     private let api: any CampusCoreAPI
+    private let cache: JSONStore<GradeCache>
+    private var reports: [String: CampusGradeReport] = [:]
+    private var ranks: [String: CampusGradeRankInfo] = [:]
 
-    init(api: any CampusCoreAPI) { self.api = api }
+    init(api: any CampusCoreAPI, userID: String) {
+        self.api = api
+        cache = JSONStore(
+            store: UserScopedStore(store: AppPersistence.migratingFileCache(), userID: userID),
+            key: "grades.v2"
+        )
+    }
 
     func load(demo: Bool = false) async {
         state = .loading
         if demo {
             switch DemoDataState.current {
-            case .normal: state = .loaded(Self.demoReport)
+            case .normal:
+                let custom = DebugRuntimeSettings.decode("grade", as: CampusGradeReport.self)
+                    ?? (try? CampusGradeParser().parse(Data(DebugRuntimeSettings.endpointJSON("grade").utf8)))
+                let report = custom ?? Self.demoReport
+                profiles = Self.demoProfiles
+                selectedProfileID = Self.demoProfiles[0].id
+                reports = [selectedProfileID: report]
+                rank = Self.demoRank
+                state = report.grades.isEmpty ? .empty : .loaded(report)
             case .loading: return
             case .empty: state = .empty
             case .error: state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
             }
             return
         }
+        let cached = try? await cache.load()
+        if let cached { apply(cached) }
         do {
-            let report = try await api.grades()
-            state = report.grades.isEmpty ? .empty : .loaded(report)
+            var loadedProfiles = try await api.gradeProfiles()
+            if loadedProfiles.isEmpty {
+                loadedProfiles = [CampusGradeStudentProfile(id: "", trainingType: "主修", department: "", major: "")]
+            }
+            var loadedReports: [String: CampusGradeReport] = [:]
+            var loadedRanks: [String: CampusGradeRankInfo] = [:]
+            for profile in loadedProfiles {
+                let report = profile.id.isEmpty ? try await api.grades() : try await api.grades(studentID: profile.id)
+                loadedReports[profile.id] = report
+                if !profile.id.isEmpty, let value = try await api.gradeRank(studentID: profile.id) {
+                    loadedRanks[profile.id] = value
+                }
+            }
+            let fresh = GradeCache(profiles: loadedProfiles, reports: loadedReports, ranks: loadedRanks)
+            try await cache.save(fresh)
+            apply(fresh)
         } catch {
-            state = .failed(AppErrorState(message: error.localizedDescription))
+            if cached == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
         }
     }
+
+    func selectProfile(_ profile: CampusGradeStudentProfile) {
+        selectedProfileID = profile.id
+        rank = ranks[profile.id]
+        guard let report = reports[profile.id] else {
+            state = .empty
+            return
+        }
+        state = report.grades.isEmpty ? .empty : .loaded(report)
+    }
+
+    private func apply(_ value: GradeCache) {
+        profiles = value.profiles
+        reports = value.reports
+        ranks = value.ranks
+        let profileID = value.profiles.first(where: { $0.id == selectedProfileID })?.id
+            ?? value.profiles.first?.id
+            ?? value.reports.keys.sorted().first
+            ?? ""
+        selectedProfileID = profileID
+        rank = value.ranks[profileID]
+        if let report = value.reports[profileID] {
+            state = report.grades.isEmpty ? .empty : .loaded(report)
+        }
+    }
+
+    private struct GradeCache: Codable, Sendable {
+        let profiles: [CampusGradeStudentProfile]
+        let reports: [String: CampusGradeReport]
+        let ranks: [String: CampusGradeRankInfo]
+    }
+
+    static let demoProfiles = [
+        CampusGradeStudentProfile(id: "demo-main", trainingType: "主修", department: "计算机科学与技术学院", major: "计算机科学与技术"),
+        CampusGradeStudentProfile(id: "demo-minor", trainingType: "微专业", department: "创新学院", major: "人工智能")
+    ]
+
+    static let demoRank = CampusGradeRankInfo(
+        gpa: 3.78,
+        majorRank: 8,
+        majorHeadCount: 120,
+        gpaSemesterSubs: [CampusGradeSemesterRank(gpa: 3.8, semesterId: 202420252, majorRank: 5)],
+        updatedDateTimeStr: "2026-07-15 12:00"
+    )
 
     static let demoReport = CampusGradeReport(
         grades: [
@@ -49,14 +129,15 @@ struct GradeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: GradeViewModel
     @State private var query = ""
-    @State private var selectedSemester = ProcessInfo.processInfo.arguments.contains("--demo-session")
+    @State private var selectedSemester = AppRuntime.isDemoSession
         ? "2025-2026-1"
         : GradeView.currentSemesterName
     @State private var isSearching = false
     @State private var showsSemesterMenu = false
 
     init(appModel: AppModel) {
-        _model = StateObject(wrappedValue: GradeViewModel(api: appModel.campusAPI))
+        let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
+        _model = StateObject(wrappedValue: GradeViewModel(api: appModel.campusAPI, userID: userID))
     }
 
     var body: some View {
@@ -64,6 +145,7 @@ struct GradeView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     header
+                    if !isSearching { profileSelector }
                     if case let .loaded(report) = model.state {
                         if !isSearching {
                             semesterSelector(report)
@@ -78,9 +160,33 @@ struct GradeView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .task { await model.load(demo: ProcessInfo.processInfo.arguments.contains("--demo-session")) }
-        .refreshable { await model.load() }
+        .task { await model.load(demo: AppRuntime.isDemoSession) }
+        .refreshable { await model.load(demo: AppRuntime.isDemoSession) }
         .accessibilityIdentifier("grades.screen")
+    }
+
+    @ViewBuilder
+    private var profileSelector: some View {
+        if model.profiles.count > 1 {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(model.profiles) { profile in
+                        Button(profile.displayName) { model.selectProfile(profile) }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(model.selectedProfileID == profile.id ? Color.white : AndroidParityPalette.systemTheme)
+                            .padding(.horizontal, 14)
+                            .frame(height: 38)
+                            .background(
+                                model.selectedProfileID == profile.id ? AndroidParityPalette.systemTheme : AndroidParityPalette.surface(colorScheme),
+                                in: Capsule()
+                            )
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .scrollIndicators(.hidden)
+            .accessibilityIdentifier("grades.profile-selector")
+        }
     }
 
     @ViewBuilder
@@ -97,7 +203,7 @@ struct GradeView: View {
         } else {
             AndroidHeader(title: "成绩单", large: true) {
                 HStack(spacing: 0) {
-                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新成绩") { Task { await model.load() } }
+                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新成绩") { Task { await model.load(demo: AppRuntime.isDemoSession) } }
                     AndroidIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索成绩") { isSearching = true }
                 }
                 .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
@@ -135,14 +241,15 @@ struct GradeView: View {
     private func summary(_ report: CampusGradeReport) -> some View {
         let selected = report.grades.filter { $0.semesterName == selectedSemester }
         let semesterGPA = weightedGPA(selected)
-        let totalRankParts = report.rank?.components(separatedBy: "/").map { $0.trimmingCharacters(in: .whitespaces) }
-        let cohort = totalRankParts?.last ?? "暂无"
+        let rank = model.rank
+        let cohort = rank?.majorHeadCount.map(String.init) ?? "暂无"
+        let semesterID = selected.first?.semesterID
         return VStack(spacing: 14) {
             metric("本学期平均绩点", semesterGPA.map { String(format: "%.2f", $0) } ?? "暂无")
-            metric("全程平均绩点", report.gradePointAverage.map { String(format: "%.2f", $0) } ?? "暂无")
-            metric("全程专业排名", report.rank?.replacingOccurrences(of: " ", with: "") ?? "暂无/暂无")
-            metric("该学期专业排名", "暂无/\(cohort)")
-            metric("最后更新时间", "暂无")
+            metric("全程平均绩点", (rank?.gpa ?? report.gradePointAverage).map { String(format: "%.2f", $0) } ?? "暂无")
+            metric("全程专业排名", "\(rank?.majorRank.map(String.init) ?? "暂无")/\(cohort)")
+            metric("该学期专业排名", "\(rank?.semesterRank(for: semesterID).map(String.init) ?? "暂无")/\(cohort)")
+            metric("最后更新时间", rank?.updatedDateTimeStr.flatMap { $0.isEmpty ? nil : $0 } ?? "暂无")
         }
         .padding(.horizontal, 24)
     }

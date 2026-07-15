@@ -332,6 +332,7 @@ private struct AndroidWeatherSettings: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var model: WeatherViewModel
+    @AppStorage("weather.show-on-home") private var showOnHome = true
 
     var body: some View {
         AndroidScreen {
@@ -350,6 +351,9 @@ private struct AndroidWeatherSettings: View {
                             .padding(.vertical, 8)
                     }
                     .buttonStyle(.plain)
+
+                    Toggle("在首页显示天气", isOn: $showOnHome)
+                        .padding(.vertical, 4)
 
                     ForEach(WeatherPreferenceKey.allCases) { key in
                         Toggle(

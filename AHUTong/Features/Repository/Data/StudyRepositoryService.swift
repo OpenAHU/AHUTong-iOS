@@ -13,6 +13,22 @@ protocol RepositoryFileRemoteDataSource: Sendable {
         from url: URL,
         progress: @escaping @Sendable (Double) async -> Void
     ) async throws -> Data
+    func downloadToTemporaryFile(
+        from url: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL
+}
+
+extension RepositoryFileRemoteDataSource {
+    func downloadToTemporaryFile(
+        from url: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL {
+        let data = try await download(from: url, progress: progress)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try data.write(to: file, options: .atomic)
+        return file
+    }
 }
 
 protocol RepositoryDownloadStoring: Sendable {
@@ -21,8 +37,23 @@ protocol RepositoryDownloadStoring: Sendable {
         repositoryID: String,
         path: String
     ) async throws -> DownloadedStudyFile
+    func saveFile(
+        at sourceURL: URL,
+        repositoryID: String,
+        path: String
+    ) async throws -> DownloadedStudyFile
     func files() async throws -> [DownloadedStudyFile]
     func delete(ids: Set<String>) async throws
+}
+
+extension RepositoryDownloadStoring {
+    func saveFile(
+        at sourceURL: URL,
+        repositoryID: String,
+        path: String
+    ) async throws -> DownloadedStudyFile {
+        try await save(Data(contentsOf: sourceURL), repositoryID: repositoryID, path: path)
+    }
 }
 
 struct GitHubRepositoryContentRemote: RepositoryContentRemoteDataSource {
@@ -108,6 +139,23 @@ struct URLSessionRepositoryFileRemote: RepositoryFileRemoteDataSource {
         await progress(1)
         return data
     }
+
+    func downloadToTemporaryFile(
+        from url: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 120
+        request.setValue("AHUTong-iOS/0.1", forHTTPHeaderField: "User-Agent")
+        await progress(0)
+        let (fileURL, response) = try await session.download(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw NetworkError.nonHTTPResponse }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw NetworkError.unacceptableStatusCode(httpResponse.statusCode)
+        }
+        await progress(1)
+        return fileURL
+    }
 }
 
 actor RepositoryDownloadFileStore: RepositoryDownloadStoring {
@@ -151,6 +199,38 @@ actor RepositoryDownloadFileStore: RepositoryDownloadStoring {
             name: URL(fileURLWithPath: path).lastPathComponent,
             localURL: fileURL,
             size: Int64(data.count),
+            downloadedAt: Date()
+        )
+        records.append(record)
+        try saveRecords(records)
+        return record
+    }
+
+    func saveFile(
+        at sourceURL: URL,
+        repositoryID: String,
+        path: String
+    ) async throws -> DownloadedStudyFile {
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(localFilename(repositoryID: repositoryID, path: path))
+        if fileManager.fileExists(atPath: fileURL.path) { try fileManager.removeItem(at: fileURL) }
+        do {
+            try fileManager.moveItem(at: sourceURL, to: fileURL)
+        } catch {
+            try fileManager.copyItem(at: sourceURL, to: fileURL)
+            try? fileManager.removeItem(at: sourceURL)
+        }
+        let attributes = try fileManager.attributesOfItem(atPath: fileURL.path)
+        let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        guard size > 0 else { throw StudyRepositoryError.emptyDownload }
+        var records = try loadRecords()
+        records.removeAll { $0.repositoryID == repositoryID && $0.path == path }
+        let record = DownloadedStudyFile(
+            repositoryID: repositoryID,
+            path: path,
+            name: URL(fileURLWithPath: path).lastPathComponent,
+            localURL: fileURL,
+            size: size,
             downloadedAt: Date()
         )
         records.append(record)
@@ -295,10 +375,9 @@ struct StudyRepositoryService: Sendable {
 
         for url in urls {
             do {
-                let data = try await fileRemote.download(from: url, progress: progress)
-                guard !data.isEmpty else { throw StudyRepositoryError.emptyDownload }
-                return try await downloads.save(
-                    data,
+                let temporaryURL = try await fileRemote.downloadToTemporaryFile(from: url, progress: progress)
+                return try await downloads.saveFile(
+                    at: temporaryURL,
                     repositoryID: repositoryID,
                     path: item.path
                 )

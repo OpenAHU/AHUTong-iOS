@@ -78,7 +78,7 @@ struct LostFoundPublishDraft: Equatable, Sendable {
     }
 }
 
-struct LostFoundCatalog: Equatable, Sendable {
+struct LostFoundCatalog: Codable, Equatable, Sendable {
     let campuses: [LostFoundCampus]
     let types: [LostFoundType]
 }

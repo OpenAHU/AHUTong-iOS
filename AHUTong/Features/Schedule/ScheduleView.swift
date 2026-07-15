@@ -7,64 +7,78 @@ final class ScheduleViewModel: ObservableObject {
     @Published private(set) var currentWeek = 1
     @Published private(set) var source: ScheduleSnapshotSource?
 
-    private let repository: ScheduleRepository
+    private let currentRepository: ScheduleRepository
+    private let nextRepository: ScheduleRepository
     private let api: any CampusCoreAPI
     private let semester: Semester
 
     init(api: any CampusCoreAPI, userID: String) {
         self.api = api
         let store = AppPersistence.migratingDefaults()
-        repository = ScheduleRepository(
+        let scopedStore = UserScopedStore(store: store, userID: userID)
+        currentRepository = ScheduleRepository(
             remote: RustScheduleRemoteDataSource(api: api),
-            cache: UserScopedStore(store: store, userID: userID)
+            cache: scopedStore
         )
-        semester = Self.currentSemester()
+        nextRepository = ScheduleRepository(
+            remote: RustScheduleRemoteDataSource(api: api, scope: .next),
+            cache: scopedStore
+        )
+        semester = Semester.current()
     }
 
-    func load(demo: Bool = false) async {
+    func load(demo: Bool = false, previewNext: Bool = false) async {
         if demo {
             currentWeek = 1
             switch DemoDataState.current {
             case .normal:
-                state = .loaded(Self.demoCourses)
-                await updateSystemIntegrations(courses: Self.demoCourses, referenceDate: DemoDataState.referenceDate)
+                let courses = DebugRuntimeSettings.decode("schedule", as: [Course].self) ?? Self.demoCourses
+                state = courses.isEmpty ? .empty : .loaded(courses)
+                if !previewNext {
+                    await updateSystemIntegrations(courses: courses, referenceDate: DemoDataState.referenceDate)
+                }
             case .loading: state = .loading
             case .empty:
                 state = .empty
-                await updateSystemIntegrations(courses: [], referenceDate: DemoDataState.referenceDate)
+                if !previewNext {
+                    await updateSystemIntegrations(courses: [], referenceDate: DemoDataState.referenceDate)
+                }
             case .error:
                 state = .failed(AppErrorState(message: "Mock 场景：接口返回 500"))
-                await publishWidget(.unavailable(.expired, updatedAt: DemoDataState.referenceDate))
+                if !previewNext { await publishWidget(.unavailable(.expired, updatedAt: DemoDataState.referenceDate)) }
             }
             source = .cache
             return
         }
         state = .loading
         do {
-            async let week = api.currentWeek()
-            async let snapshot = repository.load(semester: semester)
-            let result = try await snapshot
-            currentWeek = (try? await week) ?? 1
+            let result = try await repository(previewNext: previewNext).load(
+                semester: previewNext ? semester.next : semester
+            )
+            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? 1)
             source = result.source
             state = .loaded(result.courses)
-            await updateSystemIntegrations(courses: result.courses)
+            if !previewNext { await updateSystemIntegrations(courses: result.courses) }
         } catch {
             state = .failed(AppErrorState(message: error.localizedDescription))
-            await publishWidget(.unavailable(.expired))
+            if !previewNext { await publishWidget(.unavailable(.expired)) }
         }
     }
 
-    func refresh() async {
+    func refresh(previewNext: Bool = false) async {
         state = .loading
         do {
-            let result = try await repository.load(semester: semester, policy: .refresh)
+            let result = try await repository(previewNext: previewNext).load(
+                semester: previewNext ? semester.next : semester,
+                policy: .refresh
+            )
             source = result.source
             state = .loaded(result.courses)
-            currentWeek = (try? await api.currentWeek()) ?? currentWeek
-            await updateSystemIntegrations(courses: result.courses)
+            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? currentWeek)
+            if !previewNext { await updateSystemIntegrations(courses: result.courses) }
         } catch {
             state = .failed(AppErrorState(message: error.localizedDescription))
-            await publishWidget(.unavailable(.expired))
+            if !previewNext { await publishWidget(.unavailable(.expired)) }
         }
     }
 
@@ -85,13 +99,8 @@ final class ScheduleViewModel: ObservableObject {
         WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
     }
 
-    private static func currentSemester(date: Date = Date()) -> Semester {
-        let components = Calendar.current.dateComponents([.year, .month], from: date)
-        let year = components.year ?? 2026
-        let month = components.month ?? 9
-        let startYear = month < 9 ? year - 1 : year
-        let term = (2...8).contains(month) ? "2" : "1"
-        return Semester(schoolYear: "\(startYear)-\(startYear + 1)", term: term)!
+    private func repository(previewNext: Bool) -> ScheduleRepository {
+        previewNext ? nextRepository : currentRepository
     }
 
     static let demoCourses = [
@@ -138,8 +147,14 @@ struct ScheduleView: View {
             .scrollIndicators(.hidden)
         }
         .task {
-            await model.load(demo: ProcessInfo.processInfo.arguments.contains("--demo-session"))
+            await model.load(demo: AppRuntime.isDemoSession, previewNext: previewNextSemester)
             selectedWeek = model.currentWeek
+        }
+        .onChange(of: previewNextSemester) { _, enabled in
+            Task {
+                await model.load(demo: AppRuntime.isDemoSession, previewNext: enabled)
+                selectedWeek = model.currentWeek
+            }
         }
         .sheet(item: $selectedCourse) { course in CourseDetailView(course: course) }
         .alert("课表设置", isPresented: $showSettings) {
@@ -147,7 +162,7 @@ struct ScheduleView: View {
             Toggle("预览下学期课表", isOn: $previewNextSemester)
             Button("完成", role: .cancel) {}
         } message: {
-            Text("总览课表会显示全部周次课程；下学期预览将在教务系统提供数据时切换。")
+            Text("总览课表会显示全部周次课程；下学期预览会读取教务系统下一学期课表。")
         }
     }
 
@@ -179,7 +194,7 @@ struct ScheduleView: View {
             HStack(spacing: 0) {
                 scheduleAction("location", "回到当前周") { selectedWeek = model.currentWeek }
                 scheduleAction("gearshape", "课表设置") { showSettings = true }
-                scheduleAction("arrow.clockwise", "刷新课表") { Task { await model.refresh() } }
+                scheduleAction("arrow.clockwise", "刷新课表") { Task { await model.refresh(previewNext: previewNextSemester) } }
             }
             .padding(2)
             .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
@@ -199,7 +214,7 @@ struct ScheduleView: View {
                     VStack(spacing: 12) {
                         Text("加载课表失败").font(.headline)
                         Text(error.message).font(.caption).multilineTextAlignment(.center)
-                        Button("重试") { Task { await model.refresh() } }
+                        Button("重试") { Task { await model.refresh(previewNext: previewNextSemester) } }
                     }
                     .padding(24)
                     .accessibilityIdentifier("schedule.error")
@@ -227,10 +242,20 @@ struct ScheduleView: View {
             let spacing: CGFloat = 4
             let timeWidth: CGFloat = 40
             let dayWidth = (geometry.size.width - timeWidth - spacing * 9) / 7
+            let displayed = visibleCourses(courses)
             ZStack(alignment: .topLeading) {
                 grid(dayWidth: dayWidth, spacing: spacing, timeWidth: timeWidth)
-                ForEach(visibleCourses(courses)) { course in
-                    courseCard(course, dayWidth: dayWidth, spacing: spacing, timeWidth: timeWidth)
+                ForEach(displayed) { course in
+                    let group = conflictGroup(for: course, in: displayed)
+                    let index = group.firstIndex(of: course) ?? 0
+                    courseCard(
+                        course,
+                        dayWidth: dayWidth,
+                        spacing: spacing,
+                        timeWidth: timeWidth,
+                        conflictIndex: index,
+                        conflictCount: group.count
+                    )
                 }
             }
             .padding(.top, 8)
@@ -266,9 +291,18 @@ struct ScheduleView: View {
         }
     }
 
-    private func courseCard(_ course: Course, dayWidth: CGFloat, spacing: CGFloat, timeWidth: CGFloat) -> some View {
+    private func courseCard(
+        _ course: Course,
+        dayWidth: CGFloat,
+        spacing: CGFloat,
+        timeWidth: CGFloat,
+        conflictIndex: Int,
+        conflictCount: Int
+    ) -> some View {
         let active = course.occurs(inWeek: selectedWeek)
         let height = CGFloat(course.duration) * 48 + CGFloat(max(course.duration - 1, 0)) * spacing
+        let resolvedCount = max(conflictCount, 1)
+        let resolvedWidth = (dayWidth - CGFloat(resolvedCount - 1) * 1) / CGFloat(resolvedCount)
         return Button { selectedCourse = course } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(course.name).font(.system(size: 11, weight: .bold)).lineLimit(3)
@@ -283,12 +317,13 @@ struct ScheduleView: View {
             }
             .foregroundStyle(.white)
             .padding(4)
-            .frame(width: dayWidth, height: height)
+            .frame(width: resolvedWidth, height: height)
             .background(active ? courseColor(course.name) : Color.gray, in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .offset(
-            x: timeWidth + spacing + CGFloat(course.weekday - 1) * (dayWidth + spacing),
+            x: timeWidth + spacing + CGFloat(course.weekday - 1) * (dayWidth + spacing)
+                + CGFloat(conflictIndex) * (resolvedWidth + 1),
             y: 64 + spacing + CGFloat(course.startPeriod - 1) * (48 + spacing)
         )
         .accessibilityLabel("\(course.name)，\(course.location)，第\(course.startPeriod)节")
@@ -297,6 +332,15 @@ struct ScheduleView: View {
 
     private func visibleCourses(_ courses: [Course]) -> [Course] {
         courses.filter { showAllCourses || $0.occurs(inWeek: selectedWeek) }
+    }
+
+    private func conflictGroup(for course: Course, in courses: [Course]) -> [Course] {
+        guard showAllCourses else { return [course] }
+        return courses.filter {
+            $0.weekday == course.weekday
+                && $0.startPeriod == course.startPeriod
+                && $0.duration == course.duration
+        }
     }
 
     private func courseColor(_ name: String) -> Color {
@@ -324,7 +368,7 @@ struct ScheduleView: View {
     }
 
     private var currentWeekdayIndex: Int {
-        demo ? -1 : (Calendar.current.component(.weekday, from: Date()) + 5) % 7
+        demo || previewNextSemester ? -1 : (Calendar.current.component(.weekday, from: Date()) + 5) % 7
     }
 
     private func dateLabel(dayIndex: Int) -> String {
@@ -342,7 +386,7 @@ struct ScheduleView: View {
         return String(format: "%02d-%02d", components.month ?? 0, components.day ?? 0)
     }
 
-    private var demo: Bool { ProcessInfo.processInfo.arguments.contains("--demo-session") }
+    private var demo: Bool { AppRuntime.isDemoSession }
 
     private func shortLocation(_ location: String) -> String {
         location.replacingOccurrences(of: "博学北楼", with: "博北")

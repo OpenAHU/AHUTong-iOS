@@ -112,7 +112,7 @@ struct SchoolCalendarView: View {
         .task { if !demo { await model.load() } }
     }
 
-    private var demo: Bool { ProcessInfo.processInfo.arguments.contains("--demo-session") }
+    private var demo: Bool { AppRuntime.isDemoSession }
 }
 
 private struct SchoolCalendarZoomView: View {

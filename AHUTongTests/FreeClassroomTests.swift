@@ -52,6 +52,19 @@ final class FreeClassroomTests: XCTestCase {
         XCTAssertEqual(model.selectedUnits, Set(1...5))
         XCTAssertEqual(model.rooms.value?.map(\.nameZh), ["201 教室", "305 教室", "512 教室"])
     }
+
+    @MainActor
+    func testViewModelClampsDatesAndExpandsAllBuildings() async {
+        let model = FreeClassroomViewModel(api: FreeClassroomCampusAPIStub(), demo: true)
+        await model.loadBuildings()
+        let today = DemoDataState.referenceDate
+        model.setStartDate(today.addingTimeInterval(-86_400), now: today)
+        model.setEndDate(today.addingTimeInterval(-86_400))
+        XCTAssertEqual(Calendar.current.startOfDay(for: model.startDate), Calendar.current.startOfDay(for: today))
+        XCTAssertGreaterThanOrEqual(model.endDate, model.startDate)
+        await model.search()
+        XCTAssertEqual(model.rooms.value?.count, 12)
+    }
 }
 
 private actor FreeClassroomCampusAPIStub: CampusCoreAPI {

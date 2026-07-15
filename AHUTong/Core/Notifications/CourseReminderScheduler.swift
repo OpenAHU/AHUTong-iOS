@@ -74,22 +74,24 @@ struct CourseReminderPlanner: Sendable {
     ) -> [CourseReminderRequest] {
         let weekday = calendar.component(.weekday, from: now)
         let monday = calendar.date(byAdding: .day, value: -((weekday + 5) % 7), to: calendar.startOfDay(for: now)) ?? now
-        return courses
-            .filter { $0.occurs(inWeek: currentWeek) }
-            .compactMap { course -> CourseReminderRequest? in
+        let requests = (0..<21).flatMap { dayOffset -> [CourseReminderRequest] in
+            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: monday) else { return [] }
+            let week = currentWeek + dayOffset / 7
+            let dayOfWeek = dayOffset % 7 + 1
+            return courses.filter { $0.weekday == dayOfWeek && $0.occurs(inWeek: week) }.compactMap { course in
                 guard let time = startTimes[course.startPeriod],
-                      let day = calendar.date(byAdding: .day, value: course.weekday - 1, to: monday),
                       let start = calendar.date(bySettingHour: time.0, minute: time.1, second: 0, of: day),
                       let reminder = calendar.date(byAdding: .minute, value: -10, to: start),
                       reminder > now else { return nil }
                 return CourseReminderRequest(
-                    identifier: "course-reminder.\(currentWeek).\(course.id)",
+                    identifier: "course-reminder.\(week).\(course.id)",
                     title: "10 分钟后上课",
                     body: "\(course.name) · \(course.location)",
                     date: reminder
                 )
             }
-            .sorted { $0.date < $1.date }
+        }
+        return requests.sorted { $0.date < $1.date }.prefix(60).map { $0 }
     }
 }
 

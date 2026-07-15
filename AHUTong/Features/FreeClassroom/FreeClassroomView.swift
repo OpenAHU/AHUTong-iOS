@@ -56,6 +56,23 @@ final class FreeClassroomViewModel: ObservableObject {
         selectedUnits = values.isSubset(of: selectedUnits) ? selectedUnits.subtracting(values) : selectedUnits.union(values)
     }
 
+    func setStartDate(_ value: Date, now: Date = Date()) {
+        let calendar = Calendar.current
+        startDate = max(calendar.startOfDay(for: value), calendar.startOfDay(for: now))
+        if endDate < startDate { endDate = startDate }
+    }
+
+    func setEndDate(_ value: Date) {
+        endDate = max(Calendar.current.startOfDay(for: value), startDate)
+    }
+
+    func useDayOffset(_ offset: Int, now: Date = Date()) {
+        let calendar = Calendar.current
+        let day = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now)) ?? now
+        startDate = day
+        endDate = day
+    }
+
     func search() async {
         rooms = .loading
         if demo {
@@ -74,7 +91,7 @@ final class FreeClassroomViewModel: ObservableObject {
             let result = try await remote.rooms(
                 query: FreeClassroomQuery(
                     campusID: selectedCampusID,
-                    buildingIDs: selectedBuildingIDs.sorted(),
+                    buildingIDs: (selectedBuildingIDs.isEmpty ? Set(buildings.map(\.id)) : selectedBuildingIDs).sorted(),
                     units: selectedUnits.sorted(),
                     startDate: startDate,
                     endDate: endDate
@@ -96,7 +113,7 @@ struct FreeClassroomView: View {
         _model = StateObject(
             wrappedValue: FreeClassroomViewModel(
                 api: appModel.campusAPI,
-                demo: ProcessInfo.processInfo.arguments.contains("--demo-session")
+                demo: AppRuntime.isDemoSession
             )
         )
     }
@@ -162,8 +179,31 @@ struct FreeClassroomView: View {
             }
             filterCard("选择日期") {
                 HStack(spacing: 8) {
-                    datePicker("开始", selection: $model.startDate)
-                    datePicker("结束", selection: $model.endDate)
+                    chip("今天", selected: Calendar.current.isDateInToday(model.startDate) && Calendar.current.isDateInToday(model.endDate)) {
+                        model.useDayOffset(0)
+                    }
+                    chip("明天", selected: Calendar.current.isDateInTomorrow(model.startDate) && Calendar.current.isDateInTomorrow(model.endDate)) {
+                        model.useDayOffset(1)
+                    }
+                    Spacer()
+                }
+                HStack(spacing: 8) {
+                    DatePicker(
+                        "开始",
+                        selection: Binding(get: { model.startDate }, set: { model.setStartDate($0) }),
+                        in: Calendar.current.startOfDay(for: Date())...,
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    DatePicker(
+                        "结束",
+                        selection: Binding(get: { model.endDate }, set: { model.setEndDate($0) }),
+                        in: model.startDate...,
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
                 }
             }
         }
@@ -270,9 +310,4 @@ struct FreeClassroomView: View {
         chip(text, selected: Set(range).isSubset(of: model.selectedUnits)) { model.toggleUnits(range) }
     }
 
-    private func datePicker(_ title: String, selection: Binding<Date>) -> some View {
-        DatePicker(title, selection: selection, displayedComponents: .date)
-            .labelsHidden()
-            .datePickerStyle(.compact)
-    }
 }

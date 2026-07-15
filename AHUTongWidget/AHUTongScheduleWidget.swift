@@ -1,3 +1,4 @@
+import ActivityKit
 import SwiftUI
 import WidgetKit
 
@@ -15,12 +16,16 @@ struct ScheduleWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ScheduleWidgetEntry) -> Void) {
-        completion(ScheduleWidgetEntry(date: Date(), snapshot: ScheduleWidgetSnapshotStore.loadSharedSnapshot()))
+        let now = Date()
+        completion(ScheduleWidgetEntry(date: now, snapshot: ScheduleWidgetSnapshotStore.loadSharedSnapshot().resolved(at: now)))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ScheduleWidgetEntry>) -> Void) {
-        let entry = ScheduleWidgetEntry(date: Date(), snapshot: ScheduleWidgetSnapshotStore.loadSharedSnapshot())
-        completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
+        let now = Date()
+        let source = ScheduleWidgetSnapshotStore.loadSharedSnapshot()
+        let dates = (0...48).compactMap { Calendar.current.date(byAdding: .minute, value: $0 * 30, to: now) }
+        let entries = dates.map { ScheduleWidgetEntry(date: $0, snapshot: source.resolved(at: $0)) }
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 
     private static let placeholderCourses = [
@@ -60,14 +65,35 @@ struct AHUTongScheduleWidgetView: View {
     }
 
     private var compactCourses: some View {
+        let systemWeekday = Calendar.current.component(.weekday, from: entry.date)
+        let weekday = systemWeekday == 1 ? 7 : systemWeekday - 1
+        let remaining = entry.snapshot.courses.filter {
+            $0.weekday == weekday && endTime(period: $0.endPeriod, on: entry.date) > entry.date
+        }
         VStack(alignment: .leading, spacing: 5) {
-            ForEach(entry.snapshot.courses.prefix(3)) { course in
-                Text("周\(chineseWeekday(course.weekday)) \(course.startPeriod)-\(course.endPeriod)  \(course.name)")
+            ForEach((remaining.isEmpty ? entry.snapshot.courses : remaining).prefix(3)) { course in
+                Text("\(course.weekday == weekday ? "今天" : "周\(chineseWeekday(course.weekday))") \(course.startPeriod)-\(course.endPeriod)  \(course.name)")
                     .font(.caption)
+                    .fontWeight(isOngoing(course, at: entry.date) ? .bold : .regular)
+                    .foregroundStyle(isOngoing(course, at: entry.date) ? Color.blue : Color.primary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
         }
+    }
+
+    private func isOngoing(_ course: ScheduleWidgetCourse, at date: Date) -> Bool {
+        startTime(period: course.startPeriod, on: date) <= date && date <= endTime(period: course.endPeriod, on: date)
+    }
+
+    private func startTime(period: Int, on date: Date) -> Date {
+        let values = [1: (8, 0), 2: (8, 50), 3: (9, 50), 4: (10, 40), 5: (11, 30), 6: (14, 0), 7: (14, 50), 8: (15, 50), 9: (16, 40), 10: (17, 30), 11: (19, 0), 12: (19, 50), 13: (20, 40)]
+        let value = values[period] ?? (0, 0)
+        return Calendar.current.date(bySettingHour: value.0, minute: value.1, second: 0, of: date) ?? date
+    }
+
+    private func endTime(period: Int, on date: Date) -> Date {
+        Calendar.current.date(byAdding: .minute, value: 45, to: startTime(period: period, on: date)) ?? date
     }
 
     private var scheduleGrid: some View {
@@ -122,7 +148,55 @@ struct AHUTongScheduleWidget: Widget {
     }
 }
 
+struct CourseLiveActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: CourseActivityAttributes.self) { context in
+            HStack(spacing: 12) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(context.state.courseName).font(.headline).lineLimit(1)
+                    Text(context.state.location).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+                Text(context.state.startDate, style: .timer)
+                    .font(.headline.monospacedDigit())
+            }
+            .padding()
+            .activityBackgroundTint(Color(red: 247 / 255, green: 246 / 255, blue: 252 / 255))
+            .activitySystemActionForegroundColor(.blue)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Image(systemName: "calendar.badge.clock").foregroundStyle(.blue)
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    Text(context.state.courseName).font(.headline).lineLimit(1)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    Text(context.state.startDate, style: .timer).monospacedDigit()
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    Text(context.state.location).font(.caption).foregroundStyle(.secondary)
+                }
+            } compactLeading: {
+                Image(systemName: "book.closed.fill").foregroundStyle(.blue)
+            } compactTrailing: {
+                Text(context.state.startDate, style: .timer).monospacedDigit()
+            } minimal: {
+                Image(systemName: "book.closed.fill").foregroundStyle(.blue)
+            }
+            .widgetURL(URL(string: "ahutong://schedule"))
+            .keylineTint(.blue)
+        }
+    }
+}
+
 @main
 struct AHUTongWidgetBundle: WidgetBundle {
-    var body: some Widget { AHUTongScheduleWidget() }
+    var body: some Widget {
+        AHUTongScheduleWidget()
+        CourseLiveActivityWidget()
+    }
 }

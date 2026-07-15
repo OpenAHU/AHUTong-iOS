@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 
@@ -197,11 +198,15 @@ final class PaymentCoordinator: ObservableObject {
     init(
         feature: PaymentFeature,
         gateway: any PaymentGateway,
+        userID: String? = nil,
         pendingStore: PendingPaymentStore? = nil
     ) {
         self.feature = feature
         self.gateway = gateway
-        self.pendingStore = pendingStore ?? PendingPaymentStore(key: "payments.pending-order.\(feature.rawValue)")
+        let scope = userID.map { value in
+            SHA256.hash(data: Data(value.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+        } ?? "anonymous"
+        self.pendingStore = pendingStore ?? PendingPaymentStore(key: "payments.pending-order.\(scope).\(feature.rawValue)")
     }
 
     @discardableResult

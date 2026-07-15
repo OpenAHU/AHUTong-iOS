@@ -6,11 +6,11 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| 总体状态 | 外部阻塞 |
-| 当前里程碑 | P2～P7：除真实支付上线验收外，客户端迁移、隐私与发布工程均已收口 |
-| 当前焦点 | 小工具“失物招领”和设置“意见反馈”的无效 SF Symbols 映射已修复并完成 macOS CI、IPA、Archive 与 UI 复验；三类支付客户端闭环已实现，但不能绕过 D-005 冒充真实支付完成 |
-| 下一步 | 支付负责人提供已轮换的服务端网关、客户端鉴权方式和受控测试账号/授权环境后，对 PAY-01～03 分别执行小额、超时、重复提交、第三方返回和服务端对账验收 |
-| 用户/平台功能进度 | 20 / 23 个切片满足严格完成定义（87.0%）；剩余 3 个均为受 D-005、R-003、R-004 外部依赖阻断的真实支付切片 |
+| 总体状态 | 待 macOS 复验；真实支付仍外部阻塞 |
+| 当前里程碑 | 全量 Android 差异复查修复：导航、会话/缓存、教务、首页、平台能力和设置已实现，等待新提交的 macOS CI、IPA 与 Archive 证据 |
+| 当前焦点 | 补回 UIKit 原生导航栏、左边缘返回和 iOS 26 内容区域返回；扩展可见 Debug 页面；修复复查发现的下学期、多学籍排名、跨周 Widget/提醒、Live Activity、更新检查、反馈与下载等缺口 |
+| 下一步 | 推送候选提交并运行 iOS CI、未签名 IPA 和 Release Readiness；全部通过后恢复受影响切片的“已完成”状态并登记证据 |
+| 用户/平台功能进度 | 原 20 / 23 个严格完成切片中，本轮受代码变更影响的切片统一进入复验；3 个真实支付切片继续受 D-005、R-003、R-004 阻断，不以 Mock 冒充完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-15 |
 
@@ -61,7 +61,7 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 | Android | `2a30a54e74127ce1b4f75763596b470bd0b9d01b` | 本路线图的功能与代码参考基线 |
 | iOS | `96d33412ae47471d209b2e21c7b9715fc278d4f9` | 迁移开始前的 `main`；仅含两行 README |
 | Android `sdk` gitlink | `8c2d6b8113cb0f2ea6bb45cd74fa950e39dc956d` | 已按需浅拉，并固定为 iOS `Vendor/sdk` 的业务实现基线 |
-| iOS `sdk` 适配 | `e8261566128f9af972e16369a41078aae38f347d` | 从固定 Android SDK 基线派生；补齐 Apple C ABI、GuiXu KV、Cookie 安全模式与持久化错误边界 |
+| iOS `sdk` 适配 | `1177864`（分支 `codex/feat/apple-guixu-persistence`） | 在 Apple C ABI、GuiXu KV、Cookie 安全模式与持久化错误边界上继续补齐下学期课表、多学籍与成绩排名服务接口；完整 SHA 由最终证据提交回填 |
 | Android `GuiXu-Rust` gitlink | `2481ab378395b5ee6db21021524ad051d98b888f` | 已按需浅拉，并固定为 iOS `Vendor/GuiXu-Rust` 的解析依赖基线 |
 
 基线不得静默替换。Android 参考版本变化时，必须在这里追加新 SHA，并在变更日志说明重新对照了哪些功能与契约。
@@ -245,12 +245,28 @@ iOS/
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、本周过滤、时区日期、移除旧托管请求并重排完整；关闭只清理本 App 课程提醒；Live Activity 明确保持可选且不阻塞普通提醒切片 | `CourseReminderPlannerTests` 5 项和提醒开启 UI 状态在 `E-20260715-01` 通过；物理机到时投递受系统调度约束，保留为部署回归；Commit `d8516f2` | 2026-07-15 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | Android 同算法灰度、本地兜底/Debug 覆盖、可见及隐藏兼容入口、不可逆账号摘要、脱敏日志、隐私清单/数据地图、敏感信息扫描、Release Archive、未签名 IPA 与 Personal Team 发布清单完整；第三方崩溃/统计/广告保持关闭 | `ReleaseOperationsTests` 8 项、设置→Debug UI 路径、Archive/IPA/全套 macOS CI 见 `E-20260715-02`；物理机 7 天签名是部署回归，不冒充已执行证据；Commits `c091244`、`edfd219` | 2026-07-15 |
 
+### 8.1 全量复查候选（2026-07-15）
+
+下表是本轮候选提交的覆盖范围；在新的 macOS CI、未签名 IPA 和 Release Readiness 全绿前，它覆盖矩阵中相同行的旧“已完成”结论，统一按“待验证”处理。
+
+| 覆盖切片 | 状态 | 本轮补齐内容 | 预定自动验证 |
+| --- | --- | --- | --- |
+| APP-01、PREF-01、OPS-01 | 待验证 | UIKit 原生导航栏、原生左边缘返回、iOS 26 内容区域返回；可见 Debug 的 Mock 场景/时间/端点 JSON、灰度、缓存/会话、普通通知和 Live Activity 测试；真实检查更新、QQ 反馈、完整许可证与可生效主题 | 原生导航 UI 手势、Debug 路由、更新语义、图标与主题单测、全路径 UI |
+| AUTH-02、CONTENT-01 | 待验证 | Cookie 父域/Path/Secure/HttpOnly、响应 Cookie 持久化、401/403/登录重定向自动续期；网络/5xx 不误退出且保留离线缓存 | Cookie 匹配/响应/重试契约、离线恢复与会话测试 |
+| SCH-01、SCH-02、HOME-01 | 待验证 | 当前学期按真实日期推导、真实下学期 SDK 接口、重叠课程分栏；首页课程入口、拖放编辑、灰度门、账号隔离布局和已放工具过滤 | Semester、布局、课表 Repository/UI 回归；Rust server feature 编译 |
+| ACA-01、ACA-02、ACA-03 | 待验证 | 多学籍切换、真实学期排名、账号隔离成绩/考试缓存；空闲教室默认全楼栋与日期约束 | Rust 多学籍/排名解析、Swift 成绩/考试/空教室单测与全状态 UI |
+| CARD-01、INFO-03、CONTENT-03 | 待验证 | 二维码显示时亮度提升并恢复；首页天气开关；学习资料流式临时文件落盘与系统分享 | Simulator 构建、现有服务契约/缓存测试、Release device 构建 |
+| SYS-01、SYS-02 | 待验证 | Widget 随跨周时间线推进课程与周次；未来三周通知重排；前台/时区变化维护；ActivityKit 锁屏与灵动岛实现 | 跨周 Widget/提醒单测、Widget Extension 编译、IPA/Archive 扩展检查 |
+
+外部支付网关仍然是唯一不能由客户端代码闭环的产品阻断；生产支付目录不再回退演示数据，待 D-005 解除后再做真实扣款和对账验收。
+
 ## 9. 平台差异与已知 Android 缺口
 
 | 项目 | Android 现状 | iOS 迁移决策 |
 | --- | --- | --- |
 | 首登流程 | `Setup.kt` 的登录路由已注释但仍导航，主登录当前直接进入 Home，`Info.kt` 非正常必经链路 | Root 使用单一版本化协议 gate；必要说明确认后才进入 App Shell；拒绝保持在当前页，设置中可再次查看和撤回，不翻译遗留导航 |
 | 首启商业弹窗 | Android 将“商业合作”与两份必要说明同等处理，拒绝即退出 | iOS 将其作为自愿阅读的社区说明，不保存强制同意，也不阻塞核心功能 |
+| 返回导航 | Android 使用 Compose 顶栏与系统返回分发 | iOS 详情页保留 Android 同款内容布局，同时恢复 `UINavigationController` 原生导航栏与系统返回按钮；不自定义转场 delegate，仅启用系统拥有的左边缘 `interactivePopGestureRecognizer`，iOS 26+ 同时启用由 UIKit 协调滚动/横向手势冲突的 `interactiveContentPopGestureRecognizer` |
 | 首启声明/隐私正文 | Android 固定 SHA 的正文含“不会收集/存储”“未实现上传”等绝对陈述，与 iOS 已实现的校园请求、天气网络查询及未来真实数据处理范围不完全相符 | 对话框几何、标题、控件完全对齐；正文按 D-009 使用与实际处理一致的开发期说明，不复制失真陈述。AUTH-01 功能/UI 验收不再被阻塞，正式法律文本仍是 P7 发布门槛 |
 | 首启转场残影 | Android 自动截图中活动弹窗后方可见上一层非活动弹窗的淡化残影 | 只对齐活动弹窗的内容、几何与遮罩；不复制非活动层未及时移除的转场缺陷 |
 | 密码与会话 | 密码、Rust Cookie、业务数据会进入 MMKV/Rust KV；Cookie 另有持久化副本 | `CredentialStore` / `CampusSessionStore` 将密码与 Cookie 限定到 ThisDeviceOnly Keychain 并按学号隔离；Rust `persist_session=0` 明确禁止 Cookie 写入 GuiXu，初始化时先清空旧内存 Cookie 再加载 Keychain seed；GuiXu 只保存非敏感业务缓存 |
@@ -463,3 +479,4 @@ iOS/
 | 2026-07-15 | CORE-004 | 完成 Apple 侧 Rust SDK/GuiXu 持久化：新增 C ABI 初始化与 KV 增删查清、结构化错误/panic 边界、登录/续期写回；Swift 业务缓存接入 GuiXu，按默认/文件域分 box、物理键哈希、账号隔离、旧 UserDefaults/文件缓存一次迁移和清理。Cookie 仍只在 ThisDeviceOnly Keychain，Apple 模式禁止写 GuiXu | Rust SDK 5 项、固定 GuiXu 5 项本地通过；CI `29366676954` 的 117 单测（含 2 项真实 FFI/迁移）、4 UI 全绿；IPA `29366676886`、Archive `29366676870` 成功 | SDK `e826156`；iOS `edfd219` |
 | 2026-07-15 | PREF-005 | 按用户显式要求补回设置首页可见 `Debug` 行，并保留 Android 连续点击 App 卡片 8 次的兼容入口；UI 测试改走可发现入口 | CI `29366676954` 中 `settings.debug` → `operations.debug.screen` 路径及第 33 屏截图通过，并已目视复核 | `edfd219` |
 | 2026-07-15 | UI-005 | 修复小工具“失物招领”和设置“意见反馈”的无效 SF Symbols：前者按 Android 原图分层组合包与问号，后者使用有效的感叹号气泡；新增共享符号清单、系统可用性单测与反馈入口 UI 断言 | CI `29369377322`：118 单测 + 4 UI 全绿，54 张 PNG 无失败附件；`06-tools` 目视通过；IPA `29369377575`、Archive `29369377896` 成功，证据见 `E-20260715-03` | `53cb7fd` |
+| 2026-07-15 | AUDIT-001 | 对固定 Android 基线重新执行功能/路由/数据/平台完整复查并实现候选修复：原生导航和双返回手势、完整 Debug、自动续期与离线会话、真实下学期、多学籍排名、账号隔离缓存、首页拖放、跨周 Widget/提醒、Live Activity、主题/反馈/更新/许可证、流式下载分享和 AppIcon | Windows `git diff --check` 通过；SDK `cargo test` 7/7、`cargo check --features server` 通过；iOS macOS CI、IPA、Archive 待候选提交推送后运行 | SDK `1177864`；iOS 待回填 |

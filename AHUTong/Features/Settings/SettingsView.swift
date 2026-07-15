@@ -7,6 +7,9 @@ struct SettingsView: View {
     @ObservedObject var appModel: AppModel
     @State private var showClearConfirmation = false
     @State private var showUpdateLog = false
+    @State private var updateResult: AppUpdateResult?
+    @State private var isCheckingUpdate = false
+    @State private var feedbackMessage: String?
     @State private var debugTapCount = 0
     @State private var lastDebugTap = Date.distantPast
     @State private var showsDebug = false
@@ -40,21 +43,34 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.contributors")
                         NavigationLink {
-                            OperationsDiagnosticsView(userID: currentUser?.studentID).androidDetailScreen()
+                            OperationsDiagnosticsView(userID: currentUser?.studentID, appModel: appModel).androidDetailScreen()
                         } label: {
                             AndroidSettingRow(label: "Debug", systemImage: "terminal")
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.debug")
                         AndroidSettingButton(label: "意见反馈", systemImage: AndroidParitySymbol.feedback) {
-                            openURL(URL(string: "https://github.com/OpenAHU/AHUTong-iOS/issues")!)
+                            let url = URL(string: "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=1006203134&card_type=group&source=qrcode")!
+                            openURL(url) { accepted in
+                                if !accepted { feedbackMessage = "请安装 QQ 后重试，或手动加入反馈群：1006203134" }
+                            }
                         }
                         .accessibilityIdentifier("settings.feedback")
                         AndroidSettingButton(label: "清除缓存", systemImage: "line.3.horizontal.decrease.circle") {
                             showClearConfirmation = true
                         }
                         AndroidSettingButton(label: "检查更新", systemImage: "arrow.triangle.2.circlepath") {
-                            showUpdateLog = true
+                            guard !isCheckingUpdate else { return }
+                            isCheckingUpdate = true
+                            Task {
+                                defer { isCheckingUpdate = false }
+                                do {
+                                    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+                                    updateResult = try await AppUpdateChecker().check(currentVersion: version)
+                                } catch {
+                                    updateResult = AppUpdateResult(message: "检查更新失败：\(error.localizedDescription)", destination: nil)
+                                }
+                            }
                         }
                         AndroidSettingButton(label: "更新说明", systemImage: "doc.text") { showUpdateLog = true }
                     }
@@ -78,8 +94,23 @@ struct SettingsView: View {
         } message: {
             Text("测试版本由 GitHub Actions 构建；七天签名到期后需要重新签名安装。")
         }
+        .alert("检查更新", isPresented: Binding(
+            get: { updateResult != nil },
+            set: { if !$0 { updateResult = nil } }
+        )) {
+            if let destination = updateResult?.destination {
+                Button("查看") { openURL(destination) }
+            }
+            Button("知道了", role: .cancel) { updateResult = nil }
+        } message: { Text(updateResult?.message ?? "") }
+        .alert("意见反馈", isPresented: Binding(
+            get: { feedbackMessage != nil },
+            set: { if !$0 { feedbackMessage = nil } }
+        )) {
+            Button("知道了", role: .cancel) { feedbackMessage = nil }
+        } message: { Text(feedbackMessage ?? "") }
         .navigationDestination(isPresented: $showsDebug) {
-            OperationsDiagnosticsView(userID: currentUser?.studentID).androidDetailScreen()
+            OperationsDiagnosticsView(userID: currentUser?.studentID, appModel: appModel).androidDetailScreen()
         }
     }
 
@@ -191,9 +222,10 @@ final class PreferencesModel: ObservableObject {
     @Published var errorMessage: String?
     private let api: any CampusCoreAPI
     private let reminder = CourseReminderCoordinator()
+    private let liveActivity = CourseLiveActivityCoordinator()
     private let demo: Bool
 
-    init(api: any CampusCoreAPI, demo: Bool = ProcessInfo.processInfo.arguments.contains("--demo-session")) {
+    init(api: any CampusCoreAPI, demo: Bool = AppRuntime.isDemoSession) {
         self.api = api
         self.demo = demo
     }
@@ -218,12 +250,33 @@ final class PreferencesModel: ObservableObject {
             return false
         }
     }
+
+    func setLiveActivity(_ enabled: Bool) async -> Bool {
+        if demo { return enabled }
+        do {
+            async let courses = api.schedule()
+            async let week = api.currentWeek()
+            let (loadedCourses, loadedWeek) = try await (courses, week)
+            let result = try await liveActivity.setEnabled(
+                enabled,
+                courses: loadedCourses,
+                currentWeek: loadedWeek
+            )
+            if enabled && !result { errorMessage = "系统未允许实时活动，或未来两周暂无课程" }
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
 }
 
 private struct AndroidPreferencesView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
     @StateObject private var model: PreferencesModel
     @AppStorage("notifications.course-reminders") private var reminders = false
+    @AppStorage("notifications.live-activity") private var liveActivity = false
     @AppStorage("visual.liquid-glass") private var liquidGlass = true
     @AppStorage("theme.color") private var themeColor = "blue"
     @State private var showsIslandExplanation = false
@@ -263,10 +316,18 @@ private struct AndroidPreferencesView: View {
                         preferenceRow(
                             title: "课前倒计时岛卡提醒（实验性）",
                             detail: "仅部分系统支持 需同时开启课前提醒",
-                            isOn: false,
+                            isOn: liveActivity,
                             identifier: "preferences.island-reminder"
-                        ) { showsIslandExplanation = true }
-                        Button("管理系统岛卡权限") { showsIslandExplanation = true }
+                        ) {
+                            guard reminders || liveActivity else {
+                                model.errorMessage = "请先开启课前提醒"
+                                return
+                            }
+                            Task { liveActivity = await model.setLiveActivity(!liveActivity) }
+                        }
+                        Button("管理系统实时活动权限") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                        }
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .buttonStyle(.plain)
                             .foregroundStyle(AndroidThemeColor.color(for: themeColor))
@@ -300,7 +361,7 @@ private struct AndroidPreferencesView: View {
         .alert("iOS 平台说明", isPresented: $showsIslandExplanation) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("岛卡是 Android 系统能力，iOS 暂不提供对应权限入口；课前普通通知仍可正常使用。")
+            Text("iOS 使用 Live Activity 在锁定屏幕和灵动岛显示下一节课倒计时。可在“设置 → 安大通 → 实时活动”中管理系统权限。")
         }
         .alert("自定义主题颜色", isPresented: $showsCustomColor) {
             TextField("#FF007FAC", text: $customColor)
@@ -413,22 +474,63 @@ private struct AndroidPreferenceToggle: View {
 }
 
 private struct ThirdPartyLicensesView: View {
+    @Environment(\.colorScheme) private var colorScheme
     private let entries = [
-        ("AHUTong SDK", "OpenAHU/AHUTong-sdk @ e826156", "项目许可证与源码见固定子模块"),
-        ("GuiXu", "Yukon163/GuiXu @ 2481ab3", "Apache License 2.0"),
-        ("Rust crates", "Cargo.lock 固定依赖", "MIT / Apache-2.0 等，逐项版本见 Vendor/sdk/Cargo.lock")
+        LicenseEntry(name: "AndroidX", author: "Google", url: "https://source.android.com", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "Material", author: "Google", url: "https://source.android.com", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "Gson", author: "Google", url: "https://github.com/google/gson", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "OkHttp", author: "Square", url: "https://github.com/square/okhttp", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "Retrofit", author: "Square", url: "https://github.com/square/retrofit", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "Jsoup", author: "jsoup.org", url: "https://jsoup.org/", license: "MIT License"),
+        LicenseEntry(name: "MMKV", author: "Tencent", url: "https://github.com/Tencent/MMKV", license: "BSD 3-Clause License"),
+        LicenseEntry(name: "Coil", author: "Coil Contributors", url: "https://github.com/coil-kt/coil", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "PersistentCookieJar", author: "Fran Montiel", url: "https://github.com/franmontiel/PersistentCookieJar", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "ZXing Android Embedded", author: "JourneyApps", url: "https://github.com/journeyapps/zxing-android-embedded", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "Monet", author: "Kyant0", url: "https://github.com/Kyant0/Monet", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "Backdrop", author: "Kyant0", url: "https://github.com/Kyant0/AndroidLiquidGlass", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "Capsule", author: "Kyant0", url: "https://github.com/Kyant0/Capsule", license: "Apache Software License 2.0"),
+        LicenseEntry(name: "AHUTong SDK / GuiXu / Rust crates", author: "OpenAHU 与各 crate 作者", url: "https://github.com/OpenAHU/AHUTong-sdk", license: "版本与许可证由 Cargo.lock 固定")
     ]
     var body: some View {
         AndroidScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     AndroidHeader(title: "开源许可证", large: true)
-                    ForEach(entries, id: \.0) { entry in
-                        VStack(alignment: .leading, spacing: 5) { Text(entry.0).font(.headline); Text(entry.1); Text(entry.2).font(.caption).foregroundStyle(.secondary) }
-                            .padding(.horizontal, 24)
+                    ForEach(entries) { entry in
+                        Link(destination: entry.url) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(entry.name).font(.headline).foregroundStyle(.primary)
+                                    Text(entry.author).foregroundStyle(.primary)
+                                    Text(entry.license).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square").foregroundStyle(AndroidParityPalette.systemTheme)
+                            }
+                            .padding(16)
+                            .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
                     }
                 }
             }
+        }
+    }
+
+    private struct LicenseEntry: Identifiable {
+        let name: String
+        let author: String
+        let url: URL
+        let license: String
+
+        var id: String { name }
+
+        init(name: String, author: String, url: String, license: String) {
+            self.name = name
+            self.author = author
+            self.url = URL(string: url)!
+            self.license = license
         }
     }
 }
@@ -580,14 +682,19 @@ private struct ContributorsView: View {
     }
 }
 
-private enum AppDataCleaner {
+enum AppDataCleaner {
     static func clearCaches() async {
         await AppPersistence.clearCaches()
         if let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
             try? FileManager.default.removeItem(at: support.appendingPathComponent("AHUTong/Cache", isDirectory: true))
+            try? FileManager.default.removeItem(at: support.appendingPathComponent("AHUTong/Repository", isDirectory: true))
+            try? FileManager.default.removeItem(at: support.appendingPathComponent("AHUTong/schedule-widget.json"))
         }
-        ["home.widget-layout", "schedule.show-all", "schedule.preview-next", "home.default-payment-code", "notifications.course-reminders"].forEach {
-            UserDefaults.standard.removeObject(forKey: $0)
+        let exact = ["home.widget-layout", "schedule.show-all", "schedule.preview-next", "home.default-payment-code", "notifications.course-reminders", "notifications.live-activity"]
+        let prefixes = ["campus-card.balance.", "payments.pending-order.", DebugRuntimeSettings.endpointKeyPrefix]
+        for key in UserDefaults.standard.dictionaryRepresentation().keys where exact.contains(key) || prefixes.contains(where: key.hasPrefix) {
+            UserDefaults.standard.removeObject(forKey: key)
         }
+        try? await ScheduleWidgetSnapshotStore.shared.save(.unavailable(.signedOut))
     }
 }

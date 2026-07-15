@@ -24,6 +24,12 @@ final class WeatherViewModel: ObservableObject {
     func start() async {
         preferences = await preferencesStore.load()
         guard case .idle = state else { return }
+        if AppRuntime.isDemoSession, let response = DebugRuntimeSettings.decode("weather", as: WeatherResponse.self) {
+            state = response.isMeaningful
+                ? .loaded(WeatherSnapshot(response: response, source: .remote, updatedAt: DemoDataState.referenceDate))
+                : .empty
+            return
+        }
         await load(query: .ip)
     }
 

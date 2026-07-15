@@ -1,11 +1,15 @@
 import SwiftUI
 
 enum AndroidParityPalette {
-    static let brand = Color(red: 0 / 255, green: 127 / 255, blue: 172 / 255)
-    static let accent = Color(red: 0 / 255, green: 136 / 255, blue: 255 / 255)
-    static let systemTheme = Color(red: 103 / 255, green: 80 / 255, blue: 164 / 255)
-    static let primaryTone90 = Color(red: 234 / 255, green: 221 / 255, blue: 255 / 255)
-    static let primaryTone80 = Color(red: 208 / 255, green: 188 / 255, blue: 255 / 255)
+    private static var selectedTheme: Color {
+        AndroidThemeColor.color(for: UserDefaults.standard.string(forKey: "theme.color") ?? "default")
+    }
+
+    static var brand: Color { selectedTheme }
+    static var accent: Color { selectedTheme }
+    static var systemTheme: Color { selectedTheme }
+    static var primaryTone90: Color { selectedTheme.opacity(0.18) }
+    static var primaryTone80: Color { selectedTheme.opacity(0.3) }
     static let liquidToggle = Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255)
     static let folder = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)
     static let success = Color(red: 76 / 255, green: 175 / 255, blue: 80 / 255)
@@ -31,9 +35,7 @@ enum AndroidParityPalette {
     }
 
     static func primaryContainer(_ scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color(red: 35 / 255, green: 68 / 255, blue: 82 / 255)
-            : Color(red: 216 / 255, green: 224 / 255, blue: 255 / 255)
+        selectedTheme.opacity(scheme == .dark ? 0.28 : 0.16)
     }
 
     static func secondaryText(_ scheme: ColorScheme) -> Color {
@@ -82,8 +84,7 @@ enum AndroidThemeColor {
     ]
 
     static func color(for value: String) -> Color {
-        if value == "default" { return AndroidParityPalette.systemTheme }
-        if value == "blue" { return AndroidParityPalette.brand }
+        if value == "default" || value == "blue" { return Color(red: 103 / 255, green: 80 / 255, blue: 164 / 255) }
         if value == "green" { return .green }
         if value == "purple" { return .purple }
         if value == "orange" { return .orange }
@@ -362,7 +363,11 @@ struct LiquidGlassBottomBar: View {
 private struct AndroidDetailScreenModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(false)
+            .toolbar(.visible, for: .navigationBar)
+            .background(NativeNavigationGestureBridge())
             .preference(key: AndroidDetailVisibilityKey.self, value: true)
     }
 }

@@ -31,6 +31,10 @@ final class HomeWidgetLayoutTests: XCTestCase {
         layout.remove(at: 2)
         XCTAssertNil(layout.slots[2])
         XCTAssertEqual(layout.slots.compactMap { $0 }.count, Set(layout.slots.compactMap { $0 }).count)
+
+        layout.place("weather", at: 5)
+        XCTAssertNil(layout.slots[1])
+        XCTAssertEqual(layout.slots[5], "weather")
     }
 
     @MainActor

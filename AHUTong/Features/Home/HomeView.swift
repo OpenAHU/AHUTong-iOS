@@ -49,6 +49,16 @@ struct HomeWidgetLayout: Codable, Equatable, Sendable {
         guard slots.indices.contains(source), slots.indices.contains(destination) else { return }
         slots.swapAt(source, destination)
     }
+
+    mutating func place(_ id: String, at destination: Int) {
+        guard slots.indices.contains(destination),
+              HomeWidgetSpec.all.contains(where: { $0.id == id }) else { return }
+        if let source = slots.firstIndex(where: { $0 == id }) {
+            move(from: source, to: destination)
+        } else if slots[destination] == nil {
+            slots[destination] = id
+        }
+    }
 }
 
 struct HomeCourseSummary: Equatable {
@@ -132,8 +142,7 @@ final class HomeViewModel: ObservableObject {
             referenceDate = DemoDataState.referenceDate
             return
         }
-        let year = Calendar.current.component(.year, from: Date())
-        let semester = Semester(schoolYear: "\(year)-\(year + 1)", term: "1")!
+        let semester = Semester.current()
         do {
             async let snapshot = repository.load(semester: semester)
             async let week = api.currentWeek()
@@ -164,19 +173,29 @@ struct HomeView: View {
     @State private var layout: HomeWidgetLayout
     @State private var isEditing = false
     @AppStorage("home.request-edit") private var requestEdit = false
+    @AppStorage("weather.show-on-home") private var showWeatherOnHome = true
     @State private var showsCardRecharge = false
     private let appModel: AppModel
+    private let layoutStore: JSONStore<HomeWidgetLayout>
+    private let onOpenSchedule: () -> Void
+    private let homeEditEnabled: Bool
 
-    init(appModel: AppModel) {
+    init(
+        appModel: AppModel,
+        homeEditEnabled: Bool = true,
+        onOpenSchedule: @escaping () -> Void = {}
+    ) {
         self.appModel = appModel
+        self.homeEditEnabled = homeEditEnabled
+        self.onOpenSchedule = onOpenSchedule
         let userID: String
         if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = "guest" }
         _model = StateObject(wrappedValue: HomeViewModel(api: appModel.campusAPI, userID: userID))
-        let stored = UserDefaults.standard.integer(forKey: "home.widget-layout-version") == 2
-            ? UserDefaults.standard.data(forKey: "home.widget-layout")
-                .flatMap { try? JSONDecoder().decode(HomeWidgetLayout.self, from: $0) }
-            : nil
-        _layout = State(initialValue: stored ?? HomeWidgetLayout())
+        layoutStore = JSONStore(
+            store: UserScopedStore(store: AppPersistence.migratingDefaults(), userID: userID),
+            key: "home.widget-layout.v2"
+        )
+        _layout = State(initialValue: HomeWidgetLayout())
     }
 
     var body: some View {
@@ -185,7 +204,7 @@ struct HomeView: View {
                 LazyVStack(spacing: 24) {
                     atAGlance
                     if !model.todayCourses.isEmpty { todayCourseList }
-                    if case let .loaded(snapshot) = weatherModel.state {
+                    if showWeatherOnHome, case let .loaded(snapshot) = weatherModel.state {
                         NavigationLink { WeatherView().androidDetailScreen() } label: {
                             HomeWeatherCard(weather: snapshot.response)
                         }
@@ -197,7 +216,7 @@ struct HomeView: View {
                 .padding(.bottom, isEditing ? 420 : 96)
             }
             .scrollIndicators(.hidden)
-            .onLongPressGesture { isEditing = true }
+            .onLongPressGesture { if homeEditEnabled { isEditing = true } }
             .overlay(alignment: .bottom) {
                 if isEditing { widgetLibrary }
             }
@@ -206,18 +225,16 @@ struct HomeView: View {
             CardRechargeView(appModel: appModel).androidDetailScreen()
         }
         .task {
-            async let schedule: Void = model.load(demo: ProcessInfo.processInfo.arguments.contains("--demo-session"))
+            await loadLayout()
+            async let schedule: Void = model.load(demo: AppRuntime.isDemoSession)
             async let weather: Void = weatherModel.start()
             _ = await (schedule, weather)
         }
         .onChange(of: layout) { _, newValue in
-            if let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: "home.widget-layout")
-                UserDefaults.standard.set(2, forKey: "home.widget-layout-version")
-            }
+            Task { try? await layoutStore.save(newValue) }
         }
         .onAppear {
-            if requestEdit {
+            if requestEdit && homeEditEnabled {
                 isEditing = true
                 requestEdit = false
             }
@@ -225,7 +242,8 @@ struct HomeView: View {
     }
 
     private var atAGlance: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        Button(action: onOpenSchedule) {
+            VStack(alignment: .leading, spacing: 32) {
             Text(Self.dateFormatter.string(from: model.referenceDate))
                 .font(.body)
                 .padding(.leading, 32)
@@ -245,12 +263,16 @@ struct HomeView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 32)
+            }
         }
+        .buttonStyle(.plain)
+        .accessibilityHint("打开完整课表")
     }
 
     @ViewBuilder
     private var todayCourseList: some View {
-        AndroidCard(radius: 32, background: AndroidParityPalette.surface(colorScheme)) {
+        Button(action: onOpenSchedule) {
+            AndroidCard(radius: 32, background: AndroidParityPalette.surface(colorScheme)) {
             VStack(alignment: .leading, spacing: 16) {
                 if model.todayCourses.isEmpty {
                     Text("今天暂无课程").font(.headline)
@@ -278,7 +300,9 @@ struct HomeView: View {
                 }
             }
             .padding(16)
+            }
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 16)
         .accessibilityIdentifier("home.today-courses")
     }
@@ -318,7 +342,7 @@ struct HomeView: View {
             Group {
                 if spec.id == "bathroom" {
                     NavigationLink {
-                        BathroomPaymentView().androidDetailScreen()
+                        BathroomPaymentView(appModel: appModel).androidDetailScreen()
                     } label: {
                         HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
                     }
@@ -326,7 +350,7 @@ struct HomeView: View {
                     .accessibilityIdentifier("home.payment.bathroom")
                 } else if spec.id == "electricity" {
                     NavigationLink {
-                        ElectricityPaymentView().androidDetailScreen()
+                        ElectricityPaymentView(appModel: appModel).androidDetailScreen()
                     } label: {
                         HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
                     }
@@ -339,6 +363,12 @@ struct HomeView: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .draggable(spec.id)
+            .dropDestination(for: String.self) { items, _ in
+                guard let id = items.first else { return false }
+                layout.place(id, at: index)
+                return true
+            }
             .contextMenu {
                 if isEditing { Button("移除", role: .destructive) { layout.remove(at: index) } }
             }
@@ -351,6 +381,11 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .dropDestination(for: String.self) { items, _ in
+                guard let id = items.first else { return false }
+                layout.place(id, at: index)
+                return true
+            }
             .accessibilityLabel("空白小工具槽位 \(index + 1)")
         }
     }
@@ -360,7 +395,7 @@ struct HomeView: View {
         return "guest"
     }
 
-    private var demo: Bool { ProcessInfo.processInfo.arguments.contains("--demo-session") }
+    private var demo: Bool { AppRuntime.isDemoSession }
 
     private var widgetLibrary: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -379,6 +414,7 @@ struct HomeView: View {
                     ForEach(HomeWidgetSpec.all.filter { !layout.slots.contains($0.id) }) { spec in
                         Button { layout.add(spec.id) } label: { HomeWidgetCard(spec: spec, compact: true) }
                             .buttonStyle(.plain)
+                            .draggable(spec.id)
                     }
                 }
             }
@@ -400,7 +436,25 @@ struct HomeView: View {
         case "school_calendar": NavigationLink { SchoolCalendarView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
         case "weather": NavigationLink { WeatherView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
         case "repository": NavigationLink { StudyRepositoryView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
+        case "free_classroom": NavigationLink { FreeClassroomView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
+        case "lost_found": NavigationLink { LostFoundView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
         default: label()
+        }
+    }
+
+    private func loadLayout() async {
+        if let stored = try? await layoutStore.load() {
+            layout = stored
+            return
+        }
+        let defaults = UserDefaults.standard
+        if defaults.integer(forKey: "home.widget-layout-version") == 2,
+           let data = defaults.data(forKey: "home.widget-layout"),
+           let legacy = try? JSONDecoder().decode(HomeWidgetLayout.self, from: data) {
+            layout = legacy
+            try? await layoutStore.save(legacy)
+            defaults.removeObject(forKey: "home.widget-layout")
+            defaults.removeObject(forKey: "home.widget-layout-version")
         }
     }
 

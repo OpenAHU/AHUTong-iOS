@@ -60,4 +60,20 @@ struct Semester: Codable, Equatable, Hashable, Sendable {
         }
         return nil
     }
+
+    static func current(date: Date = Date(), calendar: Calendar = .current) -> Semester {
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        let startYear = month < 9 ? year - 1 : year
+        let term = (2...8).contains(month) ? "2" : "1"
+        return Semester(schoolYear: "\(startYear)-\(startYear + 1)", term: term)!
+    }
+
+    var next: Semester {
+        if term == "1" {
+            return Semester(schoolYear: schoolYear, term: "2")!
+        }
+        let start = Int(schoolYear.split(separator: "-")[0]) ?? 0
+        return Semester(schoolYear: "\(start + 1)-\(start + 2)", term: "1")!
+    }
 }

@@ -14,6 +14,7 @@ struct ScheduleWidgetCourse: Codable, Identifiable, Equatable, Sendable {
     let endPeriod: Int
     let name: String
     let location: String
+    let weekIndexes: [Int]?
 }
 
 struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
@@ -21,26 +22,50 @@ struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
     let currentWeek: Int
     let updatedAt: Date
     let courses: [ScheduleWidgetCourse]
+    let allCourses: [ScheduleWidgetCourse]?
 
     static func make(courses: [Course], currentWeek: Int, updatedAt: Date = Date()) -> Self {
-        let values = courses
-            .filter { $0.occurs(inWeek: currentWeek) }
-            .map {
+        let values = courses.map {
                 ScheduleWidgetCourse(
                     id: $0.id,
                     weekday: $0.weekday,
                     startPeriod: $0.startPeriod,
                     endPeriod: $0.endPeriod,
                     name: $0.name,
-                    location: $0.location
+                    location: $0.location,
+                    weekIndexes: $0.weekIndexes
                 )
             }
             .sorted { ($0.weekday, $0.startPeriod, $0.name) < ($1.weekday, $1.startPeriod, $1.name) }
-        return Self(status: values.isEmpty ? .empty : .ready, currentWeek: currentWeek, updatedAt: updatedAt, courses: values)
+        let snapshot = Self(
+            status: values.isEmpty ? .empty : .ready,
+            currentWeek: currentWeek,
+            updatedAt: updatedAt,
+            courses: values,
+            allCourses: values
+        )
+        return snapshot.resolved(at: updatedAt)
     }
 
     static func unavailable(_ status: ScheduleWidgetStatus, updatedAt: Date = Date()) -> Self {
-        Self(status: status, currentWeek: 1, updatedAt: updatedAt, courses: [])
+        Self(status: status, currentWeek: 1, updatedAt: updatedAt, courses: [], allCourses: [])
+    }
+
+    func resolved(at date: Date, calendar: Calendar = .current) -> Self {
+        guard status == .ready || status == .empty else { return self }
+        let sourceStart = calendar.dateInterval(of: .weekOfYear, for: updatedAt)?.start ?? updatedAt
+        let targetStart = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
+        let offset = calendar.dateComponents([.weekOfYear], from: sourceStart, to: targetStart).weekOfYear ?? 0
+        let week = max(1, min(20, currentWeek + offset))
+        let source = allCourses ?? courses
+        let active = source.filter { ($0.weekIndexes ?? [currentWeek]).contains(week) }
+        return Self(
+            status: active.isEmpty ? .empty : .ready,
+            currentWeek: week,
+            updatedAt: updatedAt,
+            courses: active,
+            allCourses: source
+        )
     }
 }
 

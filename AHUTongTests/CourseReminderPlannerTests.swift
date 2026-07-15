@@ -14,7 +14,7 @@ final class CourseReminderPlannerTests: XCTestCase {
 
         let requests = CourseReminderPlanner().requests(courses: [course], currentWeek: 2, now: now, calendar: calendar)
 
-        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.count, 3)
         XCTAssertEqual(calendar.component(.hour, from: requests[0].date), 7)
         XCTAssertEqual(calendar.component(.minute, from: requests[0].date), 50)
         XCTAssertEqual(requests[0].body, "高等数学 · 博学南楼101")
@@ -42,7 +42,7 @@ final class CourseReminderPlannerTests: XCTestCase {
         let replacements = await scheduler.replacements()
         XCTAssertTrue(enabled)
         XCTAssertEqual(authorizationRequests, 1)
-        XCTAssertEqual(replacements.first?.count, 1)
+        XCTAssertEqual(replacements.first?.count, 3)
     }
 
     func testCoordinatorDoesNotScheduleWhenPermissionIsDenied() async throws {
@@ -52,6 +52,19 @@ final class CourseReminderPlannerTests: XCTestCase {
         let replacements = await scheduler.replacements()
         XCTAssertFalse(enabled)
         XCTAssertTrue(replacements.isEmpty)
+    }
+
+    func testPlansAcrossTheFollowingWeeks() {
+        let requests = CourseReminderPlanner().requests(
+            courses: [course()],
+            currentWeek: 1,
+            now: date(year: 2026, month: 7, day: 13, hour: 7),
+            calendar: calendar()
+        )
+        XCTAssertEqual(
+            Set(requests.map { $0.identifier.split(separator: ".")[1] }),
+            Set<Substring>(["1", "2", "3"])
+        )
     }
 
     func testCoordinatorDisablingClearsOnlyManagedReminderSet() async throws {

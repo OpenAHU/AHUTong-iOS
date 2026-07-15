@@ -22,13 +22,21 @@ final class LostFoundViewModel: ObservableObject {
     let currentUserID: String
     private let remote: any LostFoundRemote
     private let demo: Bool
+    private let catalogCache: JSONStore<LostFoundCatalog>
+    private let itemCache: UserScopedStore
     private var currentPage = 1
     private let pageSize = 20
 
     init(appModel: AppModel) {
-        demo = ProcessInfo.processInfo.arguments.contains("--demo-session")
+        demo = AppRuntime.isDemoSession
         remote = demo ? DemoLostFoundRemote() : CampusLostFoundRemote(campusAPI: appModel.campusAPI)
         if case let .authenticated(user) = appModel.sessionState { currentUserID = user.studentID } else { currentUserID = "" }
+        let scoped = UserScopedStore(
+            store: AppPersistence.migratingFileCache(),
+            userID: currentUserID.isEmpty ? "demo" : currentUserID
+        )
+        itemCache = scoped
+        catalogCache = JSONStore(store: scoped, key: "lost-found.catalog.v1")
     }
 
     var filteredItems: [LostFoundItem] {
@@ -56,16 +64,23 @@ final class LostFoundViewModel: ObservableObject {
             case .normal: break
             }
         }
+        let itemsStore = JSONStore<[LostFoundItem]>(store: itemCache, key: "lost-found.items.\(currentState).v1")
+        let cachedCatalog = try? await catalogCache.load()
+        let cachedItems = try? await itemsStore.load()
+        if let cachedCatalog { catalog = cachedCatalog }
+        if let cachedItems { state = cachedItems.isEmpty ? .empty : .loaded(cachedItems) }
         do {
             async let loadedCatalog = remote.catalog()
             async let loadedPage = remote.page(state: currentState, page: 1, size: pageSize)
             let (catalogValue, pageValue) = try await (loadedCatalog, loadedPage)
             catalog = catalogValue
+            try await catalogCache.save(catalogValue)
+            try await itemsStore.save(pageValue.list)
             currentPage = 1
             hasMore = pageValue.pageNum < pageValue.pages
             state = pageValue.list.isEmpty ? .empty : .loaded(pageValue.list)
         } catch {
-            state = .failed(AppErrorState(message: error.localizedDescription))
+            if cachedItems == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
         }
     }
 
@@ -87,7 +102,12 @@ final class LostFoundViewModel: ObservableObject {
             currentPage = page.pageNum
             hasMore = page.pageNum < page.pages
             let ids = Set(existing.map(\.id))
-            state = .loaded(existing + page.list.filter { !ids.contains($0.id) })
+            let combined = existing + page.list.filter { !ids.contains($0.id) }
+            state = .loaded(combined)
+            try await JSONStore<[LostFoundItem]>(
+                store: itemCache,
+                key: "lost-found.items.\(currentState).v1"
+            ).save(combined)
         } catch {
             mutation = .failed(error.localizedDescription)
         }
@@ -373,6 +393,7 @@ struct LostFoundView: View {
 
 private struct LostFoundDetailView: View {
     let item: LostFoundItem
+    @State private var selectedImageIndex: Int?
 
     var body: some View {
         AndroidScreen {
@@ -392,11 +413,16 @@ private struct LostFoundDetailView: View {
                         ScrollView(.horizontal) {
                             HStack {
                                 ForEach(item.imgs) { image in
-                                    AsyncImage(url: imageURL(image.imgPath)) { image in
-                                        image.resizable().scaledToFill()
-                                    } placeholder: { ProgressView() }
-                                    .frame(width: 180, height: 180)
-                                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                    Button {
+                                        selectedImageIndex = item.imgs.firstIndex(where: { $0.id == image.id })
+                                    } label: {
+                                        AsyncImage(url: imageURL(image.imgPath)) { image in
+                                            image.resizable().scaledToFill()
+                                        } placeholder: { ProgressView() }
+                                        .frame(width: 180, height: 180)
+                                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -404,6 +430,22 @@ private struct LostFoundDetailView: View {
                 }
                 .padding(24)
             }
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedImageIndex != nil },
+                set: { if !$0 { selectedImageIndex = nil } }
+            )
+        ) {
+            LostFoundImageGallery(
+                images: item.imgs,
+                selectedIndex: Binding(
+                    get: { selectedImageIndex ?? 0 },
+                    set: { selectedImageIndex = $0 }
+                ),
+                imageURL: imageURL,
+                onClose: { selectedImageIndex = nil }
+            )
         }
         .accessibilityIdentifier("lost-found.detail")
     }
@@ -415,6 +457,41 @@ private struct LostFoundDetailView: View {
     private func imageURL(_ value: String) -> URL? {
         if value.hasPrefix("http") { return URL(string: value) }
         return URL(string: "https://adwmh.ahu.edu.cn\(value)")
+    }
+}
+
+private struct LostFoundImageGallery: View {
+    let images: [LostFoundImage]
+    @Binding var selectedIndex: Int
+    let imageURL: (String) -> URL?
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            TabView(selection: $selectedIndex) {
+                ForEach(Array(images.enumerated()), id: \.element.id) { index, item in
+                    AsyncImage(url: imageURL(item.imgPath)) { image in
+                        image.resizable().scaledToFit()
+                    } placeholder: {
+                        ProgressView().tint(.white)
+                    }
+                    .tag(index)
+                    .padding(.vertical, 56)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(.black.opacity(0.55), in: Circle())
+            }
+            .padding(16)
+            .accessibilityLabel("关闭图片预览")
+        }
+        .accessibilityIdentifier("lost-found.image-gallery")
     }
 }
 

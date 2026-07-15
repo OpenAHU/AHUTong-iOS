@@ -20,6 +20,17 @@ final class ScheduleWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(ScheduleWidgetSnapshot.unavailable(.expired).status, .expired)
     }
 
+    func testSnapshotAdvancesWeekWithoutOpeningTheApp() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let updated = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 13)))
+        let later = try XCTUnwrap(calendar.date(byAdding: .day, value: 7, to: updated))
+        let snapshot = ScheduleWidgetSnapshot.make(courses: [course()], currentWeek: 2, updatedAt: updated)
+        let resolved = snapshot.resolved(at: later, calendar: calendar)
+        XCTAssertEqual(resolved.currentWeek, 3)
+        XCTAssertEqual(resolved.courses.map(\.name), ["移动应用开发"])
+    }
+
     func testStoreRoundTripsSharedSnapshotAtomically() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

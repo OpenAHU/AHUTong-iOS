@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("theme.color") private var themeColor = "blue"
     @State private var selectedTab: AppTab = .home
     @State private var isDetailVisible = false
     @StateObject private var onboardingModel: OnboardingViewModel
     @StateObject private var appModel: AppModel
+    @StateObject private var grayGate = GrayFeatureGateModel()
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -56,9 +58,10 @@ struct RootView: View {
                 acceptForUITesting: ProcessInfo.processInfo.arguments.contains("--demo-consent")
             )
             async let session: Void = appModel.restore(
-                demoSession: ProcessInfo.processInfo.arguments.contains("--demo-session")
+                demoSession: AppRuntime.isDemoSession
             )
             _ = await (onboarding, session)
+            await reloadGrayGate()
         }
         .onOpenURL { url in
             guard url.scheme == "ahutong" else { return }
@@ -68,17 +71,29 @@ struct RootView: View {
             }
         }
         .tint(themeTint)
+        .onChange(of: appModel.sessionState) { _, _ in Task { await reloadGrayGate() } }
+        .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
+            Task { await reloadGrayGate() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            Task { await rescheduleCourseRemindersIfNeeded() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await rescheduleCourseRemindersIfNeeded() } }
+        }
     }
 
     @ViewBuilder
     private func destination(for tab: AppTab) -> some View {
         switch tab {
         case .home:
-            HomeView(appModel: appModel)
+            HomeView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled) {
+                selectedTab = .schedule
+            }
         case .schedule:
             ScheduleView(appModel: appModel)
         case .tools:
-            ToolsView(appModel: appModel) {
+            ToolsView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled) {
                 UserDefaults.standard.set(true, forKey: "home.request-edit")
                 selectedTab = .home
             }
@@ -89,6 +104,32 @@ struct RootView: View {
 
     private var themeTint: Color {
         AndroidThemeColor.color(for: themeColor)
+    }
+
+    private func reloadGrayGate() async {
+        let userID: String?
+        if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = nil }
+        await grayGate.load(
+            userID: userID,
+            demo: AppRuntime.isDemoSession
+        )
+    }
+
+    private func rescheduleCourseRemindersIfNeeded() async {
+        guard UserDefaults.standard.bool(forKey: "notifications.course-reminders"),
+              case .authenticated = appModel.sessionState else { return }
+        do {
+            async let courses = appModel.campusAPI.schedule()
+            async let week = appModel.campusAPI.currentWeek()
+            let (loadedCourses, loadedWeek) = try await (courses, week)
+            _ = try await CourseReminderCoordinator().setEnabled(
+                true,
+                courses: loadedCourses,
+                currentWeek: loadedWeek
+            )
+        } catch {
+            // Foreground maintenance is best-effort; existing pending requests remain valid.
+        }
     }
 }
 

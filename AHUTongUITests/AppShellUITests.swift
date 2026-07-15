@@ -277,6 +277,44 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testNativeNavigationBarEdgeAndContentPopGestures() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        app.buttons["tab.tools"].tap()
+
+        func openPhoneBook() {
+            let link = app.buttons["tools.phone-book"]
+            XCTAssertTrue(link.waitForExistence(timeout: 4))
+            link.tap()
+            XCTAssertTrue(app.buttons["搜索电话或部门"].waitForExistence(timeout: 4))
+            XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 3))
+            XCTAssertTrue(app.navigationBars.buttons.firstMatch.exists)
+        }
+
+        openPhoneBook()
+        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        leftEdge.press(
+            forDuration: 0.05,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)),
+            withVelocity: .fast,
+            thenHoldForDuration: 0
+        )
+        XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 4))
+
+        openPhoneBook()
+        let content = app.coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: 0.55))
+        content.press(
+            forDuration: 0.05,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.55)),
+            withVelocity: .fast,
+            thenHoldForDuration: 0
+        )
+        XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 4))
+    }
+
+    @MainActor
     func testAndroidParityPaymentsAndOperations() {
         let app = XCUIApplication()
         launchDemo(app)

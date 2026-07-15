@@ -94,11 +94,36 @@ final class CampusSessionStoreTests: XCTestCase {
         let clearedSession = try await sessionStore.load()
         XCTAssertNil(clearedSession)
     }
+
+    @MainActor
+    func testRestoreKeepsCachedIdentityWhenValidationIsOffline() async throws {
+        let secureStore = InMemorySecureStore()
+        let api = CampusCoreAPIStub()
+        let sessionStore = CampusSessionStore(secureStore: secureStore)
+        let snapshot = CampusSessionSnapshot(
+            user: User(name: "离线同学", studentID: "AB220001"),
+            cookiesJSON: "cached-cookie"
+        )
+        try await sessionStore.save(snapshot)
+        await api.failNextValidationWithTransportError()
+        let model = AppModel(
+            campusAPI: api,
+            sessionStore: sessionStore,
+            credentialStore: CredentialStore(secureStore: secureStore)
+        )
+
+        await model.restore()
+
+        XCTAssertEqual(model.sessionState, .authenticated(snapshot.user))
+        let persisted = try await sessionStore.load()
+        XCTAssertEqual(persisted, snapshot)
+    }
 }
 
 private actor CampusCoreAPIStub: CampusCoreAPI {
     private var cookies = ""
     private var shouldExpireNextValidation = false
+    private var shouldFailNextValidationOffline = false
     private var performedLogins = 0
     func initialize(cookiesJSON: String) { cookies = cookiesJSON }
     func login(studentID: String, password: String) -> User {
@@ -109,6 +134,10 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     func cookiesFlat() -> String { "[]" }
     func schedule() -> [Course] { [] }
     func currentWeek() throws -> Int {
+        if shouldFailNextValidationOffline {
+            shouldFailNextValidationOffline = false
+            throw URLError(.notConnectedToInternet)
+        }
         if shouldExpireNextValidation {
             shouldExpireNextValidation = false
             throw CampusCoreError.unauthorized
@@ -121,5 +150,6 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     func cardQRCode() -> String { "DEMO-QR" }
     func lastInitializedCookies() -> String { cookies }
     func expireNextValidation() { shouldExpireNextValidation = true }
+    func failNextValidationWithTransportError() { shouldFailNextValidationOffline = true }
     func loginCount() -> Int { performedLogins }
 }

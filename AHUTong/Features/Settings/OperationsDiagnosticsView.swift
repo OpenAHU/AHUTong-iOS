@@ -1,15 +1,17 @@
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class OperationsDiagnosticsModel: ObservableObject {
     @Published private(set) var states: [GrayFeatureState] = []
     @Published private(set) var diagnostics = ReleaseDiagnostics.current()
+    @Published private(set) var operationMessage: String?
 
     private let service = GrayReleaseService()
     private let userID: String?
     private let demo: Bool
 
-    init(userID: String?, demo: Bool = ProcessInfo.processInfo.arguments.contains("--demo-session")) {
+    init(userID: String?, demo: Bool = AppRuntime.isDemoSession) {
         self.userID = userID
         self.demo = demo
     }
@@ -44,6 +46,71 @@ final class OperationsDiagnosticsModel: ObservableObject {
             UserDefaults.standard.set(overrideMode.rawValue, forKey: key)
         }
         await load()
+        NotificationCenter.default.post(name: .grayFeatureOverrideChanged, object: nil)
+    }
+
+    func scheduleDebugNotification() async {
+        do {
+            let center = UNUserNotificationCenter.current()
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            guard granted else {
+                operationMessage = "通知权限未授予"
+                return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = "安大通 Debug 通知"
+            content.body = "这是一条 5 秒后触发的课前提醒测试。"
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: "debug.course-reminder.\(UUID().uuidString)",
+                content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+            )
+            try await center.add(request)
+            operationMessage = "测试通知已安排，约 5 秒后触发"
+        } catch {
+            operationMessage = error.localizedDescription
+        }
+    }
+
+    func startDebugLiveActivity() async {
+        let now = Date()
+        let calendar = Calendar.current
+        let weekdayValue = calendar.component(.weekday, from: now)
+        let todayWeekday = weekdayValue == 1 ? 7 : weekdayValue - 1
+        let minutes = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
+        let starts = [1: 480, 2: 530, 3: 590, 4: 640, 5: 690, 6: 840, 7: 890, 8: 950, 9: 1_000, 10: 1_050, 11: 1_140, 12: 1_190, 13: 1_240]
+        let laterToday = starts.sorted { $0.value < $1.value }.first { $0.value > minutes + 2 }
+        let weekday = laterToday == nil ? todayWeekday % 7 + 1 : todayWeekday
+        let startPeriod = laterToday?.key ?? 1
+        let course = Course(
+            weekday: weekday,
+            startWeek: 1,
+            endWeek: 1,
+            location: "Debug 教室",
+            name: "Live Activity 测试",
+            teacher: "",
+            duration: 1,
+            startPeriod: startPeriod,
+            courseID: "debug-live-activity",
+            weekIndexes: [1, 2]
+        )
+        do {
+            let started = try await CourseLiveActivityCoordinator().setEnabled(
+                true,
+                courses: [course],
+                currentWeek: 1,
+                now: now,
+                calendar: calendar
+            )
+            operationMessage = started ? "Live Activity 已启动" : "系统未允许实时活动"
+        } catch {
+            operationMessage = error.localizedDescription
+        }
+    }
+
+    func setOperationMessage(_ value: String?) {
+        operationMessage = value
     }
 
     private func overrideKey(_ feature: GrayFeature) -> String {
@@ -54,8 +121,16 @@ final class OperationsDiagnosticsModel: ObservableObject {
 struct OperationsDiagnosticsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: OperationsDiagnosticsModel
+    @ObservedObject private var appModel: AppModel
+    @AppStorage(DebugRuntimeSettings.mockEnabledKey) private var mockEnabled = false
+    @AppStorage(DebugRuntimeSettings.scenarioKey) private var mockScenario = DemoDataState.normal.rawValue
+    @AppStorage(DebugRuntimeSettings.timeKey) private var mockTimestamp = 0.0
+    @State private var selectedEndpoint = DebugRuntimeSettings.endpoints[0]
+    @State private var endpointJSON = "{}"
+    @State private var jsonMessage: String?
 
-    init(userID: String?) {
+    init(userID: String?, appModel: AppModel) {
+        self.appModel = appModel
         _model = StateObject(wrappedValue: OperationsDiagnosticsModel(userID: userID))
     }
 
@@ -64,6 +139,62 @@ struct OperationsDiagnosticsView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "Debug", large: true)
+
+                    debugSection(
+                        title: "Mock 数据源",
+                        subtitle: "切换后重新进入目标页面生效；支付 Mock 永远使用演示网关，不会发起真实扣款。"
+                    ) {
+                        Toggle("启用 Mock 数据源", isOn: $mockEnabled)
+                            .accessibilityIdentifier("debug.mock.enabled")
+                        Picker("场景", selection: $mockScenario) {
+                            ForEach([DemoDataState.normal, .loading, .empty, .error], id: \.rawValue) {
+                                Text($0.rawValue).tag($0.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        DatePicker(
+                            "模拟时间",
+                            selection: Binding(
+                                get: { mockTimestamp > 0 ? Date(timeIntervalSince1970: mockTimestamp) : DemoDataState.referenceDate },
+                                set: { mockTimestamp = $0.timeIntervalSince1970 }
+                            )
+                        )
+                        Button("恢复真实时间") { mockTimestamp = 0 }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.tint)
+                    }
+
+                    debugSection(
+                        title: "接口 JSON 编辑",
+                        subtitle: "保存前执行 JSON 语法校验，用于固定现场复现数据；场景诊断会显示当前端点和字节数。"
+                    ) {
+                        Picker("端点", selection: $selectedEndpoint) {
+                            ForEach(DebugRuntimeSettings.endpoints, id: \.self) { Text($0).tag($0) }
+                        }
+                        .onChange(of: selectedEndpoint) { _, value in
+                            endpointJSON = DebugRuntimeSettings.endpointJSON(value)
+                            jsonMessage = nil
+                        }
+                        TextEditor(text: $endpointJSON)
+                            .font(.system(.caption, design: .monospaced))
+                            .frame(minHeight: 150)
+                            .padding(8)
+                            .background(AndroidParityPalette.background(colorScheme), in: RoundedRectangle(cornerRadius: 12))
+                            .accessibilityIdentifier("debug.mock.json")
+                        HStack {
+                            Button("重置") {
+                                endpointJSON = "{}"
+                                UserDefaults.standard.removeObject(forKey: DebugRuntimeSettings.endpointKeyPrefix + selectedEndpoint)
+                                jsonMessage = "已重置"
+                            }
+                            Spacer()
+                            Button("校验并保存") { saveEndpointJSON() }
+                        }
+                        .buttonStyle(.plain)
+                        if let jsonMessage {
+                            Text(jsonMessage).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
 
                     debugSection(
                         title: "灰度测试",
@@ -95,11 +226,46 @@ struct OperationsDiagnosticsView: View {
                     debugSection(title: "隐私与日志") {
                         DebugStatusRow(label: "支付信息声明", value: model.diagnostics.privacy.declaresPaymentInfo ? "已声明" : "缺失")
                         DebugStatusRow(label: "第三方崩溃上报", value: model.diagnostics.thirdPartyCrashReportingEnabled ? "开启" : "未接入")
-                        DebugStatusRow(label: "敏感日志", value: "统一脱敏")
+                        DebugStatusRow(label: "敏感日志", value: "脱敏器可用；Debug 不展示凭据")
                         Text("密码、Token、Cookie、Authorization、手机号和长数字标识在进入统一日志前会被替换；支付密码只保留在当前内存流程中。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    debugSection(title: "维护") {
+                        Button("清除业务缓存") {
+                            Task {
+                                await AppDataCleaner.clearCaches()
+                                model.setOperationMessage("业务缓存已清除")
+                            }
+                        }
+                        Button("清除 Cookie 并重新认证") {
+                            Task {
+                                do {
+                                    try await appModel.campusAPI.initialize(cookiesJSON: "")
+                                    try await appModel.campusAPI.refreshSession()
+                                    model.setOperationMessage("Cookie 已刷新")
+                                } catch {
+                                    model.setOperationMessage(error.localizedDescription)
+                                }
+                            }
+                        }
+                        Button("清除 Cookie、Token 与登录状态", role: .destructive) {
+                            Task { await appModel.signOut() }
+                        }
+                    }
+
+                    debugSection(title: "通知测试") {
+                        Button("5 秒后发送普通课前提醒") {
+                            Task { await model.scheduleDebugNotification() }
+                        }
+                        Button("启动 Live Activity 测试") {
+                            Task { await model.startDebugLiveActivity() }
+                        }
+                        Text("普通通知验证权限与触发链路；Live Activity 会在锁定屏幕和支持的灵动岛设备显示。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     debugSection(title: "归档与安装") {
@@ -115,8 +281,19 @@ struct OperationsDiagnosticsView: View {
                 .padding(.bottom, 64)
             }
         }
+        .alert("Debug", isPresented: Binding(
+            get: { model.operationMessage != nil },
+            set: { if !$0 { model.setOperationMessage(nil) } }
+        )) {
+            Button("确定", role: .cancel) { model.setOperationMessage(nil) }
+        } message: {
+            Text(model.operationMessage ?? "")
+        }
         .accessibilityIdentifier("operations.debug.screen")
-        .task { await model.load() }
+        .task {
+            endpointJSON = DebugRuntimeSettings.endpointJSON(selectedEndpoint)
+            await model.load()
+        }
     }
 
     private func grayCard(_ state: GrayFeatureState) -> some View {
@@ -168,6 +345,15 @@ struct OperationsDiagnosticsView: View {
             .padding(16)
         }
         .padding(.horizontal, 16)
+    }
+
+    private func saveEndpointJSON() {
+        do {
+            try DebugRuntimeSettings.setEndpointJSON(endpointJSON, endpoint: selectedEndpoint)
+            jsonMessage = "JSON 有效，已保存（\(endpointJSON.utf8.count) bytes）"
+        } catch {
+            jsonMessage = "JSON 无效：\(error.localizedDescription)"
+        }
     }
 }
 

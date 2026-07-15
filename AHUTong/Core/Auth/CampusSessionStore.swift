@@ -62,24 +62,38 @@ final class AppModel: ObservableObject {
                 sessionState = .signedOut
                 return
             }
-            try await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
             do {
+                try await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
                 _ = try await campusAPI.currentWeek()
                 sessionState = .authenticated(snapshot.user)
-            } catch {
+            } catch CampusCoreError.credentialsUnavailable {
+                try? await sessionStore.clear()
+                sessionState = .signedOut
+            } catch CampusCoreError.unauthorized {
                 guard let credentials = try await credentialStore.credentials(for: snapshot.user.studentID) else {
                     try? await sessionStore.clear()
                     sessionState = .signedOut
                     return
                 }
-                try await campusAPI.initialize(cookiesJSON: "")
-                let user = try await campusAPI.login(
-                    studentID: credentials.studentID,
-                    password: credentials.password
-                )
-                let cookies = try await campusAPI.dumpCookies()
-                try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
-                sessionState = .authenticated(user)
+                do {
+                    try await campusAPI.initialize(cookiesJSON: "")
+                    let user = try await campusAPI.login(
+                        studentID: credentials.studentID,
+                        password: credentials.password
+                    )
+                    let cookies = try await campusAPI.dumpCookies()
+                    try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+                    sessionState = .authenticated(user)
+                } catch {
+                    // A campus outage must not make local, user-scoped caches
+                    // inaccessible. Keep the last authenticated identity and
+                    // let individual online screens expose their error state.
+                    sessionState = .authenticated(snapshot.user)
+                }
+            } catch {
+                // Transport failures and 5xx responses are not proof that the
+                // Keychain session is invalid. Preserve offline access.
+                sessionState = .authenticated(snapshot.user)
             }
         } catch {
             sessionState = .signedOut

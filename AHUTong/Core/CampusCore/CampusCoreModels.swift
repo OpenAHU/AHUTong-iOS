@@ -31,17 +31,51 @@ struct CampusGrade: Codable, Equatable, Identifiable, Sendable {
     var id: String { "\(courseCode)|\(courseName)|\(semesterID ?? 0)" }
 }
 
-struct CampusGradeReport: Equatable, Sendable {
+struct CampusGradeReport: Codable, Equatable, Sendable {
     let grades: [CampusGrade]
     let gradePointAverage: Double?
     let rank: String?
     let studentProfiles: [String]
 }
 
+struct CampusGradeStudentProfile: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let trainingType: String
+    let department: String
+    let major: String
+
+    var displayName: String {
+        let name = major.trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = trainingType.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { return type.isEmpty ? "主修" : type }
+        return type.isEmpty ? name : "\(name) (\(type))"
+    }
+}
+
+struct CampusGradeSemesterRank: Codable, Equatable, Sendable {
+    let gpa: Double?
+    let semesterId: Int
+    let majorRank: Int?
+}
+
+struct CampusGradeRankInfo: Codable, Equatable, Sendable {
+    let gpa: Double?
+    let majorRank: Int?
+    let majorHeadCount: Int?
+    let gpaSemesterSubs: [CampusGradeSemesterRank]?
+    let updatedDateTimeStr: String?
+
+    func semesterRank(for semesterID: Int?) -> Int? {
+        guard let semesterID else { return nil }
+        return gpaSemesterSubs?.first { $0.semesterId == semesterID }?.majorRank
+    }
+}
+
 enum CampusCoreError: Error, Equatable, LocalizedError, Sendable {
     case serverStartup(String)
     case invalidResponse
     case unauthorized
+    case credentialsUnavailable
     case campus(String)
 
     var errorDescription: String? {
@@ -49,6 +83,7 @@ enum CampusCoreError: Error, Equatable, LocalizedError, Sendable {
         case let .serverStartup(message): "校园服务启动失败：\(message)"
         case .invalidResponse: "校园服务返回了无法识别的数据"
         case .unauthorized: "登录已过期，请重新登录"
+        case .credentialsUnavailable: "登录已过期，请重新登录"
         case let .campus(message): message
         }
     }
