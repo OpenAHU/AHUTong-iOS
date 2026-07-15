@@ -32,6 +32,7 @@ final class AppShellUITests: XCTestCase {
         app.buttons["onboarding.continue"].tap()
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 3), "四入口必须由系统 Tab Bar 承载")
         XCTAssertTrue(app.buttons["tab.home"].waitForExistence(timeout: 3))
         waitForRendering()
         capture("04-home", app: app)

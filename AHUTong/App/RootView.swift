@@ -4,7 +4,6 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("theme.color") private var themeColor = "blue"
     @State private var selectedTab: AppTab = .home
-    @State private var isDetailVisible = false
     @StateObject private var onboardingModel: OnboardingViewModel
     @StateObject private var appModel: AppModel
     @StateObject private var grayGate = GrayFeatureGateModel()
@@ -33,23 +32,20 @@ struct RootView: View {
             } else if appModel.sessionState == .signedOut {
                 LoginView(appModel: appModel)
             } else {
-                ZStack(alignment: .bottom) {
-                    NavigationStack {
-                        destination(for: selectedTab)
-                    }
-                    .id(selectedTab)
-
-                    if !isDetailVisible {
-                        LiquidGlassBottomBar(selection: $selectedTab)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                TabView(selection: $selectedTab) {
+                    ForEach(AppTab.allCases) { tab in
+                        NavigationStack {
+                            destination(for: tab)
+                        }
+                        .tabItem {
+                            Label(tab.title, systemImage: tab.systemImage)
+                                .accessibilityIdentifier("tab.\(tab.rawValue)")
+                        }
+                        .tag(tab)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AndroidParityRootBackground())
-                .onChange(of: selectedTab) { _, _ in
-                    isDetailVisible = false
-                }
-                .onPreferenceChange(AndroidDetailVisibilityKey.self) { isDetailVisible = $0 }
             }
         }
         .task {
@@ -67,7 +63,6 @@ struct RootView: View {
             guard url.scheme == "ahutong" else { return }
             if url.host == "schedule" {
                 selectedTab = .schedule
-                isDetailVisible = false
             }
         }
         .tint(themeTint)

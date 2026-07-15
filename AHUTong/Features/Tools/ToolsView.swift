@@ -51,7 +51,7 @@ struct ToolsView: View {
                     desktopWidgetCard
                         .padding(.horizontal, 16)
                 }
-                .padding(.bottom, 96)
+                .padding(.bottom, 16)
             }
             .scrollIndicators(.hidden)
         }

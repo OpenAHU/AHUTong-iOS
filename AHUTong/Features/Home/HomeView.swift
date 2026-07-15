@@ -213,7 +213,7 @@ struct HomeView: View {
                     }
                     homeWidgetLayout
                 }
-                .padding(.bottom, isEditing ? 420 : 96)
+                .padding(.bottom, isEditing ? 420 : 16)
             }
             .scrollIndicators(.hidden)
             .onLongPressGesture { if homeEditEnabled { isEditing = true } }

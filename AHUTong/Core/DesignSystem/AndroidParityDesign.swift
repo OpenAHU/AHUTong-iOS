@@ -278,112 +278,6 @@ struct AndroidEmptyState: View {
     }
 }
 
-struct LiquidGlassBottomBar: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("visual.liquid-glass") private var liquidGlass = true
-    @Binding var selection: AppTab
-    @Namespace private var glassNamespace
-
-    var body: some View {
-        Group {
-            if liquidGlass {
-                if #available(iOS 26.0, *) {
-                    nativeLiquidGlassBar
-                } else {
-                    legacyMaterialBar
-                }
-            } else {
-                opaqueBar
-            }
-        }
-        .padding(.horizontal, 36)
-        .padding(.bottom, 16)
-    }
-
-    @available(iOS 26.0, *)
-    private var nativeLiquidGlassBar: some View {
-        GlassEffectContainer(spacing: 10) {
-            tabItems(nativeGlass: true)
-                .padding(4)
-                .frame(height: 64)
-                .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
-                .glassEffectID("bottom-navigation", in: glassNamespace)
-        }
-    }
-
-    private var legacyMaterialBar: some View {
-        tabItems(nativeGlass: false)
-            .padding(4)
-            .frame(height: 64)
-            .background(Capsule(style: .continuous).fill(.ultraThinMaterial))
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(colorScheme == .dark ? .white.opacity(0.1) : .black.opacity(0.06))
-            }
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.12), radius: 16, y: 6)
-    }
-
-    private var opaqueBar: some View {
-        tabItems(nativeGlass: false)
-            .padding(4)
-            .frame(height: 64)
-            .background(Capsule(style: .continuous).fill(AndroidParityPalette.surface(colorScheme)))
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(colorScheme == .dark ? .white.opacity(0.1) : .black.opacity(0.06))
-            }
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.12), radius: 16, y: 6)
-    }
-
-    private func tabItems(nativeGlass: Bool) -> some View {
-        HStack(spacing: 0) {
-            ForEach(AppTab.allCases) { tab in
-                Button {
-                    withAnimation(.snappy(duration: 0.32)) {
-                        selection = tab
-                    }
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: tab.systemImage)
-                            .font(.system(size: 20, weight: .regular))
-                        Text(tab.title)
-                            .font(.caption2)
-                    }
-                    .foregroundStyle(selection == tab ? AndroidParityPalette.accent : .primary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background {
-                        if selection == tab {
-                            selectedTabBackground(nativeGlass: nativeGlass)
-                        }
-                    }
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("tab.\(tab.rawValue)")
-                .accessibilityValue(selection == tab ? "已选择" : "")
-                .accessibilityAddTraits(selection == tab ? .isSelected : [])
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func selectedTabBackground(nativeGlass: Bool) -> some View {
-        if #available(iOS 26.0, *), nativeGlass {
-            Capsule(style: .continuous)
-                .fill(.clear)
-                .glassEffect(
-                    .regular.tint(AndroidParityPalette.accent.opacity(0.18)).interactive(),
-                    in: Capsule(style: .continuous)
-                )
-                .glassEffectID("selected-tab", in: glassNamespace)
-        } else {
-            Capsule(style: .continuous)
-                .fill(AndroidParityPalette.accent.opacity(0.12))
-                .matchedGeometryEffect(id: "selected-tab", in: glassNamespace)
-        }
-    }
-}
-
 private struct AndroidDetailScreenModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -391,16 +285,8 @@ private struct AndroidDetailScreenModifier: ViewModifier {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(false)
             .toolbar(.visible, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
             .background(NativeNavigationGestureBridge())
-            .preference(key: AndroidDetailVisibilityKey.self, value: true)
-    }
-}
-
-struct AndroidDetailVisibilityKey: PreferenceKey {
-    static let defaultValue = false
-
-    static func reduce(value: inout Bool, nextValue: () -> Bool) {
-        value = value || nextValue()
     }
 }
 

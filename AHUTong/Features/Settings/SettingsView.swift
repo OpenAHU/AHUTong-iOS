@@ -75,7 +75,7 @@ struct SettingsView: View {
                         AndroidSettingButton(label: "更新说明", systemImage: "doc.text") { showUpdateLog = true }
                     }
                 }
-                .padding(.bottom, 96)
+                .padding(.bottom, 16)
             }
             .scrollIndicators(.hidden)
         }
@@ -277,7 +277,6 @@ private struct AndroidPreferencesView: View {
     @StateObject private var model: PreferencesModel
     @AppStorage("notifications.course-reminders") private var reminders = false
     @AppStorage("notifications.live-activity") private var liveActivity = false
-    @AppStorage("visual.liquid-glass") private var liquidGlass = true
     @AppStorage("theme.color") private var themeColor = "blue"
     @State private var showsIslandExplanation = false
     @State private var showsCustomColor = false
@@ -335,9 +334,18 @@ private struct AndroidPreferencesView: View {
                     }
 
                     preferenceSection("液态玻璃") {
-                        preferenceRow(title: "启用液态玻璃效果", isOn: liquidGlass, identifier: "preferences.liquid-glass") {
-                            liquidGlass.toggle()
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "square.stack.3d.up.fill")
+                                .foregroundStyle(AndroidThemeColor.color(for: themeColor))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("跟随 iOS 系统")
+                                Text("底部导航使用原生 Tab Bar；材质、折射、辅助功能和交互效果由系统统一管理。")
+                                    .font(.subheadline)
+                                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+                            }
                         }
+                        .padding(.vertical, 8)
+                        .accessibilityIdentifier("preferences.native-tab-bar")
                     }
 
                     preferenceSection("主题颜色") {

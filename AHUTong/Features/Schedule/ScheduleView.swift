@@ -142,7 +142,7 @@ struct ScheduleView: View {
                     controls
                     content
                 }
-                .padding(.bottom, 96)
+                .padding(.bottom, 16)
             }
             .scrollIndicators(.hidden)
         }
