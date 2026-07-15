@@ -6,11 +6,11 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| 总体状态 | 原生系统 Tab Bar 修复待 macOS CI；真实支付仍外部阻塞 |
-| 当前里程碑 | 四入口已从自绘玻璃按钮栏改为系统 `TabView`/`UITabBar`，待 Xcode 26.5 回归确认 |
-| 当前焦点 | 系统原生底部导航、每 Tab 独立导航栈、详情页系统隐藏 Tab Bar，以及原生左边缘/内容区域返回的协同 |
-| 下一步 | 完成 iPhone 13 Pro / iOS 26.5 Simulator 全套 CI 与未签名 IPA，再由用户在 iPhone 13 Pro 验证系统 Liquid Glass；支付负责人提供 D-005 网关与授权环境后验收 PAY-01～03 |
-| 用户/平台功能进度 | 19 / 23 个切片满足严格完成定义（82.6%）；APP-01 因原生 Tab Bar 修复暂回待验证，另 3 个为受 D-005、R-003、R-004 阻断的真实支付切片 |
+| 总体状态 | 客户端迁移收口；真实支付仍外部阻塞 |
+| 当前里程碑 | 四入口已改为系统 `TabView`/`UITabBar`，并完成 Xcode 26.5 全量 CI、未签名 IPA 与 Release Archive 验证 |
+| 当前焦点 | 系统原生 Liquid Glass Tab Bar、每 Tab 独立导航栈、详情页系统隐藏/恢复底栏，以及原生左边缘/内容区域返回均已收口 |
+| 下一步 | 用户在 iPhone 13 Pro 真机验证系统 Liquid Glass、导航手势和 7 天签名安装；支付负责人提供 D-005 网关与授权环境后验收 PAY-01～03 |
+| 用户/平台功能进度 | 20 / 23 个切片满足严格完成定义（87.0%）；剩余 3 个均为受 D-005、R-003、R-004 外部依赖阻断的真实支付切片，不以 Mock 冒充完成 |
 | 当前分支 | `codex/feat/android-parity-migration` |
 | 最近更新 | 2026-07-16 |
 
@@ -221,11 +221,11 @@ iOS/
 
 全量复查收口证据 `E-20260715-04`：Android 产品基线继续固定为 `2a30a54`，iOS 最终代码 commits `565671e`、`a0d4855`、`444d2d3`、`0754440`、`7590212`、`7086948`、`18f96d5`，SDK `1177864f4063b65220dc18c6742fb5d7ebe45ae5` 已推送。最终 CI `29391015504` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 132 个单元测试和 5 个 UI 测试；原生导航专项实际执行左边缘拖动与两个内容坐标有限重试的内容区域拖动，两条路径均返回工具页。Artifact `AHUTong-ui-parity-xcresult-62` 为 18,811,420 bytes，SHA-256 `e1c8410c1299176e9a8f2ae99a3474265aaebcacbb9fd721937ed758b7e5a6f4`。未签名 IPA run `29391015407` 上传 `AHUTong-unsigned-ipa-62`；其中 IPA 为 5,496,416 bytes，SHA-256 `EB21B418F0B2839EBD02E3CA2F30CF13BB370D5979FD84F9AF1EC77896A6F051`。Release run `29391015433` 上传 9,592,955 bytes 的 `AHUTong-release-readiness-16`，完成 App/Widget/ActivityKit、AppIcon、隐私清单、dSYM 与敏感材料边界审计。PhotoKit、定位、通知和 Live Activity 的物理效果仍需用户真机部署回归；这不替代三类真实支付的 D-005 外部验收。
 
-原生底栏修复证据 `E-20260716-01`（待验证）：根 App Shell 已删除 `LiquidGlassBottomBar` 的 `HStack + Button` 自绘实现，改由系统 `TabView` 生成 `UITabBar`；四个入口各自持有 `NavigationStack`，详情页使用 `.toolbar(.hidden, for: .tabBar)` 交给系统隐藏/恢复，四个一级页删除旧覆盖栏所需的 96pt 补偿。代码 commit `0a8f855` 的 Release Archive `29431825414` 和未签名 IPA `29431825387` 已成功；首次 CI `29431825512` 在 Xcode 26.5 / iPhone 13 Pro iOS 26.5 Simulator 完成 132 个单元测试与 5 条 UI 测试，其中 3 条 UI 仅因原生 Tab Bar 不透传旧自绘 `tab.*` identifier 而失败。失败层级明确显示 `XCUIElementTypeTabBar` 下四个系统按钮“主页/课表/小工具/设置”，测试已改为从 `app.tabBars.buttons` 按系统标签定位，最终复跑待回写。
+原生底栏修复证据 `E-20260716-01`：根 App Shell 已删除 `LiquidGlassBottomBar` 的 `HStack + Button` 自绘实现，改由系统 `TabView` 生成 `UITabBar`；四个入口各自持有 `NavigationStack`，详情页使用 `.toolbar(.hidden, for: .tabBar)` 交给系统隐藏/恢复，四个一级页删除旧覆盖栏所需的 96pt 补偿。代码 commits `0a8f855`、`4bb2bab` 已推送。最终 CI `29432910807` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 132 个单元测试和 5 个 UI 测试；UI 自动化明确从 `XCUIElementTypeTabBar` 下操作四个系统标签按钮，并验证详情页隐藏、两种原生返回手势及返回后底栏恢复。Artifact `AHUTong-ui-parity-xcresult-64` 为 19,622,549 bytes，SHA-256 `c99bfa483f0a948a6c79511dfc7ec6b3d4bd67c8958fa23178a6e23811fcea24`，含 54 张截图且无失败关联附件；首页截图已目视确认系统 Liquid Glass 胶囊、系统选中态和四入口完整。未签名 IPA run `29432910913` 上传 `AHUTong-unsigned-ipa-64`，其中 IPA 为 5,470,527 bytes，SHA-256 `031285173E231B3659DBF417C8DD9751AE9DB34E033ECFB09236148905254403`；Release run `29432910832` 上传 9,547,511 bytes 的 `AHUTong-release-readiness-18`。首次 CI `29431825512` 的 3 条旧 identifier 失败作为测试迁移诊断保留，不计为最终验证。
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 待验证 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏必须由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；本轮以 `XCUIElementTypeTabBar` 及其四个系统标签按钮做回归，代码、首次构建和待验证项见 `E-20260716-01` | 2026-07-16 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
 | AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 已完成 | 固定 Rust SDK 的验证码/CAS/Cookie 链路以 Apple staticlib 接入；初始化 GuiXu 前先清空 Rust 内存 Cookie，iOS 以 `persist_session=0` 禁止 Cookie 写入 GuiXu，冷启动只从按学号隔离的 ThisDeviceOnly Keychain 恢复，过期时凭据重登，无凭据时安全清理，退出同时清理会话与 Widget 快照 | `CampusSessionStoreTests` 4 项、`CredentialStoreTests` 4 项及登录正常/工作中/错误状态在 `E-20260715-01` 全通过；SDK Keychain-only 持久化及最终 macOS 验证见 `E-20260715-02`；授权校园账号与物理机属于部署回归；Commits `d8516f2`、`77a5ae5`、`edfd219`，SDK `e826156` | 2026-07-15 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 已完成 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入 cache-first/refresh/stale-cache Repository；业务缓存通过 Apple C ABI 写入 GuiXu，物理键为 SHA-256 摘要且逻辑键强制账号命名空间；升级时一次性读取旧 UserDefaults/文件缓存、写入 GuiXu 后删除旧副本；Widget 快照与提醒刷新仍由同一课表结果驱动 | 原课表 Repository/文件缓存/周次/模型 12 项及新增 GuiXu FFI/迁移 2 项测试；全状态 UI 见 `E-20260715-01`，最终 macOS 复验见 `E-20260715-02`；Commits `d8516f2`、`edfd219`，SDK `e826156` | 2026-07-15 |
@@ -251,11 +251,11 @@ iOS/
 
 ### 8.1 全量复查收口（2026-07-15）
 
-下表记录 2026-07-15 全量复查范围；该轮证据见 `E-20260715-04`。2026-07-16 原生系统 Tab Bar 修复单独见 `E-20260716-01`，APP-01 在新 CI 通过前暂为待验证。
+下表记录 2026-07-15 全量复查范围；该轮证据见 `E-20260715-04`。2026-07-16 原生系统 Tab Bar 修复已完成，证据单独见 `E-20260716-01`。
 
 | 覆盖切片 | 状态 | 本轮补齐内容 | 预定自动验证 |
 | --- | --- | --- | --- |
-| APP-01、PREF-01、OPS-01 | APP-01 待验证；其余已完成 | 系统 `TabView`/`UITabBar`、UIKit 原生导航栏、原生左边缘返回、iOS 26 内容区域返回；完整 Debug、更新、反馈、许可证、主题与 Dynamic Type | `XCUIElementTypeTabBar`、原生导航 UI 手势、Debug 路由、更新语义、图标与主题单测、全路径 UI；本轮底栏证据见 `E-20260716-01` |
+| APP-01、PREF-01、OPS-01 | 已完成 | 系统 `TabView`/`UITabBar`、UIKit 原生导航栏、原生左边缘返回、iOS 26 内容区域返回；完整 Debug、更新、反馈、许可证、主题与 Dynamic Type | `XCUIElementTypeTabBar`、原生导航 UI 手势、Debug 路由、更新语义、图标与主题单测、全路径 UI；本轮底栏证据见 `E-20260716-01` |
 | AUTH-02、CONTENT-01 | 已完成 | Cookie 父域/Path/Secure/HttpOnly、响应 Cookie 持久化、401/403/登录重定向自动续期；网络/5xx 不误退出且保留离线缓存；续期凭据被拒时清理失效材料并由根导航回到登录页 | Cookie 匹配/响应/重试契约、离线恢复、续期拒绝与会话测试 |
 | SCH-01、SCH-02、HOME-01 | 已完成 | 当前学期按真实日期推导、真实下学期 SDK 接口、重叠课程分栏；首页课程入口、拖放编辑、灰度门、账号隔离布局和已放工具过滤 | Semester、布局、课表 Repository/UI 回归；Rust server feature 编译 |
 | ACA-01、ACA-02、ACA-03 | 已完成 | 多学籍切换、真实学期排名、账号隔离成绩/考试缓存；空闲教室默认全楼栋与日期约束 | Rust 多学籍/排名解析、Swift 成绩/考试/空教室单测与全状态 UI |
@@ -388,7 +388,7 @@ iOS/
 - [x] GitHub Actions 生成含 Widget 与双隐私清单的未签名 IPA/Archive；仓库和产物不含签名证书、描述文件或 Apple ID。
 - [ ] 支付负责人轮换 Android 已暴露材料，并提供受控的服务端签名网关 URL 与最小权限客户端鉴权方式。
 - [ ] 为校园卡、浴室和电控分别提供可审计的测试账号/房间或明确授权的小额真实环境，并完成成功、拒绝、超时、重复提交、第三方返回和对账验收。
-- [ ] 原生 Tab Bar 新 CI 通过后 APP-01 恢复“已完成”，严格完成度回到 20 / 23（87.0%）；支付解除条件完成后再将 PAY-01～03 逐项推进，不以 Mock 或未扣款 UI 伪造 100%。
+- [x] 原生 Tab Bar 的 APP-01 已由 `E-20260716-01` 恢复“已完成”，严格完成度回到 20 / 23（87.0%）；支付解除条件完成后再将 PAY-01～03 逐项推进，不以 Mock 或未扣款 UI 伪造 100%。
 
 ### P0-W1：工程与契约起点
 
@@ -486,4 +486,4 @@ iOS/
 | 2026-07-15 | AUDIT-001 | 对固定 Android 基线重新执行功能/路由/数据/平台完整复查并补齐原生导航/双返回手势、完整 Debug、自动续期与离线会话、真实下学期、多学籍排名、账号隔离缓存、首页拖放、跨周 Widget/提醒、Live Activity、主题/反馈/更新/许可证、流式下载分享和 AppIcon | SDK `cargo test` 7/7、`cargo check --features server`；最终 132 单测、5 UI、IPA 与 Archive 全绿，见 `E-20260715-04` | SDK `1177864`；iOS `565671e`～`18f96d5` |
 | 2026-07-15 | AUDIT-002 | 继续收口低优先级复查项：天气页首入定位、PhotoKit 校历保存、Dynamic Type 缩放、不可逆校园卡缓存键、统一脱敏日志实际接入，以及续期凭据拒绝后的全局登录回退 | 最终 CI `29391015504` 通过 132 单测和 5 UI，双原生返回实拖与首页/工具去重入口均通过；IPA `29391015407`、Archive `29391015433` 成功 | iOS `0754440`、`7590212`、`7086948`、`18f96d5` |
 | 2026-07-15 | OPS-011 | 全量复查候选完成最终验证，受影响切片从“待验证”恢复“已完成”；客户端可完成迁移仍为 20 / 23，只有三类真实支付受外部网关/授权环境阻断 | `E-20260715-04`；Artifact `AHUTong-ui-parity-xcresult-62`、`AHUTong-unsigned-ipa-62`、`AHUTong-release-readiness-16` | iOS `18f96d5`；SDK `1177864` |
-| 2026-07-16 | UI-006 | 纠正“使用系统玻璃 API”等于“原生导航栏”的错误判断：删除自绘 `LiquidGlassBottomBar`，根四入口改为系统 `TabView`/`UITabBar`，每 Tab 独立导航栈，详情页由系统隐藏底栏；清理旧 96pt 覆盖补偿和无效玻璃开关 | Archive `29431825414`、IPA `29431825387` 已成功；首次 CI `29431825512` 的辅助功能树确认系统 Tab Bar，旧测试 identifier 已改为系统标签定位，APP-01 等最终 CI | `0a8f855`，测试修复待提交 |
+| 2026-07-16 | UI-006 | 纠正“使用系统玻璃 API”等于“原生导航栏”的错误判断：删除自绘 `LiquidGlassBottomBar`，根四入口改为系统 `TabView`/`UITabBar`，每 Tab 独立导航栈，详情页由系统隐藏底栏；清理旧 96pt 覆盖补偿和无效玻璃开关 | CI `29432910807`：132 单测 + 5 UI 全绿，系统 Tab Bar 类型/标签、详情隐藏/恢复、左边缘与内容区域返回均通过；IPA `29432910913`、Archive `29432910832` 成功，首页系统 Liquid Glass 截图目视通过，见 `E-20260716-01` | `0a8f855`、`4bb2bab` |
