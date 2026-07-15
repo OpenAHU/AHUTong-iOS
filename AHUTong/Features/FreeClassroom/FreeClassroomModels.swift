@@ -133,7 +133,7 @@ struct DemoFreeClassroomRemote: FreeClassroomRemote {
         if let custom = DebugRuntimeSettings.decode("free-classroom", as: DebugFreeClassroomPayload.self)?.buildings {
             return custom.filter { $0.enabled }
         }
-        campusID == 2
+        return campusID == 2
             ? [ClassroomBuilding(code: "LH-JX", enabled: true, id: 201, nameZh: "龙河教学主楼")]
             : [
                 ClassroomBuilding(code: "BXN", enabled: true, id: 101, nameZh: "博学南楼"),

@@ -116,7 +116,7 @@ actor DemoLostFoundRemote: LostFoundRemote {
         if let catalog = DebugRuntimeSettings.decode("lost-found", as: DebugLostFoundPayload.self)?.catalog {
             return catalog
         }
-        LostFoundCatalog(
+        return LostFoundCatalog(
             campuses: [LostFoundCampus(id: "1", campusName: "磬苑校区"), LostFoundCampus(id: "2", campusName: "龙河校区")],
             types: [
                 LostFoundType(typeId: "1", typeName: "校园卡"),
