@@ -70,7 +70,7 @@ struct AHUTongScheduleWidgetView: View {
         let remaining = entry.snapshot.courses.filter {
             $0.weekday == weekday && endTime(period: $0.endPeriod, on: entry.date) > entry.date
         }
-        VStack(alignment: .leading, spacing: 5) {
+        return VStack(alignment: .leading, spacing: 5) {
             ForEach((remaining.isEmpty ? entry.snapshot.courses : remaining).prefix(3)) { course in
                 Text("\(course.weekday == weekday ? "今天" : "周\(chineseWeekday(course.weekday))") \(course.startPeriod)-\(course.endPeriod)  \(course.name)")
                     .font(.caption)
