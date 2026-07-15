@@ -223,7 +223,7 @@ final class PaymentCatalogTests: XCTestCase {
         let targetURL = try XCTUnwrap(URL(string: target))
         XCTAssertEqual(targetURL.scheme, "https")
         XCTAssertEqual(targetURL.host, "ycard.ahu.edu.cn")
-        XCTAssertEqual(targetURL.path, "/plat/")
+        XCTAssertEqual(targetURL.path, "/plat")
         XCTAssertEqual(URLComponents(url: targetURL, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "loginTransit")
     }
 
