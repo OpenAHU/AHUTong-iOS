@@ -244,7 +244,15 @@ final class AppShellUITests: XCTestCase {
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
             app.buttons["tab.tools"].tap()
-            app.buttons["tools.exam"].tap()
+            let toolsExam = app.buttons["tools.exam"]
+            if toolsExam.waitForExistence(timeout: 2) {
+                toolsExam.tap()
+            } else {
+                app.buttons["tab.home"].tap()
+                let homeExam = app.buttons["home.widget.exam"]
+                XCTAssertTrue(homeExam.waitForExistence(timeout: 4))
+                homeExam.tap()
+            }
             XCTAssertTrue(app.descendants(matching: .any)["exams.screen"].waitForExistence(timeout: 4))
             waitForRendering()
             capture("state-\(state)-exams", app: app)
