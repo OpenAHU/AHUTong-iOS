@@ -333,21 +333,6 @@ private struct AndroidPreferencesView: View {
                             .padding(.vertical, 8)
                     }
 
-                    preferenceSection("液态玻璃") {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "square.stack.3d.up.fill")
-                                .foregroundStyle(AndroidThemeColor.color(for: themeColor))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("跟随 iOS 系统")
-                                Text("底部导航使用原生 Tab Bar；材质、折射、辅助功能和交互效果由系统统一管理。")
-                                    .font(.subheadline)
-                                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-                            }
-                        }
-                        .padding(.vertical, 8)
-                        .accessibilityIdentifier("preferences.native-tab-bar")
-                    }
-
                     preferenceSection("主题颜色") {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 16) {

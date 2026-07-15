@@ -134,6 +134,9 @@ final class AppShellUITests: XCTestCase {
         tabButton("settings", app: app).tap()
         app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.staticTexts["液态玻璃"].exists)
+        XCTAssertFalse(app.buttons["preferences.liquid-glass"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["preferences.native-tab-bar"].exists)
         waitForRendering()
         capture("16-preferences", app: app)
 
