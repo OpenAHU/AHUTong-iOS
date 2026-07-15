@@ -132,6 +132,26 @@ enum PaymentGatewayError: LocalizedError, Equatable {
     }
 }
 
+enum OfficialSchoolPaymentPortal {
+    private static let loginEndpoint = URL(
+        string: "https://ycard.ahu.edu.cn/berserker-auth/cas/redirect/neusoftCas"
+    )!
+    private static let portalTarget = URL(
+        string: "https://ycard.ahu.edu.cn/plat/?name=loginTransit"
+    )!
+
+    static var loginURL: URL {
+        var components = URLComponents(
+            url: loginEndpoint,
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "targetUrl", value: portalTarget.absoluteString)
+        ]
+        return components.url!
+    }
+}
+
 protocol PaymentGateway: Sendable {
     func createOrder(request: PaymentRequest, idempotencyKey: String) async throws -> PaymentOrder
     func confirm(orderID: String, authorization: String?) async throws -> PaymentOrderStatus

@@ -212,6 +212,21 @@ final class PaymentCoordinatorTests: XCTestCase {
 }
 
 final class PaymentCatalogTests: XCTestCase {
+    func testOfficialPortalUsesSchoolHTTPSLoginTransit() throws {
+        let url = OfficialSchoolPaymentPortal.loginURL
+        XCTAssertEqual(url.scheme, "https")
+        XCTAssertEqual(url.host, "ycard.ahu.edu.cn")
+        XCTAssertEqual(url.path, "/berserker-auth/cas/redirect/neusoftCas")
+
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let target = try XCTUnwrap(components.queryItems?.first { $0.name == "targetUrl" }?.value)
+        let targetURL = try XCTUnwrap(URL(string: target))
+        XCTAssertEqual(targetURL.scheme, "https")
+        XCTAssertEqual(targetURL.host, "ycard.ahu.edu.cn")
+        XCTAssertEqual(targetURL.path, "/plat/")
+        XCTAssertEqual(URLComponents(url: targetURL, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "loginTransit")
+    }
+
     func testCardRechargeFixtureUsesNonProductionAccountAndBalance() {
         XCTAssertTrue(PaymentDemoCatalog.cardAccountID.hasPrefix("mock-"))
         XCTAssertEqual(PaymentDemoCatalog.cardBalance, Decimal(string: "126.35"))

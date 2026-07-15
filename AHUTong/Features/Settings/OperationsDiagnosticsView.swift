@@ -219,7 +219,7 @@ struct OperationsDiagnosticsView: View {
                         )
                         DebugStatusRow(
                             label: "支付生产网关",
-                            value: model.diagnostics.productionPaymentGatewayConfigured ? "已配置" : "安全阻断"
+                            value: model.diagnostics.productionPaymentGatewayConfigured ? "已配置" : "未配置（官方页可用）"
                         )
                     }
 

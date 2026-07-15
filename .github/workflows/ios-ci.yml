@@ -44,6 +44,25 @@ jobs:
         with:
           workspaces: Vendor/sdk
 
+      - name: Probe official school payment portal without charging
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers="$RUNNER_TEMP/ycard-head.txt"
+          curl \
+            --silent \
+            --show-error \
+            --fail \
+            --retry 2 \
+            --retry-all-errors \
+            --head \
+            --max-redirs 0 \
+            --dump-header "$headers" \
+            --output /dev/null \
+            'https://ycard.ahu.edu.cn/berserker-auth/cas/redirect/neusoftCas?targetUrl=https%3A%2F%2Fycard.ahu.edu.cn%2Fplat%2F%3Fname%3DloginTransit'
+          grep -Eq '^HTTP/[^ ]+ 302' "$headers"
+          grep -Eiq '^location: https://ycard\.ahu\.edu\.cn/berserker-auth/cas/login/neusoftCas' "$headers"
+
       - name: Generate Xcode project
         run: |
           xcodegen --version
