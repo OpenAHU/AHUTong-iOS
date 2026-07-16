@@ -396,7 +396,7 @@ final class AppShellUITests: XCTestCase {
             .matching(identifier: "settings.app-card")
             .firstMatch
         XCTAssertTrue(appCard.waitForExistence(timeout: 4))
-        for _ in 0..<8 { appCard.tap() }
+        appCard.tap(withNumberOfTaps: 8, numberOfTouches: 1)
         XCTAssertTrue(app.descendants(matching: .any)["operations.debug.screen"].waitForExistence(timeout: 5))
         waitForRendering()
         capture("33-operations-debug", app: app)
