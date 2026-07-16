@@ -7,11 +7,11 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 总体状态 | 客户端迁移收口；学校官方支付页已作为真实生产入口接入，原生直连与对账仍受 D-005 外部阻塞 |
-| 当前里程碑 | 设置首页、偏好、许可证与贡献者的可点击项统一补上 iOS 按压高亮、缩放和轻触觉反馈，不再无反馈直接跳转 |
-| 当前焦点 | 按压态即时可见；减弱动态效果时取消缩放但保留明暗反馈；导航、按钮、开关和主题色交互保持可用 |
-| 下一步 | 用户在 iPhone 13 Pro 验证按住设置项时的视觉变化与轻触觉；Simulator 只验证视觉/导航，不冒充物理触觉证据 |
+| 当前里程碑 | 课表主体恢复 Android 同款 1～20 周左右分页，拖动跟手吸附并与顶部周次选择双向同步 |
+| 当前焦点 | 左右滑动、顶部周次、回到当前周共享同一选择状态；课程卡点击与辅助功能标识不被分页容器覆盖 |
+| 下一步 | 用户在 iPhone 13 Pro 验证课表主体连续左右滑动的手感，并用真实课表确认跨周课程显隐 |
 | 用户/平台功能进度 | 20 / 23 个切片满足严格完成定义（87.0%）；剩余 3 个均为受 D-005、R-003、R-004 外部依赖阻断的真实支付切片，不以 Mock 冒充完成 |
-| 当前分支 | `codex/fix/settings-tap-feedback` |
+| 当前分支 | `codex/fix/schedule-horizontal-swipe` |
 | 最近更新 | 2026-07-17 |
 
 ## 1. 目标与边界
@@ -192,7 +192,7 @@ iOS/
 | D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 已完成 spike 与持久化适配 | SDK `e826156` 在原 Simulator/device `staticlib` 基础上补齐 GuiXu 初始化、KV 增删查清、结构化错误和 panic 边界；本阶段不额外封装 XCFramework，构建脚本按 Apple target 选择静态库 |
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 已确定开发期方案 | C ABI 负责生命周期及 GuiXu 持久化/KV；业务请求继续使用带随机 token 的 localhost Rust server + Swift `URLSession`，只开放 loopback，保留未来逐接口直连 FFI 的替换边界 |
 | D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞原生支付 | 2026-07-16 再次检索 OpenAHU 组织的服务端/API 仓库与代码，只找到 Android/Rust SDK 的校卡上游调用，未找到可接入的签名/对账网关；现以学校官方 HTTPS 页面提供真实生产入口，但原生三类支付仍须负责人轮换已暴露材料并提供网关 URL、鉴权契约及授权测试环境 |
-| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `29524972678` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 135 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-71`。设备 run `29524973286` 与 Archive run `29524972714` 成功；物理 iPhone 13 Pro 的触觉验证由用户执行 |
+| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `29529374996` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 138 个单元测试与 6 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-74`。设备 run `29529375018` 与 Archive run `29529375330` 成功；物理 iPhone 13 Pro 的连续分页手感由用户验证 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 已确定当前方案 | 当前不集成第三方崩溃、统计或广告 SDK；灰度只向自有端点发送不可逆账号摘要并提供本地兜底；未来新增数据收集必须先更新隐私清单和用途评估 |
 | D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
@@ -232,13 +232,15 @@ iOS/
 
 设置点击反馈收口证据 `E-20260717-03`：代码 commit `c68ff9a` 已推送。设置首页、偏好开关、主题色、许可证、贡献者及执行型按钮统一使用 `SettingsPressFeedbackStyle`；触摸按下立即显示明暗高亮、0.985 缩放并触发一次轻触觉，开启“减弱动态效果”时取消缩放但保留非动态反馈。`SettingsInteractionTests` 的 2 项专项测试锁定常规按压态与减弱动态效果语义。最终 CI `29524972678` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 135 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-71` 为 19,687,342 bytes。未签名 IPA run `29524973286` 上传 `AHUTong-unsigned-ipa-71`，IPA 为 5,493,558 bytes，SHA-256 `059A5CEF3E9A149F3E31964AE2FA7382DFF819573072030A43B4F4F47839969F`，产物校验文件一致；Release run `29524972714` 上传 9,582,445 bytes 的 `AHUTong-release-readiness-25`。Simulator 可验证按压视觉与导航，但没有物理触觉，轻触觉仍由用户在 iPhone 13 Pro 上完成部署回归。
 
+课表左右分页收口证据 `E-20260717-04`：对照 Android `Schedule.kt` 的 `HorizontalPager`，iOS commits `aa4387f`、`ce732e0`、`7589911` 将课表主体改为原生 page-style `TabView`，完整承载 1～20 周并让左右拖动、顶部周次和“回到当前周”共享选择状态；每页按自身周次计算日期、课程显隐和非本周样式。首次 CI `29526843733` 中新增左右滑动专项已通过，但旧课程详情用例暴露分页辅助功能标识冲突；第二次 CI `29527873374` 进一步证明父级 `schedule.week-page.*` 被 SwiftUI 传播到课程按钮，且同时出现两个课表外既有长链超时。删除父级标识后，最终 CI `29529374996` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 138 个单元测试与 6 个 UI 测试；专项真实执行左滑第 1→2 周、右滑第 2→1 周，并在滑动前后确认课程卡可见可导航。Artifact `AHUTong-ui-parity-xcresult-74` 为 19,689,203 bytes。未签名 IPA run `29529375018` 上传 `AHUTong-unsigned-ipa-74`，IPA 为 5,504,028 bytes，SHA-256 `F5972A453283289421908A4334E48524FCF8F2026B1AE87F0FF07FC2DD4F1B8A`，产物校验文件一致；Release run `29529375330` 上传 9,597,304 bytes 的 `AHUTong-release-readiness-28`。物理 iPhone 13 Pro 的连续分页手感仍由用户部署回归。
+
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
 | AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 已完成 | 固定 Rust SDK 的验证码/CAS/Cookie 链路以 Apple staticlib 接入；初始化 GuiXu 前先清空 Rust 内存 Cookie，iOS 以 `persist_session=0` 禁止 Cookie 写入 GuiXu，冷启动只从按学号隔离的 ThisDeviceOnly Keychain 恢复，过期时凭据重登，无凭据时安全清理，退出同时清理会话与 Widget 快照 | `CampusSessionStoreTests` 4 项、`CredentialStoreTests` 4 项及登录正常/工作中/错误状态在 `E-20260715-01` 全通过；SDK Keychain-only 持久化及最终 macOS 验证见 `E-20260715-02`；授权校园账号与物理机属于部署回归；Commits `d8516f2`、`77a5ae5`、`edfd219`，SDK `e826156` | 2026-07-15 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 已完成 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入 cache-first/refresh/stale-cache Repository；业务缓存通过 Apple C ABI 写入 GuiXu，物理键为 SHA-256 摘要且逻辑键强制账号命名空间；升级时一次性读取旧 UserDefaults/文件缓存、写入 GuiXu 后删除旧副本；Widget 快照与提醒刷新仍由同一课表结果驱动 | 原课表 Repository/文件缓存/周次/模型 12 项及新增 GuiXu FFI/迁移 2 项测试；全状态 UI 见 `E-20260715-01`，最终 macOS 复验见 `E-20260715-02`；Commits `d8516f2`、`edfd219`，SDK `e826156` | 2026-07-15 |
-| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周、真实日期、单双周卡片、重叠课程分栏、刷新、总览、课程详情、真实下学期切换和设置已按 Android 几何实现；加载/空/错误态完整 | 课表/周次/模型/缓存与真实学期边界测试通过；原 UI 证据见 `E-20260714-01`，最终下学期与导航复验见 `E-20260715-04` | 2026-07-15 |
+| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周、真实日期、单双周卡片、重叠课程分栏、刷新、总览、课程详情、真实下学期切换和设置已按 Android 几何实现；课表主体使用原生分页左右拖动，周次选择双向同步；加载/空/错误态完整 | 原 UI 证据见 `E-20260714-01`，下学期与导航见 `E-20260715-04`；20 周边界单测与真实左右滑动/课程卡回归见 `E-20260717-04` | 2026-07-17 |
 | HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程、天气、8 槽位去重/增删/换位、编辑工具库与持久化已实现；Android 10 个工具注册表保持同序 | `HomeWidgetLayoutTests` 5 项覆盖布局和固定时间的进行中/下一节/已结束状态；首页正常及三种状态双端证据见 `E-20260714-01`；Commits `e339a7b`、`b3c098c`、`f23f130` | 2026-07-14 |
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | SDK `/grade`、`/grade/profiles`、`/grade/rank`、递归兼容解析、真实多学籍切换、GPA/学期排名、学期筛选、搜索、账号隔离离线缓存和全状态 Android UI 已实现 | Rust 多学籍/排名解析 2 项及 Swift 成绩回归通过；原四状态证据见 `E-20260714-01`，最终 SDK/CI 见 `E-20260715-04` | 2026-07-15 |
 | ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和加载/空/错态均已实现；状态排序使用与 Android 相同的确定性基准时间 | `CampusExamDisplayStatusTests` 2 项通过；考试正常、加载、空、错误双端证据见 `E-20260714-01`，首卡均为“操作系统 / 进行中 / 09:40~11:20”；Commits `bbabd5e`、`ffe9887`、`6561f25` | 2026-07-14 |
@@ -403,6 +405,7 @@ iOS/
 - [x] 液态玻璃偏好入口删除已通过 `E-20260716-02` 最终 CI，PREF-01 恢复“已完成”；设置中不得重新加入可关闭系统 Tab Bar 材质的开关。
 - [x] 设置首页 `Debug` 可见行已按 `E-20260717-02` 删除；完整诊断页只允许由 App 信息卡 8 连点隐藏入口进入。
 - [x] 设置域可点击项已按 `E-20260717-03` 统一提供即时按压和触觉反馈，并覆盖减弱动态效果语义。
+- [x] 课表主体已按 `E-20260717-04` 恢复 1～20 周原生左右分页，并完成真实双向滑动、课程卡导航和辅助功能回归。
 
 ### P0-W1：工程与契约起点
 
@@ -505,3 +508,4 @@ iOS/
 | 2026-07-17 | PAY-004 | 将三类生产支付的无服务端阻断提示改为学校官方 HTTPS/CAS 页面入口；真实输入与确认留在校方页面，App 不提交当前表单、不保存官方密码、不把跳转误报为成功，原生网关仍保持安全边界 | 最终 CI `29439249505`：无扣款 HEAD/302 探测、133 单测 + 5 UI 全绿；IPA `29439249117`、Archive `29439249504` 成功，见 `E-20260717-01` | `df88d87`、`ac5e1d0` |
 | 2026-07-17 | PREF-006 | 覆盖此前可见 Debug 行要求：从设置“关于”列表删除 Debug，只保留 App 信息卡 8 连点隐藏入口；合并卡片辅助功能元素并用系统 8 连点做真实导航回归 | 最终 CI `29520243365` attempt 3：133 单测 + 5 UI 全绿；IPA `29520243324`、Archive `29520243338` 成功，见 `E-20260717-02` | `ec4f21a`、`64cc7df`、`4f00e8e` |
 | 2026-07-17 | PREF-007 | 为设置首页、偏好开关、主题色、许可证和贡献者统一增加按压高亮、短缩放与轻触觉反馈；减弱动态效果时保留明暗反馈但取消缩放 | `SettingsInteractionTests` 2 项锁定按压/减弱动态效果状态；最终 macOS CI、IPA 与 Archive 见 `E-20260717-03` | `c68ff9a` |
+| 2026-07-17 | SCH-005 | 对齐 Android `HorizontalPager`：课表主体改为原生 1～20 周分页，左右拖动跟手吸附，顶部周次与回到当前周双向同步；修正分页父级标识传播，保留当前页课程卡点击和辅助功能语义 | `ScheduleWeekNavigationTests` 覆盖周范围、边界与当前页课程标识；真实左滑 1→2 周、右滑 2→1 周及课程卡存在性由 UI 自动化验证，最终证据见 `E-20260717-04` | `aa4387f`、`ce732e0`、`7589911` |
