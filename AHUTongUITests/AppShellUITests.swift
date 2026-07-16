@@ -112,6 +112,12 @@ final class AppShellUITests: XCTestCase {
             XCTAssertTrue(link.waitForExistence(timeout: 4))
             link.tap()
             XCTAssertTrue(app.descendants(matching: .any)[marker].waitForExistence(timeout: 5))
+            if marker == "exams.screen" {
+                let examCard = app.descendants(matching: .any)
+                    .matching(NSPredicate(format: "identifier BEGINSWITH %@", "exams.card.操作系统|"))
+                    .firstMatch
+                XCTAssertTrue(examCard.waitForExistence(timeout: 4))
+            }
             waitForRendering()
             capture(screenshotName, app: app)
             restartAtTools(app)

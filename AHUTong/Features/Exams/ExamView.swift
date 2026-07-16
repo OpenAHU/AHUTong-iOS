@@ -163,7 +163,7 @@ struct ExamView: View {
         case let .failed(error):
             VStack(spacing: 20) {
                 Text(error.message).foregroundStyle(.red).multilineTextAlignment(.center)
-                Button("重试") { Task { await model.load() } }.buttonStyle(.borderedProminent)
+                Button("重试") { Task { await model.load(demo: isDemo) } }.buttonStyle(.borderedProminent)
             }
             .padding(24)
         case let .loaded(exams):
@@ -211,6 +211,7 @@ struct ExamView: View {
         .padding(.horizontal, 24).padding(.vertical, 16)
         .background(AndroidParityPalette.surface(colorScheme))
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("exams.card.\(exam.id)")
     }
 
     private func statusColor(_ status: CampusExamDisplayStatus) -> Color {

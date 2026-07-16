@@ -9,12 +9,50 @@ struct CampusExam: Codable, Equatable, Identifiable, Sendable {
 
     var id: String { "\(course)|\(time)|\(seatNumber)" }
 
+    init(course: String, time: String, seatNumber: String, location: String, isFinished: Bool) {
+        self.course = course
+        self.time = time
+        self.seatNumber = seatNumber
+        self.location = location
+        self.isFinished = isFinished
+    }
+
     enum CodingKeys: String, CodingKey {
         case course
         case time
         case seatNumber = "seatNum"
         case location
         case isFinished = "finished"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        course = container.lossyString(forKey: .course, default: "未知课程")
+        time = container.lossyString(forKey: .time, default: "待公布")
+        seatNumber = container.lossyString(forKey: .seatNumber, default: "")
+        location = container.lossyString(forKey: .location, default: "待公布")
+        isFinished = container.lossyBool(forKey: .isFinished)
+    }
+}
+
+private extension KeyedDecodingContainer where Key == CampusExam.CodingKeys {
+    func lossyString(forKey key: Key, default fallback: String) -> String {
+        if let value = try? decode(String.self, forKey: key) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? fallback : trimmed
+        }
+        if let value = try? decode(Int.self, forKey: key) { return String(value) }
+        if let value = try? decode(Double.self, forKey: key) { return String(value) }
+        return fallback
+    }
+
+    func lossyBool(forKey key: Key) -> Bool {
+        if let value = try? decode(Bool.self, forKey: key) { return value }
+        if let value = try? decode(Int.self, forKey: key) { return value != 0 }
+        if let value = try? decode(String.self, forKey: key) {
+            return ["true", "1", "yes"].contains(value.lowercased())
+        }
+        return false
     }
 }
 
