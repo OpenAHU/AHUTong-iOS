@@ -392,7 +392,9 @@ final class AppShellUITests: XCTestCase {
         tabButton("settings", app: app).tap()
         XCTAssertFalse(app.buttons["settings.debug"].exists)
         XCTAssertFalse(app.staticTexts["Debug"].exists)
-        let appCard = app.descendants(matching: .any)["settings.app-card"]
+        let appCard = app.descendants(matching: .any)
+            .matching(identifier: "settings.app-card")
+            .firstMatch
         XCTAssertTrue(appCard.waitForExistence(timeout: 4))
         for _ in 0..<8 { appCard.tap() }
         XCTAssertTrue(app.descendants(matching: .any)["operations.debug.screen"].waitForExistence(timeout: 5))

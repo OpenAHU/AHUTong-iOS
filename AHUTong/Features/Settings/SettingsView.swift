@@ -123,6 +123,7 @@ struct SettingsView: View {
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
         .onTapGesture(perform: registerDebugTap)
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("settings.app-card")
     }
 
