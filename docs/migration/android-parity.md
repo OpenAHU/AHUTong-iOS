@@ -7,11 +7,11 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 总体状态 | 客户端迁移收口；学校官方支付页已作为真实生产入口接入，原生直连与对账仍受 D-005 外部阻塞 |
-| 当前里程碑 | 设置首页隐藏 `Debug` 可见行，只保留 Android 同款 App 信息卡连续点击 8 次的隐藏入口 |
-| 当前焦点 | 设置页无 `Debug` 文案/按钮，App 卡片系统 8 连点仍可进入完整诊断页；macOS CI、IPA 与 Archive 已通过 |
-| 下一步 | 用户在 iPhone 13 Pro 验证设置页普通浏览无 Debug 项；需要诊断时连续点击 App 信息卡 8 次 |
+| 当前里程碑 | 设置首页、偏好、许可证与贡献者的可点击项统一补上 iOS 按压高亮、缩放和轻触觉反馈，不再无反馈直接跳转 |
+| 当前焦点 | 按压态即时可见；减弱动态效果时取消缩放但保留明暗反馈；导航、按钮、开关和主题色交互保持可用 |
+| 下一步 | 用户在 iPhone 13 Pro 验证按住设置项时的视觉变化与轻触觉；Simulator 只验证视觉/导航，不冒充物理触觉证据 |
 | 用户/平台功能进度 | 20 / 23 个切片满足严格完成定义（87.0%）；剩余 3 个均为受 D-005、R-003、R-004 外部依赖阻断的真实支付切片，不以 Mock 冒充完成 |
-| 当前分支 | `codex/fix/hide-debug-setting` |
+| 当前分支 | `codex/fix/settings-tap-feedback` |
 | 最近更新 | 2026-07-17 |
 
 ## 1. 目标与边界
@@ -52,6 +52,7 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 7. 本约束追溯适用于此前已标记完成的 APP-01、AUTH-01、INFO-01、INFO-02、INFO-03、CONTENT-03；这些切片在 UI 复验通过前统一回到“实现中”。
 8. 2026-07-16 用户进一步明确四入口必须使用 iOS 原生底部导航，而非仅在自绘容器上调用 Liquid Glass API。根容器必须使用系统 `TabView`/`UITabBar`，iOS 26+ 的 Liquid Glass、折射、触控、辅助功能和后续系统演进全部交给系统；禁止自绘 `HStack + Button` 冒充原生 Tab Bar。Liquid Glass 默认启用，设置页不得提供开关、关闭路径或单独说明入口。入口顺序、图标、中文文案和选中语义仍与 Android 一致。
 9. 2026-07-17 用户覆盖此前“直接显示 Debug 行”的要求：设置首页不得出现 `Debug` 可见项，只保留与 Android 一致的 App 信息卡连续点击 8 次隐藏入口；Debug 页面内容和视觉仍以 Android `settings/Debug.kt` 为基准。
+10. 设置域所有可点击行必须在跳转或执行前提供可感知的按压态；iOS 使用轻触觉、明暗高亮和短缩放补足交互反馈，开启“减弱动态效果”时禁用缩放但不得移除非动态反馈。静态布局仍以 Android 为准。
 
 ## 2. 固定基线
 
@@ -191,7 +192,7 @@ iOS/
 | D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 已完成 spike 与持久化适配 | SDK `e826156` 在原 Simulator/device `staticlib` 基础上补齐 GuiXu 初始化、KV 增删查清、结构化错误和 panic 边界；本阶段不额外封装 XCFramework，构建脚本按 Apple target 选择静态库 |
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 已确定开发期方案 | C ABI 负责生命周期及 GuiXu 持久化/KV；业务请求继续使用带随机 token 的 localhost Rust server + Swift `URLSession`，只开放 loopback，保留未来逐接口直连 FFI 的替换边界 |
 | D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞原生支付 | 2026-07-16 再次检索 OpenAHU 组织的服务端/API 仓库与代码，只找到 Android/Rust SDK 的校卡上游调用，未找到可接入的签名/对账网关；现以学校官方 HTTPS 页面提供真实生产入口，但原生三类支付仍须负责人轮换已暴露材料并提供网关 URL、鉴权契约及授权测试环境 |
-| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `29520243365` attempt 3 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 133 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-70`。设备 run `29520243324` 与 Archive run `29520243338` 成功；物理 iPhone 13 Pro 验证由用户执行 |
+| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `29524972678` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 135 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-71`。设备 run `29524973286` 与 Archive run `29524972714` 成功；物理 iPhone 13 Pro 的触觉验证由用户执行 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 已确定当前方案 | 当前不集成第三方崩溃、统计或广告 SDK；灰度只向自有端点发送不可逆账号摘要并提供本地兜底；未来新增数据收集必须先更新隐私清单和用途评估 |
 | D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
@@ -229,6 +230,8 @@ iOS/
 
 设置 Debug 入口收口证据 `E-20260717-02`：代码 commits `ec4f21a`、`64cc7df`、`4f00e8e` 已推送。设置“关于”列表删除可见 `Debug` `NavigationLink` 和 `settings.debug` 标识，完整诊断页及 `showsDebug` 导航保留；App 信息卡合并为单一辅助功能元素，UI 自动化同时断言列表无 Debug 按钮/文案，并用系统 8 连点手势进入 `operations.debug.screen`、保存第 33 屏截图。最终 CI `29520243365` attempt 3 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 133 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-70` 为 19,682,221 bytes。未签名 IPA run `29520243324` 上传 `AHUTong-unsigned-ipa-70`，IPA 为 5,487,372 bytes，SHA-256 `3742D1D763F73C3D89E151172C27581FFA7FC3EDCD64AE6F4CA97920D34A633B`，产物校验文件一致；Release run `29520243338` 上传 9,571,856 bytes 的 `AHUTong-release-readiness-24`。诊断记录：CI `29517210090` 首次因 SwiftUI 标识传播导致测试多命中，`29518859957` 因逐次 `tap()` 等待 idle 超过 Android 同款 1 秒计数阈值而未解锁；最终改用系统合成 8 连点。最终 run 的 attempts 1～2 中隐藏入口均已通过，失败仅为既有课表/考试长链路的不同等待点偶发超时，attempt 3 同 commit 全绿；不把失败 attempt 冒充最终证据。
 
+设置点击反馈收口证据 `E-20260717-03`：代码 commit `c68ff9a` 已推送。设置首页、偏好开关、主题色、许可证、贡献者及执行型按钮统一使用 `SettingsPressFeedbackStyle`；触摸按下立即显示明暗高亮、0.985 缩放并触发一次轻触觉，开启“减弱动态效果”时取消缩放但保留非动态反馈。`SettingsInteractionTests` 的 2 项专项测试锁定常规按压态与减弱动态效果语义。最终 CI `29524972678` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 135 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-71` 为 19,687,342 bytes。未签名 IPA run `29524973286` 上传 `AHUTong-unsigned-ipa-71`，IPA 为 5,493,558 bytes，SHA-256 `059A5CEF3E9A149F3E31964AE2FA7382DFF819573072030A43B4F4F47839969F`，产物校验文件一致；Release run `29524972714` 上传 9,582,445 bytes 的 `AHUTong-release-readiness-25`。Simulator 可验证按压视觉与导航，但没有物理触觉，轻触觉仍由用户在 iPhone 13 Pro 上完成部署回归。
+
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
@@ -250,7 +253,7 @@ iOS/
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 已完成 | 认证请求层复用 Rust 会话 Cookie 并识别 401/403/登录重定向；真实 campus/type/list 端点、失物/寻物双列表、校区/类型/全文筛选、分页、详情和受控图片加载完整 | `LostFoundTests` 的契约解码、跨字段筛选和无重复分页 3 项及双端列表/详情/三态截图在 `E-20260715-01` 通过；Commits `d8516f2`、`7b688b7`、`aeda622`、`1c0f950` | 2026-07-15 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；所有权由可靠用户标识判定，“我的帖子”、字段校验和失败提示完整；未确认的图片上传能力不伪造 | `LostFoundTests` 的草稿校验、远端确认后可见、拒绝删除他人/成功删除本人 3 项及双端 60% 发布面板在 `E-20260715-01` 通过；Commits `d8516f2`、`aeda622`、`77a5ae5` | 2026-07-15 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 仓库/目录浏览、缓存、URLSession 临时文件流式落盘、进度、Quick Look/系统分享、单个和批量删除完整；Android 页面结构已重做 | `StudyRepositoryServiceTests` 6 项覆盖六仓契约、目录缓存、双源下载进度和删除；UI 见 `E-20260714-01`，最终 device 构建见 `E-20260715-04` | 2026-07-15 |
-| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、Android 主题色、贡献名单、隐藏 Debug、意见反馈和偏好持久化完整；设置列表不显示 Debug，只保留 App 卡片 8 连点入口；液态玻璃开关与说明区块保持删除，原生 Tab Bar 始终跟随系统 | 原设置/偏好证据见 `E-20260714-01`～`03`；液态玻璃入口删除见 `E-20260716-02`；Debug 可见行移除与隐藏入口回归见 `E-20260717-02` | 2026-07-17 |
+| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、Android 主题色、贡献名单、隐藏 Debug、意见反馈和偏好持久化完整；所有可点击行具备按压高亮/缩放/轻触觉反馈并尊重减弱动态效果；设置列表不显示 Debug，只保留 App 卡片 8 连点入口；原生 Tab Bar 始终跟随系统 | 原设置/偏好证据见 `E-20260714-01`～`03`；液态玻璃入口删除见 `E-20260716-02`；Debug 可见行移除见 `E-20260717-02`；交互反馈见 `E-20260717-03` | 2026-07-17 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 已完成 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整 | `ScheduleWidgetSnapshotTests` 5 项含跨周推进；原 Widget 证据见 `E-20260715-01`，最终 Extension/IPA/Archive 见 `E-20260715-04` | 2026-07-15 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、时区日期、前台/时区变化重排完整；ActivityKit 锁屏与灵动岛下一节课倒计时、设置开关和 Debug 测试入口完整 | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归 | 2026-07-15 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | Android 同算法灰度、本地兜底/Debug 覆盖、App 卡片 8 连点隐藏入口、不可逆账号摘要、脱敏日志、隐私清单/数据地图、敏感信息扫描、Release Archive、未签名 IPA 与 Personal Team 发布清单完整；第三方崩溃/统计/广告保持关闭 | `ReleaseOperationsTests` 8 项及 Archive/IPA/全套 macOS CI 见 `E-20260715-02`；隐藏入口专项回归见 `E-20260717-02`；物理机 7 天签名是部署回归，不冒充已执行证据 | 2026-07-17 |
@@ -292,6 +295,7 @@ iOS/
 | 课程数据格式 | 旧 `Course` 缓存把 weekday/周次/节次保存为字符串，新教务 Activity 使用整数和 `weekIndexes`；空 weekIndexes 的 Activity 会被丢弃 | iOS `Course` 解码同时接受字符串和整数；存在 `weekIndexes` 时以去重排序后的精确周为准，否则兼容旧起止周范围；畸形数据不触发强制转换崩溃 |
 | 课表缓存隔离 | 大部分当前学期缓存带用户前缀，但 `next.schedule` 仍是共享键 | iOS 持久化协议从入口要求 `UserScopedStore`，当前/下一学期均不得绕过用户命名空间；GuiXu 物理键再做 SHA-256，数据库文件不出现学号或业务键明文；旧 UserDefaults/文件缓存只迁移一次 |
 | Debug 入口 | App 卡片连续点击 8 次后进入 Debug | 与 Android 保持一致：设置列表不展示 Debug，连续点击 App 信息卡 8 次后进入；诊断页面内容保持完整 |
+| 设置点击反馈 | Compose `clickable` 默认提供按压/波纹反馈 | 保持 Android 布局不变，SwiftUI 自定义 `ButtonStyle` 在触摸按下时提供高亮、0.985 缩放和轻触觉；减弱动态效果时只禁用缩放 |
 | 电话本 | Android 使用 `ACTION_DIAL`，双校区号码先弹窗选择；号码注释来自 2025 新生手册并含 2026 年 3 月更新 | iOS 保留 9 类 57 个条目及来源说明，统一补 0551 区号；所有号码（含单号码）先由确认菜单选择，再交给系统电话应用，不申请通讯录权限 |
 | 校历 | Android 下载 `openahu.org/download/xiaoli.jpg` 到应用目录，支持手势缩放并可申请权限保存相册 | iOS 校验图片签名并原子缓存，损坏缓存自动清理、刷新失败显示旧缓存；使用 1–5 倍原生手势、Quick Look 和 ShareLink，不写相册，因此无需照片权限且拒绝权限时无功能损失 |
 | 学习资料 | Android 通过 GitHub Contents API 浏览 6 个学院仓库，jsDelivr/Raw 下载到外部应用目录，再以 Intent 打开 | iOS 保持同一仓库清单和分支，目录按仓库/路径缓存；文件流式下载到 Application Support、文件名哈希化，使用 Quick Look/ShareLink；公开 GitHub 限流或断网时回退已访问目录和已下载文件 |
@@ -398,6 +402,7 @@ iOS/
 - [x] 原生 Tab Bar 的 APP-01 已由 `E-20260716-01` 恢复“已完成”；支付解除条件完成后再将 PAY-01～03 逐项推进，不以 Mock 或未扣款 UI 伪造 100%。
 - [x] 液态玻璃偏好入口删除已通过 `E-20260716-02` 最终 CI，PREF-01 恢复“已完成”；设置中不得重新加入可关闭系统 Tab Bar 材质的开关。
 - [x] 设置首页 `Debug` 可见行已按 `E-20260717-02` 删除；完整诊断页只允许由 App 信息卡 8 连点隐藏入口进入。
+- [x] 设置域可点击项已按 `E-20260717-03` 统一提供即时按压和触觉反馈，并覆盖减弱动态效果语义。
 
 ### P0-W1：工程与契约起点
 
@@ -499,3 +504,4 @@ iOS/
 | 2026-07-16 | UI-007 | 按用户要求从设置页彻底删除液态玻璃区块；系统原生 Tab Bar 默认启用并且不提供用户修改入口 | CI `29435300302`：132 单测 + 5 UI 全绿，三个删除项否定断言通过，偏好页截图目视通过；IPA `29435300525`、Archive `29435300113` 成功，见 `E-20260716-02` | `d5d791f` |
 | 2026-07-17 | PAY-004 | 将三类生产支付的无服务端阻断提示改为学校官方 HTTPS/CAS 页面入口；真实输入与确认留在校方页面，App 不提交当前表单、不保存官方密码、不把跳转误报为成功，原生网关仍保持安全边界 | 最终 CI `29439249505`：无扣款 HEAD/302 探测、133 单测 + 5 UI 全绿；IPA `29439249117`、Archive `29439249504` 成功，见 `E-20260717-01` | `df88d87`、`ac5e1d0` |
 | 2026-07-17 | PREF-006 | 覆盖此前可见 Debug 行要求：从设置“关于”列表删除 Debug，只保留 App 信息卡 8 连点隐藏入口；合并卡片辅助功能元素并用系统 8 连点做真实导航回归 | 最终 CI `29520243365` attempt 3：133 单测 + 5 UI 全绿；IPA `29520243324`、Archive `29520243338` 成功，见 `E-20260717-02` | `ec4f21a`、`64cc7df`、`4f00e8e` |
+| 2026-07-17 | PREF-007 | 为设置首页、偏好开关、主题色、许可证和贡献者统一增加按压高亮、短缩放与轻触觉反馈；减弱动态效果时保留明暗反馈但取消缩放 | `SettingsInteractionTests` 2 项锁定按压/减弱动态效果状态；最终 macOS CI、IPA 与 Archive 见 `E-20260717-03` | `c68ff9a` |
