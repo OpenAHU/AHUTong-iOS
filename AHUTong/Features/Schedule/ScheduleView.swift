@@ -15,6 +15,46 @@ struct ScheduleWeekNavigation {
     }
 }
 
+struct ScheduleOverviewGroup: Equatable, Identifiable {
+    let weekday: Int
+    let startPeriod: Int
+    let duration: Int
+    let courses: [Course]
+
+    var id: String { "\(weekday)-\(startPeriod)-\(duration)" }
+}
+
+enum ScheduleOverviewLayout {
+    private struct Slot: Hashable {
+        let weekday: Int
+        let startPeriod: Int
+        let duration: Int
+    }
+
+    static func groups(for courses: [Course]) -> [ScheduleOverviewGroup] {
+        Dictionary(grouping: courses) {
+            Slot(weekday: $0.weekday, startPeriod: $0.startPeriod, duration: $0.duration)
+        }
+        .map { slot, courses in
+            ScheduleOverviewGroup(
+                weekday: slot.weekday,
+                startPeriod: slot.startPeriod,
+                duration: slot.duration,
+                courses: courses.sorted {
+                    if $0.startWeek != $1.startWeek { return $0.startWeek < $1.startWeek }
+                    if $0.endWeek != $1.endWeek { return $0.endWeek < $1.endWeek }
+                    return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                }
+            )
+        }
+        .sorted {
+            if $0.weekday != $1.weekday { return $0.weekday < $1.weekday }
+            if $0.startPeriod != $1.startPeriod { return $0.startPeriod < $1.startPeriod }
+            return $0.duration < $1.duration
+        }
+    }
+}
+
 @MainActor
 final class ScheduleViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<[Course]> = .idle
@@ -46,7 +86,8 @@ final class ScheduleViewModel: ObservableObject {
             currentWeek = 1
             switch DemoDataState.current {
             case .normal:
-                let courses = DebugRuntimeSettings.decode("schedule", as: [Course].self) ?? Self.demoCourses
+                let fallback = previewNext ? Self.demoNextSemesterCourses : Self.demoCourses
+                let courses = DebugRuntimeSettings.decode("schedule", as: [Course].self) ?? fallback
                 state = courses.isEmpty ? .empty : .loaded(courses)
                 if !previewNext {
                     await updateSystemIntegrations(courses: courses, referenceDate: DemoDataState.referenceDate)
@@ -69,10 +110,13 @@ final class ScheduleViewModel: ObservableObject {
             let result = try await repository(previewNext: previewNext).load(
                 semester: previewNext ? semester.next : semester
             )
+            try Task.checkCancellation()
             currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? 1)
             source = result.source
             state = .loaded(result.courses)
             if !previewNext { await updateSystemIntegrations(courses: result.courses) }
+        } catch is CancellationError {
+            return
         } catch {
             state = .failed(AppErrorState(message: error.localizedDescription))
             if !previewNext { await publishWidget(.unavailable(.expired)) }
@@ -86,10 +130,13 @@ final class ScheduleViewModel: ObservableObject {
                 semester: previewNext ? semester.next : semester,
                 policy: .refresh
             )
+            try Task.checkCancellation()
             source = result.source
             state = .loaded(result.courses)
             currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? currentWeek)
             if !previewNext { await updateSystemIntegrations(courses: result.courses) }
+        } catch is CancellationError {
+            return
         } catch {
             state = .failed(AppErrorState(message: error.localizedDescription))
             if !previewNext { await publishWidget(.unavailable(.expired)) }
@@ -126,6 +173,12 @@ final class ScheduleViewModel: ObservableObject {
         Course(weekday: 5, startWeek: 1, endWeek: 16, location: "磬苑操场", name: "大学体育", teacher: "赵老师", duration: 2, startPeriod: 3, courseID: "demo-6", weekIndexes: Array(1...16)),
         Course(weekday: 7, startWeek: 4, endWeek: 16, location: "线上", name: "形势与政策", teacher: "辅导员", duration: 2, startPeriod: 11, courseID: "demo-7", weekIndexes: [4, 8, 12, 16])
     ]
+
+    static let demoNextSemesterCourses = [
+        Course(weekday: 1, startWeek: 1, endWeek: 16, location: "博学南楼 A205", name: "编译原理", teacher: "周老师", duration: 2, startPeriod: 1, courseID: "demo-next-1", weekIndexes: Array(1...16)),
+        Course(weekday: 3, startWeek: 1, endWeek: 12, location: "笃行北楼 B305", name: "计算机图形学", teacher: "吴老师", duration: 2, startPeriod: 3, courseID: "demo-next-2", weekIndexes: Array(1...12)),
+        Course(weekday: 5, startWeek: 2, endWeek: 16, location: "实验中心 407", name: "软件测试", teacher: "郑老师", duration: 3, startPeriod: 6, courseID: "demo-next-3", weekIndexes: Array(2...16))
+    ]
 }
 
 struct ScheduleView: View {
@@ -160,23 +213,17 @@ struct ScheduleView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .task {
+        .task(id: previewNextSemester) {
             await model.load(demo: AppRuntime.isDemoSession, previewNext: previewNextSemester)
+            guard !Task.isCancelled else { return }
             selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
         }
-        .onChange(of: previewNextSemester) { _, enabled in
-            Task {
-                await model.load(demo: AppRuntime.isDemoSession, previewNext: enabled)
-                selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
-            }
-        }
         .sheet(item: $selectedCourse) { course in CourseDetailView(course: course) }
-        .alert("课表设置", isPresented: $showSettings) {
-            Toggle("总览课表", isOn: $showAllCourses)
-            Toggle("预览下学期课表", isOn: $previewNextSemester)
-            Button("完成", role: .cancel) {}
-        } message: {
-            Text("总览课表会显示全部周次课程；下学期预览会读取教务系统下一学期课表。")
+        .sheet(isPresented: $showSettings) {
+            ScheduleSettingsView(
+                showAllCourses: $showAllCourses,
+                previewNextSemester: $previewNextSemester
+            )
         }
     }
 
@@ -215,12 +262,16 @@ struct ScheduleView: View {
             }
             HStack(spacing: 0) {
                 scheduleAction("location", "回到当前周") {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
+                    if previewNextSemester {
+                        previewNextSemester = false
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
+                        }
                     }
                 }
-                scheduleAction("gearshape", "课表设置") { showSettings = true }
-                scheduleAction("arrow.clockwise", "刷新课表") { Task { await model.refresh(previewNext: previewNextSemester) } }
+                scheduleAction("gearshape", "课表设置", identifier: "schedule.settings") { showSettings = true }
+                scheduleAction("arrow.clockwise", "刷新课表", identifier: "schedule.refresh") { Task { await model.refresh(previewNext: previewNextSemester) } }
             }
             .padding(2)
             .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
@@ -257,10 +308,16 @@ struct ScheduleView: View {
         }
     }
 
-    private func scheduleAction(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
+    private func scheduleAction(
+        _ icon: String,
+        _ label: String,
+        identifier: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) { Image(systemName: icon).font(.system(size: 20)).frame(width: 38, height: 38) }
             .buttonStyle(.plain)
             .accessibilityLabel(label)
+            .accessibilityIdentifier(identifier ?? "schedule.action.\(label)")
     }
 
     private func schedulePager(courses: [Course]) -> some View {
@@ -284,18 +341,26 @@ struct ScheduleView: View {
             let displayed = visibleCourses(courses, week: week)
             ZStack(alignment: .topLeading) {
                 grid(dayWidth: dayWidth, spacing: spacing, timeWidth: timeWidth, week: week)
-                ForEach(displayed) { course in
-                    let group = conflictGroup(for: course, in: displayed)
-                    let index = group.firstIndex(of: course) ?? 0
-                    courseCard(
-                        course,
-                        dayWidth: dayWidth,
-                        spacing: spacing,
-                        timeWidth: timeWidth,
-                        conflictIndex: index,
-                        conflictCount: group.count,
-                        week: week
-                    )
+                if showAllCourses {
+                    ForEach(ScheduleOverviewLayout.groups(for: courses)) { group in
+                        overviewCourseGroupCard(
+                            group,
+                            dayWidth: dayWidth,
+                            spacing: spacing,
+                            timeWidth: timeWidth,
+                            week: week
+                        )
+                    }
+                } else {
+                    ForEach(displayed) { course in
+                        courseCard(
+                            course,
+                            dayWidth: dayWidth,
+                            spacing: spacing,
+                            timeWidth: timeWidth,
+                            week: week
+                        )
+                    }
                 }
             }
             .padding(.top, 8)
@@ -336,14 +401,10 @@ struct ScheduleView: View {
         dayWidth: CGFloat,
         spacing: CGFloat,
         timeWidth: CGFloat,
-        conflictIndex: Int,
-        conflictCount: Int,
         week: Int
     ) -> some View {
         let active = course.occurs(inWeek: week)
         let height = CGFloat(course.duration) * 48 + CGFloat(max(course.duration - 1, 0)) * spacing
-        let resolvedCount = max(conflictCount, 1)
-        let resolvedWidth = (dayWidth - CGFloat(resolvedCount - 1) * 1) / CGFloat(resolvedCount)
         return Button { selectedCourse = course } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(course.name).androidScaledFont(size: 11, relativeTo: .caption2, weight: .bold).lineLimit(3)
@@ -358,13 +419,12 @@ struct ScheduleView: View {
             }
             .foregroundStyle(.white)
             .padding(4)
-            .frame(width: resolvedWidth, height: height)
+            .frame(width: dayWidth, height: height)
             .background(active ? courseColor(course.name) : Color.gray, in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .offset(
-            x: timeWidth + spacing + CGFloat(course.weekday - 1) * (dayWidth + spacing)
-                + CGFloat(conflictIndex) * (resolvedWidth + 1),
+            x: timeWidth + spacing + CGFloat(course.weekday - 1) * (dayWidth + spacing),
             y: 64 + spacing + CGFloat(course.startPeriod - 1) * (48 + spacing)
         )
         .accessibilityLabel("\(course.name)，\(course.location)，第\(course.startPeriod)节")
@@ -377,17 +437,61 @@ struct ScheduleView: View {
         )
     }
 
-    private func visibleCourses(_ courses: [Course], week: Int) -> [Course] {
-        courses.filter { showAllCourses || $0.occurs(inWeek: week) }
+    private func overviewCourseGroupCard(
+        _ group: ScheduleOverviewGroup,
+        dayWidth: CGFloat,
+        spacing: CGFloat,
+        timeWidth: CGFloat,
+        week: Int
+    ) -> some View {
+        let height = CGFloat(group.duration) * 48 + CGFloat(max(group.duration - 1, 0)) * spacing
+        return VStack(spacing: 1) {
+            ForEach(group.courses) { course in
+                let active = course.occurs(inWeek: week)
+                Button { selectedCourse = course } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(course.name)
+                            .androidScaledFont(size: 11, relativeTo: .caption2, weight: .bold)
+                            .lineLimit(group.courses.count <= 2 ? 3 : 2)
+                        Spacer(minLength: 0)
+                        Text("\(course.startWeek)-\(course.endWeek)周")
+                            .androidScaledFont(size: 10, relativeTo: .caption2, weight: .bold)
+                            .frame(maxWidth: .infinity)
+                        Text(shortLocation(course.location))
+                            .androidScaledFont(size: 10, relativeTo: .caption2, weight: .bold)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity)
+                            .padding(2)
+                            .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
+                            .foregroundStyle(.black)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(courseColor(course.name).opacity(active ? 1 : 0.45))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(course.name)，第\(course.startWeek)到\(course.endWeek)周，\(course.location)")
+                .accessibilityIdentifier(
+                    ScheduleWeekNavigation.courseIdentifier(
+                        courseID: course.courseID,
+                        week: week,
+                        selectedWeek: selectedWeek
+                    )
+                )
+            }
+        }
+        .frame(width: dayWidth, height: height)
+        .background(AndroidParityPalette.surface(colorScheme))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .offset(
+            x: timeWidth + spacing + CGFloat(group.weekday - 1) * (dayWidth + spacing),
+            y: 64 + spacing + CGFloat(group.startPeriod - 1) * (48 + spacing)
+        )
     }
 
-    private func conflictGroup(for course: Course, in courses: [Course]) -> [Course] {
-        guard showAllCourses else { return [course] }
-        return courses.filter {
-            $0.weekday == course.weekday
-                && $0.startPeriod == course.startPeriod
-                && $0.duration == course.duration
-        }
+    private func visibleCourses(_ courses: [Course], week: Int) -> [Course] {
+        courses.filter { $0.occurs(inWeek: week) }
     }
 
     private func courseColor(_ name: String) -> Color {
@@ -443,6 +547,94 @@ struct ScheduleView: View {
             .replacingOccurrences(of: "笃行南楼", with: "笃南")
             .replacingOccurrences(of: "笃行北楼", with: "笃北")
             .replacingOccurrences(of: "互联大楼", with: "互楼")
+    }
+}
+
+private struct ScheduleSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding var showAllCourses: Bool
+    @Binding var previewNextSemester: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("课表设置")
+                    .font(.title2.bold())
+                Spacer()
+                Button("完成") { dismiss() }
+                    .font(.headline)
+                    .accessibilityIdentifier("schedule.settings.done")
+            }
+
+            settingToggle(
+                title: "总览课表",
+                description: "显示全部周次的课程，重叠课程会平分同一块时间区域",
+                identifier: "schedule.settings.overview",
+                isOn: $showAllCourses
+            )
+            settingToggle(
+                title: "预览下学期课表",
+                description: "切换到教务系统中的下学期课表",
+                identifier: "schedule.settings.next-semester",
+                isOn: $previewNextSemester
+            )
+            Spacer(minLength: 0)
+        }
+        .padding(24)
+        .background(AndroidParityPalette.raisedSurface(colorScheme))
+        .presentationDetents([.height(310)])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(32)
+    }
+
+    private func settingToggle(
+        title: String,
+        description: String,
+        identifier: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Button { isOn.wrappedValue.toggle() } label: {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.body.bold())
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("", isOn: isOn)
+                    .labelsHidden()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ScheduleSettingPressStyle())
+        .padding(.vertical, 10)
+        .accessibilityIdentifier(identifier)
+        .accessibilityValue(isOn.wrappedValue ? "开启" : "关闭")
+    }
+}
+
+private struct ScheduleSettingPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0))
+                    .allowsHitTesting(false)
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.55), trigger: configuration.isPressed) { oldValue, newValue in
+                !oldValue && newValue
+            }
     }
 }
 

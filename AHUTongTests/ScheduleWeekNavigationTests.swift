@@ -24,4 +24,44 @@ final class ScheduleWeekNavigationTests: XCTestCase {
             "schedule.course.demo-3.week.3"
         )
     }
+
+    func testOverviewGroupsSameTimeCoursesLikeAndroid() throws {
+        let groups = ScheduleOverviewLayout.groups(for: [
+            course(id: "late", name: "后半学期", startWeek: 9, endWeek: 16),
+            course(id: "early", name: "前半学期", startWeek: 1, endWeek: 8),
+            course(id: "other", name: "另一时间", startWeek: 1, endWeek: 16, startPeriod: 3)
+        ])
+
+        XCTAssertEqual(groups.count, 2)
+        let sharedSlot = try XCTUnwrap(groups.first { $0.startPeriod == 1 })
+        XCTAssertEqual(sharedSlot.courses.map(\.courseID), ["early", "late"])
+    }
+
+    func testOverviewRetainsCoursesOutsideSelectedWeek() {
+        let future = course(id: "future", name: "未来课程", startWeek: 4, endWeek: 12)
+
+        XCTAssertFalse(future.occurs(inWeek: 1))
+        XCTAssertEqual(ScheduleOverviewLayout.groups(for: [future]).flatMap(\.courses), [future])
+    }
+
+    private func course(
+        id: String,
+        name: String,
+        startWeek: Int,
+        endWeek: Int,
+        startPeriod: Int = 1
+    ) -> Course {
+        Course(
+            weekday: 1,
+            startWeek: startWeek,
+            endWeek: endWeek,
+            location: "教室",
+            name: name,
+            teacher: "老师",
+            duration: 2,
+            startPeriod: startPeriod,
+            courseID: id,
+            weekIndexes: Array(startWeek...endWeek)
+        )
+    }
 }

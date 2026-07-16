@@ -218,6 +218,24 @@ final class AppShellUITests: XCTestCase {
         waitForExpectations(timeout: 3)
         XCTAssertEqual(pager.value as? String, "第1周")
         XCTAssertTrue(demoCourse.waitForExistence(timeout: 3))
+
+        app.buttons["schedule.settings"].tap()
+        let overview = app.buttons["schedule.settings.overview"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 3))
+        overview.tap()
+        expectation(for: NSPredicate(format: "value == %@", "开启"), evaluatedWith: overview)
+        waitForExpectations(timeout: 3)
+        app.buttons["schedule.settings.done"].tap()
+        XCTAssertTrue(app.buttons["schedule.course.demo-5"].waitForExistence(timeout: 4))
+
+        app.buttons["schedule.settings"].tap()
+        let nextSemester = app.buttons["schedule.settings.next-semester"]
+        XCTAssertTrue(nextSemester.waitForExistence(timeout: 3))
+        nextSemester.tap()
+        expectation(for: NSPredicate(format: "value == %@", "开启"), evaluatedWith: nextSemester)
+        waitForExpectations(timeout: 3)
+        app.buttons["schedule.settings.done"].tap()
+        XCTAssertTrue(app.buttons["schedule.course.demo-next-1"].waitForExistence(timeout: 5))
     }
 
     @MainActor
