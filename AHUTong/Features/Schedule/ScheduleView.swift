@@ -1,6 +1,14 @@
 import SwiftUI
 import WidgetKit
 
+struct ScheduleWeekNavigation {
+    static let validWeeks = 1...20
+
+    static func clamped(_ week: Int) -> Int {
+        min(max(week, validWeeks.lowerBound), validWeeks.upperBound)
+    }
+}
+
 @MainActor
 final class ScheduleViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<[Course]> = .idle
@@ -148,12 +156,12 @@ struct ScheduleView: View {
         }
         .task {
             await model.load(demo: AppRuntime.isDemoSession, previewNext: previewNextSemester)
-            selectedWeek = model.currentWeek
+            selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
         }
         .onChange(of: previewNextSemester) { _, enabled in
             Task {
                 await model.load(demo: AppRuntime.isDemoSession, previewNext: enabled)
-                selectedWeek = model.currentWeek
+                selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
             }
         }
         .sheet(item: $selectedCourse) { course in CourseDetailView(course: course) }
@@ -171,10 +179,11 @@ struct ScheduleView: View {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
-                        ForEach(1...20, id: \.self) { week in
+                        ForEach(ScheduleWeekNavigation.validWeeks, id: \.self) { week in
                             Button {
-                                selectedWeek = week
-                                withAnimation { proxy.scrollTo(max(1, week - 2), anchor: .leading) }
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    selectedWeek = week
+                                }
                             } label: {
                                 Text("\(week)")
                                     .font(.headline.bold())
@@ -184,15 +193,26 @@ struct ScheduleView: View {
                                     .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Capsule())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("schedule.week.\(week)")
+                            .accessibilityAddTraits(selectedWeek == week ? .isSelected : [])
                             .id(week)
                         }
                     }
                     .padding(.horizontal, 16)
                 }
                 .scrollIndicators(.hidden)
+                .onChange(of: selectedWeek) { _, week in
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(max(1, week - 2), anchor: .leading)
+                    }
+                }
             }
             HStack(spacing: 0) {
-                scheduleAction("location", "回到当前周") { selectedWeek = model.currentWeek }
+                scheduleAction("location", "回到当前周") {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
+                    }
+                }
                 scheduleAction("gearshape", "课表设置") { showSettings = true }
                 scheduleAction("arrow.clockwise", "刷新课表") { Task { await model.refresh(previewNext: previewNextSemester) } }
             }
@@ -206,10 +226,10 @@ struct ScheduleView: View {
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            scheduleGrid(courses: [])
+            schedulePager(courses: [])
                 .overlay { ProgressView("加载课表…").accessibilityIdentifier("schedule.loading") }
         case let .failed(error):
-            scheduleGrid(courses: [])
+            schedulePager(courses: [])
                 .overlay {
                     VStack(spacing: 12) {
                         Text("加载课表失败").font(.headline)
@@ -220,9 +240,9 @@ struct ScheduleView: View {
                     .accessibilityIdentifier("schedule.error")
                 }
         case .empty:
-            scheduleGrid(courses: []).accessibilityIdentifier("schedule.empty")
+            schedulePager(courses: []).accessibilityIdentifier("schedule.empty")
         case let .loaded(courses):
-            scheduleGrid(courses: courses)
+            schedulePager(courses: courses)
                 .overlay {
                     if courses.isEmpty {
                         EmptyView().accessibilityIdentifier("schedule.empty")
@@ -237,14 +257,28 @@ struct ScheduleView: View {
             .accessibilityLabel(label)
     }
 
-    private func scheduleGrid(courses: [Course]) -> some View {
+    private func schedulePager(courses: [Course]) -> some View {
+        TabView(selection: $selectedWeek) {
+            ForEach(ScheduleWeekNavigation.validWeeks, id: \.self) { week in
+                scheduleGrid(courses: courses, week: week)
+                    .tag(week)
+                    .accessibilityIdentifier("schedule.week-page.\(week)")
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .frame(height: scheduleGridHeight)
+        .accessibilityIdentifier("schedule.week-pager")
+        .accessibilityValue("第\(selectedWeek)周")
+    }
+
+    private func scheduleGrid(courses: [Course], week: Int) -> some View {
         GeometryReader { geometry in
             let spacing: CGFloat = 4
             let timeWidth: CGFloat = 40
             let dayWidth = (geometry.size.width - timeWidth - spacing * 9) / 7
-            let displayed = visibleCourses(courses)
+            let displayed = visibleCourses(courses, week: week)
             ZStack(alignment: .topLeading) {
-                grid(dayWidth: dayWidth, spacing: spacing, timeWidth: timeWidth)
+                grid(dayWidth: dayWidth, spacing: spacing, timeWidth: timeWidth, week: week)
                 ForEach(displayed) { course in
                     let group = conflictGroup(for: course, in: displayed)
                     let index = group.firstIndex(of: course) ?? 0
@@ -254,28 +288,29 @@ struct ScheduleView: View {
                         spacing: spacing,
                         timeWidth: timeWidth,
                         conflictIndex: index,
-                        conflictCount: group.count
+                        conflictCount: group.count,
+                        week: week
                     )
                 }
             }
             .padding(.top, 8)
             .padding(4)
         }
-        .frame(height: 64 + 13 * 52 + 24)
+        .frame(height: scheduleGridHeight)
         .background(AndroidParityPalette.raisedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 32))
     }
 
-    private func grid(dayWidth: CGFloat, spacing: CGFloat, timeWidth: CGFloat) -> some View {
+    private func grid(dayWidth: CGFloat, spacing: CGFloat, timeWidth: CGFloat, week: Int) -> some View {
         VStack(spacing: spacing) {
             HStack(spacing: spacing) {
                 Color.clear.frame(width: timeWidth, height: 64)
                 ForEach(Array(weekdays.enumerated()), id: \.offset) { index, weekday in
                     VStack(spacing: 2) {
                         Text(weekday).font(.caption.bold())
-                        Text(dateLabel(dayIndex: index)).font(.caption2).foregroundStyle(.secondary)
+                        Text(dateLabel(dayIndex: index, week: week)).font(.caption2).foregroundStyle(.secondary)
                     }
                     .frame(width: dayWidth, height: 64)
-                    .background(index == currentWeekdayIndex && selectedWeek == model.currentWeek ? AndroidParityPalette.primaryContainer(colorScheme) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                    .background(index == currentWeekdayIndex && week == model.currentWeek ? AndroidParityPalette.primaryContainer(colorScheme) : .clear, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             ForEach(Array(times.enumerated()), id: \.offset) { index, time in
@@ -297,9 +332,10 @@ struct ScheduleView: View {
         spacing: CGFloat,
         timeWidth: CGFloat,
         conflictIndex: Int,
-        conflictCount: Int
+        conflictCount: Int,
+        week: Int
     ) -> some View {
-        let active = course.occurs(inWeek: selectedWeek)
+        let active = course.occurs(inWeek: week)
         let height = CGFloat(course.duration) * 48 + CGFloat(max(course.duration - 1, 0)) * spacing
         let resolvedCount = max(conflictCount, 1)
         let resolvedWidth = (dayWidth - CGFloat(resolvedCount - 1) * 1) / CGFloat(resolvedCount)
@@ -330,8 +366,8 @@ struct ScheduleView: View {
         .accessibilityIdentifier("schedule.course.\(course.courseID)")
     }
 
-    private func visibleCourses(_ courses: [Course]) -> [Course] {
-        courses.filter { showAllCourses || $0.occurs(inWeek: selectedWeek) }
+    private func visibleCourses(_ courses: [Course], week: Int) -> [Course] {
+        courses.filter { showAllCourses || $0.occurs(inWeek: week) }
     }
 
     private func conflictGroup(for course: Course, in courses: [Course]) -> [Course] {
@@ -371,15 +407,15 @@ struct ScheduleView: View {
         demo || previewNextSemester ? -1 : (Calendar.current.component(.weekday, from: Date()) + 5) % 7
     }
 
-    private func dateLabel(dayIndex: Int) -> String {
+    private func dateLabel(dayIndex: Int, week: Int) -> String {
         let calendar = Calendar(identifier: .gregorian)
         let date: Date
         if demo {
             let semesterStart = calendar.date(from: DateComponents(year: 2026, month: 7, day: 13)) ?? Date()
-            date = calendar.date(byAdding: .day, value: (selectedWeek - 1) * 7 + dayIndex, to: semesterStart) ?? semesterStart
+            date = calendar.date(byAdding: .day, value: (week - 1) * 7 + dayIndex, to: semesterStart) ?? semesterStart
         } else {
             let weekday = calendar.component(.weekday, from: Date())
-            let mondayOffset = -((weekday + 5) % 7) + (selectedWeek - model.currentWeek) * 7
+            let mondayOffset = -((weekday + 5) % 7) + (week - model.currentWeek) * 7
             date = calendar.date(byAdding: .day, value: mondayOffset + dayIndex, to: Date()) ?? Date()
         }
         let components = calendar.dateComponents([.month, .day], from: date)
@@ -387,6 +423,8 @@ struct ScheduleView: View {
     }
 
     private var demo: Bool { AppRuntime.isDemoSession }
+
+    private var scheduleGridHeight: CGFloat { 64 + 13 * 52 + 24 }
 
     private func shortLocation(_ location: String) -> String {
         location.replacingOccurrences(of: "博学北楼", with: "博北")

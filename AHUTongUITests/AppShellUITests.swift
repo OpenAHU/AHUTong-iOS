@@ -185,6 +185,33 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testScheduleSupportsHorizontalWeekPaging() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        tabButton("schedule", app: app).tap()
+
+        let pager = app.descendants(matching: .any)["schedule.week-pager"]
+        let firstWeek = app.buttons["schedule.week.1"]
+        let secondWeek = app.buttons["schedule.week.2"]
+        XCTAssertTrue(pager.waitForExistence(timeout: 4))
+        XCTAssertTrue(firstWeek.waitForExistence(timeout: 2))
+        XCTAssertTrue(firstWeek.isSelected)
+
+        pager.swipeLeft()
+        expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: secondWeek)
+        waitForExpectations(timeout: 3)
+        XCTAssertEqual(pager.value as? String, "第2周")
+
+        pager.swipeRight()
+        expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: firstWeek)
+        waitForExpectations(timeout: 3)
+        XCTAssertEqual(pager.value as? String, "第1周")
+    }
+
+    @MainActor
     func testAndroidParityLoginAndReminderSystemStates() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-consent"]
