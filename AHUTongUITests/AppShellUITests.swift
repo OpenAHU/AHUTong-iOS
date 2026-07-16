@@ -196,8 +196,10 @@ final class AppShellUITests: XCTestCase {
         let pager = app.descendants(matching: .any)["schedule.week-pager"]
         let firstWeek = app.buttons["schedule.week.1"]
         let secondWeek = app.buttons["schedule.week.2"]
+        let demoCourse = app.buttons["schedule.course.demo-3"]
         XCTAssertTrue(pager.waitForExistence(timeout: 4))
         XCTAssertTrue(firstWeek.waitForExistence(timeout: 2))
+        XCTAssertTrue(demoCourse.waitForExistence(timeout: 4))
         XCTAssertTrue(firstWeek.isSelected)
 
         pager.swipeLeft()
@@ -209,6 +211,7 @@ final class AppShellUITests: XCTestCase {
         expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: firstWeek)
         waitForExpectations(timeout: 3)
         XCTAssertEqual(pager.value as? String, "第1周")
+        XCTAssertTrue(demoCourse.waitForExistence(timeout: 3))
     }
 
     @MainActor

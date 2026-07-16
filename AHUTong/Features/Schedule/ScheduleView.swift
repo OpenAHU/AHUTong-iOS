@@ -268,7 +268,6 @@ struct ScheduleView: View {
             ForEach(ScheduleWeekNavigation.validWeeks, id: \.self) { week in
                 scheduleGrid(courses: courses, week: week)
                     .tag(week)
-                    .accessibilityIdentifier("schedule.week-page.\(week)")
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
