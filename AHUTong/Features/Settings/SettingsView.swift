@@ -29,18 +29,18 @@ struct SettingsView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
                             .padding(.horizontal, 16)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
                     .accessibilityIdentifier("settings.preferences")
                     section("关于")
                     settingsGroup {
                         NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
                             AndroidSettingRow(label: "开源协议", systemImage: "doc.text")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SettingsPressFeedbackStyle())
                         NavigationLink { ContributorsView().androidDetailScreen() } label: {
                             AndroidSettingRow(label: "贡献名单", systemImage: "person.2")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SettingsPressFeedbackStyle())
                         .accessibilityIdentifier("settings.contributors")
                         AndroidSettingButton(label: "意见反馈", systemImage: AndroidParitySymbol.feedback) {
                             let url = URL(string: "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=1006203134&card_type=group&source=qrcode")!
@@ -138,7 +138,7 @@ struct SettingsView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SettingsPressFeedbackStyle())
         }
         .padding(24)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
@@ -208,7 +208,55 @@ private struct AndroidSettingButton: View {
     let label: String
     let systemImage: String
     let action: () -> Void
-    var body: some View { Button(action: action) { AndroidSettingRow(label: label, systemImage: systemImage) }.buttonStyle(.plain) }
+    var body: some View {
+        Button(action: action) {
+            AndroidSettingRow(label: label, systemImage: systemImage)
+        }
+        .buttonStyle(SettingsPressFeedbackStyle())
+    }
+}
+
+struct SettingsPressFeedbackState: Equatable {
+    let scale: CGFloat
+    let opacity: Double
+    let highlightOpacity: Double
+
+    init(isPressed: Bool, reduceMotion: Bool) {
+        scale = isPressed && !reduceMotion ? 0.985 : 1
+        opacity = isPressed ? 0.78 : 1
+        highlightOpacity = isPressed ? 0.08 : 0
+    }
+}
+
+private struct SettingsPressFeedbackStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let cornerRadius: CGFloat
+
+    init(cornerRadius: CGFloat = 12) {
+        self.cornerRadius = cornerRadius
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        let state = SettingsPressFeedbackState(
+            isPressed: configuration.isPressed,
+            reduceMotion: reduceMotion
+        )
+        return configuration.label
+            .scaleEffect(state.scale)
+            .opacity(state.opacity)
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.primary.opacity(state.highlightOpacity))
+                    .allowsHitTesting(false)
+            }
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: configuration.isPressed
+            )
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.55), trigger: configuration.isPressed) { oldValue, newValue in
+                !oldValue && newValue
+            }
+    }
 }
 
 @MainActor
@@ -322,7 +370,7 @@ private struct AndroidPreferencesView: View {
                             if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                         }
                             .frame(maxWidth: .infinity, alignment: .trailing)
-                            .buttonStyle(.plain)
+                            .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 8))
                             .foregroundStyle(AndroidThemeColor.color(for: themeColor))
                             .padding(.vertical, 8)
                     }
@@ -397,7 +445,7 @@ private struct AndroidPreferencesView: View {
             }
             .padding(.vertical, 8)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SettingsPressFeedbackStyle())
         .accessibilityIdentifier(identifier ?? "")
         .accessibilityValue(isOn ? "开启" : "关闭")
     }
@@ -437,7 +485,7 @@ private struct AndroidPreferencesView: View {
                     .fixedSize()
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SettingsPressFeedbackStyle())
     }
 }
 
@@ -497,7 +545,7 @@ private struct ThirdPartyLicensesView: View {
                             .padding(16)
                             .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
                         .padding(.horizontal, 16)
                     }
                 }
@@ -634,7 +682,7 @@ private struct ContributorsView: View {
                         .background(AndroidParityPalette.raisedSurface(colorScheme))
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 4))
                     .accessibilityIdentifier("contributors.entry.\(entry.id)")
                 }
             }
