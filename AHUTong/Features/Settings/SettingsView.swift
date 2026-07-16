@@ -42,13 +42,6 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.contributors")
-                        NavigationLink {
-                            OperationsDiagnosticsView(userID: currentUser?.studentID, appModel: appModel).androidDetailScreen()
-                        } label: {
-                            AndroidSettingRow(label: "Debug", systemImage: "terminal")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("settings.debug")
                         AndroidSettingButton(label: "意见反馈", systemImage: AndroidParitySymbol.feedback) {
                             let url = URL(string: "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=1006203134&card_type=group&source=qrcode")!
                             openURL(url) { accepted in

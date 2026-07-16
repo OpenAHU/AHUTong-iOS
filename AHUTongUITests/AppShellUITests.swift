@@ -390,9 +390,11 @@ final class AppShellUITests: XCTestCase {
 
         launchDemo(app)
         tabButton("settings", app: app).tap()
-        let debug = app.buttons["settings.debug"]
-        XCTAssertTrue(debug.waitForExistence(timeout: 4))
-        debug.tap()
+        XCTAssertFalse(app.buttons["settings.debug"].exists)
+        XCTAssertFalse(app.staticTexts["Debug"].exists)
+        let appCard = app.descendants(matching: .any)["settings.app-card"]
+        XCTAssertTrue(appCard.waitForExistence(timeout: 4))
+        for _ in 0..<8 { appCard.tap() }
         XCTAssertTrue(app.descendants(matching: .any)["operations.debug.screen"].waitForExistence(timeout: 5))
         waitForRendering()
         capture("33-operations-debug", app: app)
