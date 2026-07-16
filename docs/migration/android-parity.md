@@ -7,11 +7,11 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 总体状态 | 客户端迁移收口；学校官方支付页已作为真实生产入口接入，原生直连与对账仍受 D-005 外部阻塞 |
-| 当前里程碑 | 三类支付生产页可安全打开学校 CAS/校园卡官方页面，App 不携带签名材料、不自动提交当前表单，也不把打开/关闭页面误报为支付成功 |
-| 当前焦点 | macOS CI 对官方入口做无扣款 HTTPS/302 探测并编译测试；真机只在官方页面内由用户再次确认，原生网关继续安全阻断 |
-| 下一步 | 用户在 iPhone 13 Pro 验证官方页面登录、业务列表和账单回查；支付负责人提供 D-005 网关与授权环境后验收原生 PAY-01～03 |
+| 当前里程碑 | 设置首页隐藏 `Debug` 可见行，只保留 Android 同款 App 信息卡连续点击 8 次的隐藏入口 |
+| 当前焦点 | 设置页无 `Debug` 文案/按钮，App 卡片系统 8 连点仍可进入完整诊断页；macOS CI、IPA 与 Archive 已通过 |
+| 下一步 | 用户在 iPhone 13 Pro 验证设置页普通浏览无 Debug 项；需要诊断时连续点击 App 信息卡 8 次 |
 | 用户/平台功能进度 | 20 / 23 个切片满足严格完成定义（87.0%）；剩余 3 个均为受 D-005、R-003、R-004 外部依赖阻断的真实支付切片，不以 Mock 冒充完成 |
-| 当前分支 | `codex/feat/android-parity-migration` |
+| 当前分支 | `codex/fix/hide-debug-setting` |
 | 最近更新 | 2026-07-17 |
 
 ## 1. 目标与边界
@@ -51,7 +51,7 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 6. 每个页面完成前必须保存同一设备尺寸、同一数据状态的 Android 与 iOS 截图，检查关键几何尺寸与颜色；主要页面必须有 UI 测试覆盖可见文案、入口和交互状态。
 7. 本约束追溯适用于此前已标记完成的 APP-01、AUTH-01、INFO-01、INFO-02、INFO-03、CONTENT-03；这些切片在 UI 复验通过前统一回到“实现中”。
 8. 2026-07-16 用户进一步明确四入口必须使用 iOS 原生底部导航，而非仅在自绘容器上调用 Liquid Glass API。根容器必须使用系统 `TabView`/`UITabBar`，iOS 26+ 的 Liquid Glass、折射、触控、辅助功能和后续系统演进全部交给系统；禁止自绘 `HStack + Button` 冒充原生 Tab Bar。Liquid Glass 默认启用，设置页不得提供开关、关闭路径或单独说明入口。入口顺序、图标、中文文案和选中语义仍与 Android 一致。
-9. 2026-07-15 用户显式要求设置首页直接显示 `Debug` 入口。Android 的 App 卡片连续点击 8 次入口仍保留为兼容路径，iOS 同时提供可发现的 `Debug` 行；Debug 页面内容和视觉仍以 Android `settings/Debug.kt` 为基准。
+9. 2026-07-17 用户覆盖此前“直接显示 Debug 行”的要求：设置首页不得出现 `Debug` 可见项，只保留与 Android 一致的 App 信息卡连续点击 8 次隐藏入口；Debug 页面内容和视觉仍以 Android `settings/Debug.kt` 为基准。
 
 ## 2. 固定基线
 
@@ -191,7 +191,7 @@ iOS/
 | D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 已完成 spike 与持久化适配 | SDK `e826156` 在原 Simulator/device `staticlib` 基础上补齐 GuiXu 初始化、KV 增删查清、结构化错误和 panic 边界；本阶段不额外封装 XCFramework，构建脚本按 Apple target 选择静态库 |
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 已确定开发期方案 | C ABI 负责生命周期及 GuiXu 持久化/KV；业务请求继续使用带随机 token 的 localhost Rust server + Swift `URLSession`，只开放 loopback，保留未来逐接口直连 FFI 的替换边界 |
 | D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞原生支付 | 2026-07-16 再次检索 OpenAHU 组织的服务端/API 仓库与代码，只找到 Android/Rust SDK 的校卡上游调用，未找到可接入的签名/对账网关；现以学校官方 HTTPS 页面提供真实生产入口，但原生三类支付仍须负责人轮换已暴露材料并提供网关 URL、鉴权契约及授权测试环境 |
-| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `29439249505` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 133 个单元测试与 5 个 UI 测试，并完成学校支付入口无扣款探测；Artifact `AHUTong-ui-parity-xcresult-67`。设备 run `29439249117` 与 Archive run `29439249504` 成功；物理 iPhone 13 Pro 的官方页面登录/业务/账单验证由用户执行 |
+| D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `29520243365` attempt 3 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 133 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-70`。设备 run `29520243324` 与 Archive run `29520243338` 成功；物理 iPhone 13 Pro 验证由用户执行 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 已确定当前方案 | 当前不集成第三方崩溃、统计或广告 SDK；灰度只向自有端点发送不可逆账号摘要并提供本地兜底；未来新增数据收集必须先更新隐私清单和用途评估 |
 | D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
@@ -227,6 +227,8 @@ iOS/
 
 学校官方支付入口证据 `E-20260717-01`：代码 commits `df88d87`、`ac5e1d0` 已推送。三类生产页使用 `SFSafariViewController` 打开 `ycard.ahu.edu.cn` 同域 CAS/校园卡入口，页面明确说明本地表单不会随跳转提交，打开/关闭页面不代表扣款成功；Debug 诊断仍把原生生产网关标为未配置。最终 CI `29439249505` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上完成无账号、无金额、无订单的 HTTPS HEAD/302 探测，并通过 133 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-67` 为 19,534,427 bytes。未签名 IPA run `29439249117` 上传 `AHUTong-unsigned-ipa-67`，IPA 为 5,480,883 bytes，SHA-256 `CA5203812ECA32399A32F0627D97CF7756A99449CEB5CCDDAFB9D70C382A62A2`，产物侧校验文件一致；Release run `29439249504` 上传 9,567,090 bytes 的 `AHUTong-release-readiness-21` 并通过敏感材料扫描。首次 CI `29437746489` 中原 132 个单元测试与 5 个 UI 测试均通过，仅新增 URL 测试把 Foundation 标准化后的 `/plat` 错写成 `/plat/`，修正后复验通过；该诊断不冒充产品故障。真实登录、业务列表、最终确认和账单变化仍须用户在物理 iPhone 13 Pro 上验证，未执行任何自动扣款。
 
+设置 Debug 入口收口证据 `E-20260717-02`：代码 commits `ec4f21a`、`64cc7df`、`4f00e8e` 已推送。设置“关于”列表删除可见 `Debug` `NavigationLink` 和 `settings.debug` 标识，完整诊断页及 `showsDebug` 导航保留；App 信息卡合并为单一辅助功能元素，UI 自动化同时断言列表无 Debug 按钮/文案，并用系统 8 连点手势进入 `operations.debug.screen`、保存第 33 屏截图。最终 CI `29520243365` attempt 3 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 133 个单元测试与 5 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-70` 为 19,682,221 bytes。未签名 IPA run `29520243324` 上传 `AHUTong-unsigned-ipa-70`，IPA 为 5,487,372 bytes，SHA-256 `3742D1D763F73C3D89E151172C27581FFA7FC3EDCD64AE6F4CA97920D34A633B`，产物校验文件一致；Release run `29520243338` 上传 9,571,856 bytes 的 `AHUTong-release-readiness-24`。诊断记录：CI `29517210090` 首次因 SwiftUI 标识传播导致测试多命中，`29518859957` 因逐次 `tap()` 等待 idle 超过 Android 同款 1 秒计数阈值而未解锁；最终改用系统合成 8 连点。最终 run 的 attempts 1～2 中隐藏入口均已通过，失败仅为既有课表/考试长链路的不同等待点偶发超时，attempt 3 同 commit 全绿；不把失败 attempt 冒充最终证据。
+
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
@@ -248,10 +250,10 @@ iOS/
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 已完成 | 认证请求层复用 Rust 会话 Cookie 并识别 401/403/登录重定向；真实 campus/type/list 端点、失物/寻物双列表、校区/类型/全文筛选、分页、详情和受控图片加载完整 | `LostFoundTests` 的契约解码、跨字段筛选和无重复分页 3 项及双端列表/详情/三态截图在 `E-20260715-01` 通过；Commits `d8516f2`、`7b688b7`、`aeda622`、`1c0f950` | 2026-07-15 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；所有权由可靠用户标识判定，“我的帖子”、字段校验和失败提示完整；未确认的图片上传能力不伪造 | `LostFoundTests` 的草稿校验、远端确认后可见、拒绝删除他人/成功删除本人 3 项及双端 60% 发布面板在 `E-20260715-01` 通过；Commits `d8516f2`、`aeda622`、`77a5ae5` | 2026-07-15 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 仓库/目录浏览、缓存、URLSession 临时文件流式落盘、进度、Quick Look/系统分享、单个和批量删除完整；Android 页面结构已重做 | `StudyRepositoryServiceTests` 6 项覆盖六仓契约、目录缓存、双源下载进度和删除；UI 见 `E-20260714-01`，最终 device 构建见 `E-20260715-04` | 2026-07-15 |
-| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、Android 主题色、贡献名单、可见及隐藏 Debug、意见反馈和偏好持久化完整；按用户要求彻底删除液态玻璃开关与说明区块，原生 Tab Bar 始终跟随系统默认开启 | 原设置/偏好证据见 `E-20260714-01`～`03`；本轮删除项、否定 UI 回归与最终三条 workflow 见 `E-20260716-02`；Commit `d5d791f` | 2026-07-16 |
+| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、Android 主题色、贡献名单、隐藏 Debug、意见反馈和偏好持久化完整；设置列表不显示 Debug，只保留 App 卡片 8 连点入口；液态玻璃开关与说明区块保持删除，原生 Tab Bar 始终跟随系统 | 原设置/偏好证据见 `E-20260714-01`～`03`；液态玻璃入口删除见 `E-20260716-02`；Debug 可见行移除与隐藏入口回归见 `E-20260717-02` | 2026-07-17 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 已完成 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整 | `ScheduleWidgetSnapshotTests` 5 项含跨周推进；原 Widget 证据见 `E-20260715-01`，最终 Extension/IPA/Archive 见 `E-20260715-04` | 2026-07-15 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、时区日期、前台/时区变化重排完整；ActivityKit 锁屏与灵动岛下一节课倒计时、设置开关和 Debug 测试入口完整 | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归 | 2026-07-15 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | Android 同算法灰度、本地兜底/Debug 覆盖、可见及隐藏兼容入口、不可逆账号摘要、脱敏日志、隐私清单/数据地图、敏感信息扫描、Release Archive、未签名 IPA 与 Personal Team 发布清单完整；第三方崩溃/统计/广告保持关闭 | `ReleaseOperationsTests` 8 项、设置→Debug UI 路径、Archive/IPA/全套 macOS CI 见 `E-20260715-02`；物理机 7 天签名是部署回归，不冒充已执行证据；Commits `c091244`、`edfd219` | 2026-07-15 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | Android 同算法灰度、本地兜底/Debug 覆盖、App 卡片 8 连点隐藏入口、不可逆账号摘要、脱敏日志、隐私清单/数据地图、敏感信息扫描、Release Archive、未签名 IPA 与 Personal Team 发布清单完整；第三方崩溃/统计/广告保持关闭 | `ReleaseOperationsTests` 8 项及 Archive/IPA/全套 macOS CI 见 `E-20260715-02`；隐藏入口专项回归见 `E-20260717-02`；物理机 7 天签名是部署回归，不冒充已执行证据 | 2026-07-17 |
 
 ### 8.1 全量复查收口（2026-07-15）
 
@@ -259,7 +261,7 @@ iOS/
 
 | 覆盖切片 | 状态 | 本轮补齐内容 | 预定自动验证 |
 | --- | --- | --- | --- |
-| APP-01、PREF-01、OPS-01 | 已完成 | 系统 `TabView`/`UITabBar`、UIKit 原生导航栏、双原生返回；完整 Debug、更新、反馈、许可证、主题与 Dynamic Type；液态玻璃无用户开关 | 原生导航与底栏见 `E-20260716-01`；设置入口移除见 `E-20260716-02` |
+| APP-01、PREF-01、OPS-01 | 已完成 | 系统 `TabView`/`UITabBar`、UIKit 原生导航栏、双原生返回；隐藏 Debug、更新、反馈、许可证、主题与 Dynamic Type；液态玻璃无用户开关 | 原生导航与底栏见 `E-20260716-01`；液态玻璃入口移除见 `E-20260716-02`；Debug 可见行移除见 `E-20260717-02` |
 | AUTH-02、CONTENT-01 | 已完成 | Cookie 父域/Path/Secure/HttpOnly、响应 Cookie 持久化、401/403/登录重定向自动续期；网络/5xx 不误退出且保留离线缓存；续期凭据被拒时清理失效材料并由根导航回到登录页 | Cookie 匹配/响应/重试契约、离线恢复、续期拒绝与会话测试 |
 | SCH-01、SCH-02、HOME-01 | 已完成 | 当前学期按真实日期推导、真实下学期 SDK 接口、重叠课程分栏；首页课程入口、拖放编辑、灰度门、账号隔离布局和已放工具过滤 | Semester、布局、课表 Repository/UI 回归；Rust server feature 编译 |
 | ACA-01、ACA-02、ACA-03 | 已完成 | 多学籍切换、真实学期排名、账号隔离成绩/考试缓存；空闲教室默认全楼栋与日期约束 | Rust 多学籍/排名解析、Swift 成绩/考试/空教室单测与全状态 UI |
@@ -289,7 +291,7 @@ iOS/
 | 课表 | 主要功能成熟；当前时间指示线有显式 TODO | 先完成行为对齐；时间线作为独立增强项，不阻塞首个课表切片 |
 | 课程数据格式 | 旧 `Course` 缓存把 weekday/周次/节次保存为字符串，新教务 Activity 使用整数和 `weekIndexes`；空 weekIndexes 的 Activity 会被丢弃 | iOS `Course` 解码同时接受字符串和整数；存在 `weekIndexes` 时以去重排序后的精确周为准，否则兼容旧起止周范围；畸形数据不触发强制转换崩溃 |
 | 课表缓存隔离 | 大部分当前学期缓存带用户前缀，但 `next.schedule` 仍是共享键 | iOS 持久化协议从入口要求 `UserScopedStore`，当前/下一学期均不得绕过用户命名空间；GuiXu 物理键再做 SHA-256，数据库文件不出现学号或业务键明文；旧 UserDefaults/文件缓存只迁移一次 |
-| Debug 入口 | App 卡片连续点击 8 次后进入 Debug | 按用户显式要求，设置首页直接显示 `Debug` 行；原 8 次点击路径继续保留，页面内容与 Android 对齐 |
+| Debug 入口 | App 卡片连续点击 8 次后进入 Debug | 与 Android 保持一致：设置列表不展示 Debug，连续点击 App 信息卡 8 次后进入；诊断页面内容保持完整 |
 | 电话本 | Android 使用 `ACTION_DIAL`，双校区号码先弹窗选择；号码注释来自 2025 新生手册并含 2026 年 3 月更新 | iOS 保留 9 类 57 个条目及来源说明，统一补 0551 区号；所有号码（含单号码）先由确认菜单选择，再交给系统电话应用，不申请通讯录权限 |
 | 校历 | Android 下载 `openahu.org/download/xiaoli.jpg` 到应用目录，支持手势缩放并可申请权限保存相册 | iOS 校验图片签名并原子缓存，损坏缓存自动清理、刷新失败显示旧缓存；使用 1–5 倍原生手势、Quick Look 和 ShareLink，不写相册，因此无需照片权限且拒绝权限时无功能损失 |
 | 学习资料 | Android 通过 GitHub Contents API 浏览 6 个学院仓库，jsDelivr/Raw 下载到外部应用目录，再以 Intent 打开 | iOS 保持同一仓库清单和分支，目录按仓库/路径缓存；文件流式下载到 Application Support、文件名哈希化，使用 Quick Look/ShareLink；公开 GitHub 限流或断网时回退已访问目录和已下载文件 |
@@ -395,6 +397,7 @@ iOS/
 - [ ] 为校园卡、浴室和电控分别提供可审计的测试账号/房间或明确授权的小额真实环境，并完成成功、拒绝、超时、重复提交、第三方返回和对账验收。
 - [x] 原生 Tab Bar 的 APP-01 已由 `E-20260716-01` 恢复“已完成”；支付解除条件完成后再将 PAY-01～03 逐项推进，不以 Mock 或未扣款 UI 伪造 100%。
 - [x] 液态玻璃偏好入口删除已通过 `E-20260716-02` 最终 CI，PREF-01 恢复“已完成”；设置中不得重新加入可关闭系统 Tab Bar 材质的开关。
+- [x] 设置首页 `Debug` 可见行已按 `E-20260717-02` 删除；完整诊断页只允许由 App 信息卡 8 连点隐藏入口进入。
 
 ### P0-W1：工程与契约起点
 
@@ -495,3 +498,4 @@ iOS/
 | 2026-07-16 | UI-006 | 纠正“使用系统玻璃 API”等于“原生导航栏”的错误判断：删除自绘 `LiquidGlassBottomBar`，根四入口改为系统 `TabView`/`UITabBar`，每 Tab 独立导航栈，详情页由系统隐藏底栏；清理旧 96pt 覆盖补偿和无效玻璃开关 | CI `29432910807`：132 单测 + 5 UI 全绿，系统 Tab Bar 类型/标签、详情隐藏/恢复、左边缘与内容区域返回均通过；IPA `29432910913`、Archive `29432910832` 成功，首页系统 Liquid Glass 截图目视通过，见 `E-20260716-01` | `0a8f855`、`4bb2bab` |
 | 2026-07-16 | UI-007 | 按用户要求从设置页彻底删除液态玻璃区块；系统原生 Tab Bar 默认启用并且不提供用户修改入口 | CI `29435300302`：132 单测 + 5 UI 全绿，三个删除项否定断言通过，偏好页截图目视通过；IPA `29435300525`、Archive `29435300113` 成功，见 `E-20260716-02` | `d5d791f` |
 | 2026-07-17 | PAY-004 | 将三类生产支付的无服务端阻断提示改为学校官方 HTTPS/CAS 页面入口；真实输入与确认留在校方页面，App 不提交当前表单、不保存官方密码、不把跳转误报为成功，原生网关仍保持安全边界 | 最终 CI `29439249505`：无扣款 HEAD/302 探测、133 单测 + 5 UI 全绿；IPA `29439249117`、Archive `29439249504` 成功，见 `E-20260717-01` | `df88d87`、`ac5e1d0` |
+| 2026-07-17 | PREF-006 | 覆盖此前可见 Debug 行要求：从设置“关于”列表删除 Debug，只保留 App 信息卡 8 连点隐藏入口；合并卡片辅助功能元素并用系统 8 连点做真实导航回归 | 最终 CI `29520243365` attempt 3：133 单测 + 5 UI 全绿；IPA `29520243324`、Archive `29520243338` 成功，见 `E-20260717-02` | `ec4f21a`、`64cc7df`、`4f00e8e` |
