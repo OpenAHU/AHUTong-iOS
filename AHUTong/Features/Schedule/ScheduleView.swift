@@ -7,6 +7,12 @@ struct ScheduleWeekNavigation {
     static func clamped(_ week: Int) -> Int {
         min(max(week, validWeeks.lowerBound), validWeeks.upperBound)
     }
+
+    static func courseIdentifier(courseID: String, week: Int, selectedWeek: Int) -> String {
+        week == selectedWeek
+            ? "schedule.course.\(courseID)"
+            : "schedule.course.\(courseID).week.\(week)"
+    }
 }
 
 @MainActor
@@ -363,7 +369,13 @@ struct ScheduleView: View {
             y: 64 + spacing + CGFloat(course.startPeriod - 1) * (48 + spacing)
         )
         .accessibilityLabel("\(course.name)，\(course.location)，第\(course.startPeriod)节")
-        .accessibilityIdentifier("schedule.course.\(course.courseID)")
+        .accessibilityIdentifier(
+            ScheduleWeekNavigation.courseIdentifier(
+                courseID: course.courseID,
+                week: week,
+                selectedWeek: selectedWeek
+            )
+        )
     }
 
     private func visibleCourses(_ courses: [Course], week: Int) -> [Course] {

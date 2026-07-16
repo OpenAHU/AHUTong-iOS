@@ -13,4 +13,15 @@ final class ScheduleWeekNavigationTests: XCTestCase {
         XCTAssertEqual(ScheduleWeekNavigation.clamped(20), 20)
         XCTAssertEqual(ScheduleWeekNavigation.clamped(21), 20)
     }
+
+    func testOnlySelectedPageKeepsStableCourseIdentifier() {
+        XCTAssertEqual(
+            ScheduleWeekNavigation.courseIdentifier(courseID: "demo-3", week: 2, selectedWeek: 2),
+            "schedule.course.demo-3"
+        )
+        XCTAssertEqual(
+            ScheduleWeekNavigation.courseIdentifier(courseID: "demo-3", week: 3, selectedWeek: 2),
+            "schedule.course.demo-3.week.3"
+        )
+    }
 }
