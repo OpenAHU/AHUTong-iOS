@@ -61,12 +61,35 @@ struct CampusGrade: Codable, Equatable, Identifiable, Sendable {
     let courseCode: String
     let credit: Double?
     let score: String
+    let detail: String?
     let gradePoint: Double?
     let courseProperty: String
     let semesterID: Int?
     let semesterName: String
 
     var id: String { "\(courseCode)|\(courseName)|\(semesterID ?? 0)" }
+
+    init(
+        courseName: String,
+        courseCode: String,
+        credit: Double?,
+        score: String,
+        detail: String? = nil,
+        gradePoint: Double?,
+        courseProperty: String,
+        semesterID: Int?,
+        semesterName: String
+    ) {
+        self.courseName = courseName
+        self.courseCode = courseCode
+        self.credit = credit
+        self.score = score
+        self.detail = detail
+        self.gradePoint = gradePoint
+        self.courseProperty = courseProperty
+        self.semesterID = semesterID
+        self.semesterName = semesterName
+    }
 }
 
 struct CampusGradeReport: Codable, Equatable, Sendable {
@@ -85,8 +108,7 @@ struct CampusGradeStudentProfile: Codable, Equatable, Identifiable, Sendable {
     var displayName: String {
         let name = major.trimmingCharacters(in: .whitespacesAndNewlines)
         let type = trainingType.trimmingCharacters(in: .whitespacesAndNewlines)
-        if name.isEmpty { return type.isEmpty ? "主修" : type }
-        return type.isEmpty ? name : "\(name) (\(type))"
+        return "\(name.isEmpty ? "本专业" : name) (\(type.isEmpty ? "主修" : type))"
     }
 }
 
@@ -197,20 +219,26 @@ struct CampusGradeParser: Sendable {
     private func looksLikeGrade(_ value: [String: Any]) -> Bool {
         let keys = Set(value.keys)
         let hasCourse = !keys.isDisjoint(with: ["courseName", "courseNameZh", "lessonName", "course"])
-        let hasScore = !keys.isDisjoint(with: ["grade", "score", "gaGrade", "gradePoint"])
-        return hasCourse && hasScore
+        let hasScoreOrDetail = !keys.isDisjoint(
+            with: ["grade", "score", "gaGrade", "gradePoint", "gradeDetail", "detail"]
+        )
+        return hasCourse && hasScoreOrDetail
     }
 
     private func parseGrade(_ value: [String: Any]) -> CampusGrade? {
-        guard let courseName = string(keys: ["courseName", "courseNameZh", "lessonName", "course"], in: value),
-              let score = string(keys: ["grade", "score", "gaGrade", "gradePoint"], in: value) else {
+        guard let courseName = string(
+            keys: ["courseName", "courseNameZh", "lessonName", "course"],
+            in: value
+        ) else {
             return nil
         }
+        let score = string(keys: ["grade", "score", "gaGrade", "gradePoint"], in: value) ?? ""
         return CampusGrade(
             courseName: courseName,
             courseCode: string(keys: ["courseCode", "lessonCode", "courseNum"], in: value) ?? courseName,
             credit: double(keys: ["credit", "credits"], in: value),
             score: score,
+            detail: string(keys: ["gradeDetail", "detail"], in: value),
             gradePoint: double(keys: ["gradePoint", "gp"], in: value),
             courseProperty: string(keys: ["courseProperty", "courseType", "courseNature"], in: value) ?? "",
             semesterID: int(keys: ["semesterId", "semesterID"], in: value),

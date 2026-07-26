@@ -320,6 +320,7 @@ private struct AndroidPreferencesView: View {
     @AppStorage("notifications.course-reminders") private var reminders = false
     @AppStorage("notifications.live-activity") private var liveActivity = false
     @AppStorage("theme.color") private var themeColor = "blue"
+    @AppStorage private var prefersCMB: Bool
     @State private var showsIslandExplanation = false
     @State private var showsCustomColor = false
     @State private var customColor = ""
@@ -327,6 +328,15 @@ private struct AndroidPreferencesView: View {
     init(onboardingModel: OnboardingViewModel, appModel: AppModel) {
         _ = onboardingModel
         _model = StateObject(wrappedValue: PreferencesModel(api: appModel.campusAPI))
+        let userID = if case let .authenticated(user) = appModel.sessionState {
+            user.studentID
+        } else {
+            "guest"
+        }
+        _prefersCMB = AppStorage(
+            wrappedValue: false,
+            AccountPreferenceKey.make("payment.cmb-card-recharge-preferred", userID: userID)
+        )
     }
 
     var body: some View {
@@ -338,6 +348,17 @@ private struct AndroidPreferencesView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 32)
+
+                    preferenceSection("充值") {
+                        preferenceRow(
+                            title: "总是使用招商银行充值",
+                            detail: "开启后首页校园卡充值会直接进入招商银行充值",
+                            isOn: prefersCMB,
+                            identifier: "preferences.cmb-card-recharge"
+                        ) {
+                            prefersCMB.toggle()
+                        }
+                    }
 
                     preferenceSection("通知") {
                         preferenceRow(
@@ -508,31 +529,60 @@ private struct AndroidPreferenceToggle: View {
     }
 }
 
+struct IOSLicenseEntry: Identifiable, Equatable, Sendable {
+    let name: String
+    let author: String
+    let url: URL
+    let license: String
+    let bundledDocuments: [String]
+
+    var id: String { name }
+}
+
+enum IOSLicenseCatalog {
+    static let entries = [
+        IOSLicenseEntry(
+            name: "GuiXu (Rust rewrite)",
+            author: "Delsart 与 GuiXu Rust contributors",
+            url: URL(string: "https://github.com/Yukon163/GuiXu/tree/rust-rewrite")!,
+            license: "Apache License 2.0",
+            bundledDocuments: ["NOTICE", "LICENSE"]
+        ),
+        IOSLicenseEntry(
+            name: "AHUTong Rust SDK",
+            author: "OpenAHU contributors",
+            url: URL(string: "https://github.com/OpenAHU/AHUTong-sdk")!,
+            license: "源码仓库尚未声明独立许可证",
+            bundledDocuments: []
+        ),
+        IOSLicenseEntry(
+            name: "Rust dependency inventory",
+            author: "各 crate 作者",
+            url: URL(string: "https://github.com/OpenAHU/AHUTong-sdk/blob/master/Cargo.lock")!,
+            license: "精确版本由随构建固定的 Cargo.lock 记录；各项遵循其上游许可证",
+            bundledDocuments: []
+        )
+    ]
+}
+
 private struct ThirdPartyLicensesView: View {
     @Environment(\.colorScheme) private var colorScheme
-    private let entries = [
-        LicenseEntry(name: "AndroidX", author: "Google", url: "https://source.android.com", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "Material", author: "Google", url: "https://source.android.com", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "Gson", author: "Google", url: "https://github.com/google/gson", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "OkHttp", author: "Square", url: "https://github.com/square/okhttp", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "Retrofit", author: "Square", url: "https://github.com/square/retrofit", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "Jsoup", author: "jsoup.org", url: "https://jsoup.org/", license: "MIT License"),
-        LicenseEntry(name: "MMKV", author: "Tencent", url: "https://github.com/Tencent/MMKV", license: "BSD 3-Clause License"),
-        LicenseEntry(name: "Coil", author: "Coil Contributors", url: "https://github.com/coil-kt/coil", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "PersistentCookieJar", author: "Fran Montiel", url: "https://github.com/franmontiel/PersistentCookieJar", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "ZXing Android Embedded", author: "JourneyApps", url: "https://github.com/journeyapps/zxing-android-embedded", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "Monet", author: "Kyant0", url: "https://github.com/Kyant0/Monet", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "Backdrop", author: "Kyant0", url: "https://github.com/Kyant0/AndroidLiquidGlass", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "Capsule", author: "Kyant0", url: "https://github.com/Kyant0/Capsule", license: "Apache Software License 2.0"),
-        LicenseEntry(name: "AHUTong SDK / GuiXu / Rust crates", author: "OpenAHU 与各 crate 作者", url: "https://github.com/OpenAHU/AHUTong-sdk", license: "版本与许可证由 Cargo.lock 固定")
-    ]
+    @Environment(\.openURL) private var openURL
+    @State private var selectedEntry: IOSLicenseEntry?
+
     var body: some View {
         AndroidScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     AndroidHeader(title: "开源许可证", large: true)
-                    ForEach(entries) { entry in
-                        Link(destination: entry.url) {
+                    ForEach(IOSLicenseCatalog.entries) { entry in
+                        Button {
+                            if entry.bundledDocuments.isEmpty {
+                                openURL(entry.url)
+                            } else {
+                                selectedEntry = entry
+                            }
+                        } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(entry.name).font(.headline).foregroundStyle(.primary)
@@ -540,7 +590,8 @@ private struct ThirdPartyLicensesView: View {
                                     Text(entry.license).font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Image(systemName: "arrow.up.right.square").foregroundStyle(AndroidParityPalette.systemTheme)
+                                Image(systemName: entry.bundledDocuments.isEmpty ? "arrow.up.right.square" : "doc.text.magnifyingglass")
+                                    .foregroundStyle(AndroidParityPalette.systemTheme)
                             }
                             .padding(16)
                             .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16))
@@ -551,22 +602,38 @@ private struct ThirdPartyLicensesView: View {
                 }
             }
         }
+        .sheet(item: $selectedEntry) { entry in
+            NavigationStack {
+                ScrollView {
+                    Text(bundledText(for: entry))
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(20)
+                }
+                .navigationTitle(entry.name)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("关闭") { selectedEntry = nil }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("查看源码") { openURL(entry.url) }
+                    }
+                }
+            }
+        }
     }
 
-    private struct LicenseEntry: Identifiable {
-        let name: String
-        let author: String
-        let url: URL
-        let license: String
-
-        var id: String { name }
-
-        init(name: String, author: String, url: String, license: String) {
-            self.name = name
-            self.author = author
-            self.url = URL(string: url)!
-            self.license = license
+    private func bundledText(for entry: IOSLicenseEntry) -> String {
+        entry.bundledDocuments.map { resource in
+            guard let url = Bundle.main.url(forResource: resource, withExtension: nil),
+                  let value = try? String(contentsOf: url, encoding: .utf8) else {
+                return "无法读取 \(resource)"
+            }
+            return value
         }
+        .joined(separator: "\n\n")
     }
 }
 
@@ -713,7 +780,11 @@ private struct ContributorsView: View {
             informationMessage = "请联系任意一位小伙伴"
             return
         }
-        openURL(url)
+        openURL(url) { accepted in
+            if !accepted {
+                informationMessage = "未能打开 QQ，请手动搜索 QQ：\(entry.qq ?? "")"
+            }
+        }
     }
 }
 

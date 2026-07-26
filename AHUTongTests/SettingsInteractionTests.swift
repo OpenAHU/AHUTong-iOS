@@ -21,4 +21,34 @@ final class SettingsInteractionTests: XCTestCase {
         XCTAssertLessThan(pressed.opacity, 1)
         XCTAssertGreaterThan(pressed.highlightOpacity, 0)
     }
+
+    @MainActor
+    func testAccountPreferencesAndEvaluationPresetsDoNotCrossUsers() throws {
+        let firstKey = AccountPreferenceKey.make(
+            "payment.cmb-card-recharge-preferred",
+            userID: "student-a"
+        )
+        let secondKey = AccountPreferenceKey.make(
+            "payment.cmb-card-recharge-preferred",
+            userID: "student-b"
+        )
+        XCTAssertNotEqual(firstKey, secondKey)
+        XCTAssertFalse(firstKey.contains("student-a"))
+
+        let suite = "settings-isolation-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let firstStore = EvaluationPresetStore(defaults: defaults, userID: "student-a")
+        let secondStore = EvaluationPresetStore(defaults: defaults, userID: "student-b")
+        let firstPreset = EvaluationPreset(
+            optionIndexes: ["question": 2],
+            textAnswers: ["comment": "仅属于第一个账号"],
+            isAnonymous: true
+        )
+
+        firstStore.save(firstPreset)
+
+        XCTAssertEqual(firstStore.load(), firstPreset)
+        XCTAssertEqual(secondStore.load(), EvaluationPreset())
+    }
 }

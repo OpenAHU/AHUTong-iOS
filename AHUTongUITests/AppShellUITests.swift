@@ -389,10 +389,31 @@ final class AppShellUITests: XCTestCase {
     func testAndroidParityPaymentsAndOperations() {
         let app = XCUIApplication()
         launchDemo(app)
+        setCMBPreference(false, app: app)
+        launchDemo(app)
 
         let recharge = app.buttons["campus-card.recharge"]
         XCTAssertTrue(recharge.waitForExistence(timeout: 5))
         recharge.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 4))
+        let cmbEntry = app.buttons["payment.card.cmb-entry"]
+        XCTAssertTrue(cmbEntry.waitForExistence(timeout: 4))
+        cmbEntry.tap()
+        XCTAssertTrue(app.staticTexts["使用招商银行充值"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["是否以后都默认使用招商银行充值？"].exists)
+        XCTAssertTrue(app.buttons["payment.card.cmb-cancel"].exists)
+        XCTAssertTrue(app.buttons["payment.card.cmb-once"].exists)
+        XCTAssertTrue(app.buttons["payment.card.cmb-always"].exists)
+        app.buttons["payment.card.cmb-cancel"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 3))
+        cmbEntry.tap()
+        app.buttons["payment.card.cmb-once"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.cmb.screen"].waitForExistence(timeout: 4))
+
+        launchDemo(app)
+        let rechargeAfterOneTimeChoice = app.buttons["campus-card.recharge"]
+        XCTAssertTrue(rechargeAfterOneTimeChoice.waitForExistence(timeout: 5))
+        rechargeAfterOneTimeChoice.tap()
         XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 4))
         waitForRendering()
         capture("24-card-recharge", app: app)
@@ -405,6 +426,18 @@ final class AppShellUITests: XCTestCase {
         waitForPaymentResult("payment.card.state", app: app)
         waitForRendering()
         capture("26-card-recharge-success", app: app)
+
+        launchDemo(app)
+        app.buttons["campus-card.recharge"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 4))
+        app.buttons["payment.card.cmb-entry"].tap()
+        app.buttons["payment.card.cmb-always"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.cmb.screen"].waitForExistence(timeout: 4))
+        launchDemo(app)
+        app.buttons["campus-card.recharge"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.cmb.screen"].waitForExistence(timeout: 4))
+        launchDemo(app)
+        setCMBPreference(false, app: app)
 
         launchDemo(app)
         openHomePayment("home.payment.bathroom", marker: "payment.bathroom.screen", app: app)
@@ -457,6 +490,85 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
+    func testEvaluationNetworkRechargeAndCMBPreference() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        tabButton("tools", app: app).tap()
+
+        let evaluation = app.buttons["tools.evaluation"]
+        XCTAssertTrue(evaluation.waitForExistence(timeout: 4))
+        evaluation.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["evaluation.screen"].waitForExistence(timeout: 4))
+        let evaluationTarget = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "evaluation.target."))
+            .firstMatch
+        XCTAssertTrue(evaluationTarget.waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("34-evaluation", app: app)
+
+        launchDemo(app)
+        tabButton("tools", app: app).tap()
+        let networkRecharge = app.buttons["tools.network-recharge"]
+        XCTAssertTrue(networkRecharge.waitForExistence(timeout: 4))
+        scrollUpUntilHittable(networkRecharge, app: app)
+        networkRecharge.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.network.screen"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.descendants(matching: .any)["payment.network.account"].waitForExistence(timeout: 4))
+        let quickAmount = app.buttons["payment.network.quick-amount"].firstMatch
+        XCTAssertTrue(quickAmount.waitForExistence(timeout: 4))
+        scrollUpUntilHittable(quickAmount, app: app)
+        quickAmount.tap()
+        let continueButton = app.buttons["payment.network.continue"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 4))
+        scrollUpUntilHittable(continueButton, app: app)
+        continueButton.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.network.demo-success"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("35-network-recharge", app: app)
+
+        launchDemo(app)
+        tabButton("settings", app: app).tap()
+        app.buttons["settings.preferences"].tap()
+        let preference = app.buttons["preferences.cmb-card-recharge"]
+        XCTAssertTrue(preference.waitForExistence(timeout: 4))
+        let initialValue = preference.value as? String
+        let changedValue = initialValue == "开启" ? "关闭" : "开启"
+        preference.tap()
+        expectation(
+            for: NSPredicate(format: "value == %@", changedValue),
+            evaluatedWith: preference
+        )
+        waitForExpectations(timeout: 3)
+        waitForRendering()
+        capture("36-cmb-preference", app: app)
+        preference.tap()
+        expectation(
+            for: NSPredicate(format: "value == %@", initialValue ?? "关闭"),
+            evaluatedWith: preference
+        )
+        waitForExpectations(timeout: 3)
+    }
+
+    @MainActor
+    func testCompactHomeWeatherOpensWeatherInsteadOfSchedule() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--demo-consent",
+            "--demo-session",
+            "--demo-weather-compact"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+        let compactWeather = app.buttons["home.weather.compact"]
+        XCTAssertTrue(compactWeather.waitForExistence(timeout: 5))
+        compactWeather.tap()
+
+        XCTAssertTrue(app.buttons["天气设置"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["回到当前周"].exists)
+    }
+
+    @MainActor
     private func capture(_ name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "android-parity-\(name)"
@@ -482,6 +594,39 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = ["--demo-consent", "--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func setCMBPreference(_ enabled: Bool, app: XCUIApplication) {
+        tabButton("settings", app: app).tap()
+        let preferences = app.buttons["settings.preferences"]
+        XCTAssertTrue(preferences.waitForExistence(timeout: 4))
+        preferences.tap()
+        let preference = app.buttons["preferences.cmb-card-recharge"]
+        XCTAssertTrue(preference.waitForExistence(timeout: 4))
+        let expectedValue = enabled ? "开启" : "关闭"
+        if preference.value as? String != expectedValue {
+            preference.tap()
+            expectation(
+                for: NSPredicate(format: "value == %@", expectedValue),
+                evaluatedWith: preference
+            )
+            waitForExpectations(timeout: 3)
+        }
+    }
+
+    @MainActor
+    private func scrollUpUntilHittable(
+        _ element: XCUIElement,
+        app: XCUIApplication,
+        maximumAttempts: Int = 4
+    ) {
+        var attempts = 0
+        while !element.isHittable && attempts < maximumAttempts {
+            app.swipeUp()
+            attempts += 1
+        }
+        XCTAssertTrue(element.isHittable)
     }
 
     @MainActor

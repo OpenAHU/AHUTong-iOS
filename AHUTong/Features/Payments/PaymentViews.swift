@@ -5,10 +5,13 @@ import UIKit
 struct CardRechargeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
+    @AppStorage private var prefersCMB: Bool
     @StateObject private var coordinator: PaymentCoordinator
     @State private var amount = ""
     @State private var balance: Decimal?
     @State private var showsMethodDialog = false
+    @State private var showsCMBPreferenceDialog = false
+    @State private var showsCMBRecharge = false
     @State private var showsOfficialPortal = false
     @State private var validationMessage: String?
     private let appModel: AppModel
@@ -20,6 +23,18 @@ struct CardRechargeView: View {
         demo = isDemo
         let resolved = gateway ?? PaymentGatewayFactory.make(demo: isDemo)
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
+        let preferenceUserID = if case let .authenticated(user) = appModel.sessionState {
+            user.studentID
+        } else {
+            "guest"
+        }
+        _prefersCMB = AppStorage(
+            wrappedValue: false,
+            AccountPreferenceKey.make(
+                "payment.cmb-card-recharge-preferred",
+                userID: preferenceUserID
+            )
+        )
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(feature: .cardRecharge, gateway: resolved, userID: userID))
     }
 
@@ -36,12 +51,19 @@ struct CardRechargeView: View {
                     }
                     accountCard
                     PaymentAmountCard(title: "充值金额", amount: $amount, identifier: "payment.card.amount")
-                    PaymentStateButton(phase: coordinator.phase, identifier: "payment.card.state") {
+                    PaymentStateButton(
+                        phase: coordinator.phase,
+                        identifier: "payment.card.state",
+                        leadingTitle: "招商银行充值点这里",
+                        leadingIdentifier: "payment.card.cmb-entry"
+                    ) {
                         validateAndShowMethods()
                     } reconcile: {
                         Task { await coordinator.resumeExternalReturn() }
                     } reset: {
                         coordinator.reset()
+                    } leadingAction: {
+                        showsCMBPreferenceDialog = true
                     }
                 }
                 .padding(.bottom, 48)
@@ -66,6 +88,32 @@ struct CardRechargeView: View {
                     Button("取消", role: .cancel) { showsMethodDialog = false }
                 }
             }
+
+            if showsCMBPreferenceDialog {
+                AndroidPaymentDialog(
+                    title: "使用招商银行充值",
+                    identifier: "payment.card.cmb-preference-dialog"
+                ) {
+                    Text("是否以后都默认使用招商银行充值？")
+                        .foregroundStyle(.secondary)
+                } actions: {
+                    Button("取消", role: .cancel) {
+                        showsCMBPreferenceDialog = false
+                    }
+                    .accessibilityIdentifier("payment.card.cmb-cancel")
+                    Button("仅本次") {
+                        showsCMBPreferenceDialog = false
+                        showsCMBRecharge = true
+                    }
+                    .accessibilityIdentifier("payment.card.cmb-once")
+                    Button("以后都用") {
+                        prefersCMB = true
+                        showsCMBPreferenceDialog = false
+                        showsCMBRecharge = true
+                    }
+                    .accessibilityIdentifier("payment.card.cmb-always")
+                }
+            }
         }
         .task {
             await loadBalance()
@@ -82,6 +130,9 @@ struct CardRechargeView: View {
         .onOpenURL { url in
             guard url.scheme == "ahutong", url.host == "payment-return" else { return }
             Task { await coordinator.resumeExternalReturn() }
+        }
+        .navigationDestination(isPresented: $showsCMBRecharge) {
+            CMBRechargeView(appModel: appModel).androidDetailScreen()
         }
         .alert("无法继续", isPresented: Binding(
             get: { validationMessage != nil },
@@ -167,7 +218,7 @@ struct BathroomPaymentView: View {
     @State private var phone = ""
     @State private var account: BathroomPaymentAccount?
     @State private var amount = ""
-    @State private var password = ""
+    @State private var passwordEntry = CampusPaymentPasswordEntry()
     @State private var showsPasswordDialog = false
     @State private var showsOfficialPortal = false
     @State private var validationMessage: String?
@@ -290,6 +341,7 @@ struct BathroomPaymentView: View {
 
     private func submit() {
         guard let account else { return }
+        guard passwordEntry.validate() else { return }
         do {
             let request = try PaymentRequest(
                 feature: .bathroom,
@@ -297,9 +349,9 @@ struct BathroomPaymentView: View {
                 amount: PaymentAmount(amount),
                 accountID: account.id,
                 accountLabel: account.name,
-                authorization: password
+                authorization: passwordEntry.value
             )
-            password = ""
+            passwordEntry.reset()
             showsPasswordDialog = false
             Task { await coordinator.submit(request) }
         } catch { validationMessage = error.localizedDescription }
@@ -307,31 +359,45 @@ struct BathroomPaymentView: View {
 
     private func passwordDialog(title: String, identifier: String, submit: @escaping () -> Void) -> some View {
         AndroidPaymentDialog(title: title, identifier: identifier) {
-            SecureField("密码（6 位数字）", text: $password)
+            SecureField(
+                "密码（6 位数字）",
+                text: Binding(
+                    get: { passwordEntry.value },
+                    set: { passwordEntry.update($0) }
+                )
+            )
                 .accessibilityIdentifier("payment.bathroom.password")
                 .keyboardType(.numberPad)
                 .textFieldStyle(.roundedBorder)
-                .onChange(of: password) { _, value in
-                    password = String(value.filter { $0.isNumber }.prefix(6))
-                }
+            if let inlineError = passwordEntry.inlineError {
+                Text(inlineError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("payment.bathroom.password-error")
+            }
         } actions: {
             Button("确认", action: submit)
                 .accessibilityIdentifier("payment.bathroom.confirm")
-            Button("取消", role: .cancel) { password = ""; showsPasswordDialog = false }
+            Button("取消", role: .cancel) {
+                passwordEntry.reset()
+                showsPasswordDialog = false
+            }
         }
     }
 }
 
 struct ElectricityPaymentView: View {
     @StateObject private var coordinator: PaymentCoordinator
+    @StateObject private var chargeHistory: ElectricityChargeHistoryModel
     @State private var campus = ""
     @State private var building = ""
     @State private var floor = ""
     @State private var room = ""
     @State private var amount = ""
-    @State private var password = ""
+    @State private var passwordEntry = CampusPaymentPasswordEntry()
     @State private var showsPasswordDialog = false
     @State private var showsOfficialPortal = false
+    @State private var showsChargeHistoryReset = false
     @State private var validationMessage: String?
     private let demo: Bool
 
@@ -344,6 +410,9 @@ struct ElectricityPaymentView: View {
             gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo),
             userID: userID
         ))
+        _chargeHistory = StateObject(
+            wrappedValue: ElectricityChargeHistoryModel(userID: userID)
+        )
     }
 
     var body: some View {
@@ -358,6 +427,20 @@ struct ElectricityPaymentView: View {
                         }
                     }
                     locationCard
+                    if let feedback = chargeHistory.feedback {
+                        Text(feedback)
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(.horizontal, 24)
+                            .accessibilityIdentifier(
+                                "payment.electricity.charge-history-message"
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                     PaymentAmountCard(title: "缴费金额", amount: $amount, identifier: "payment.electricity.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.electricity.state") {
                         validateAndShowPassword()
@@ -374,17 +457,29 @@ struct ElectricityPaymentView: View {
                     title: "请输入校园卡密码",
                     identifier: "payment.electricity.password-dialog"
                 ) {
-                    SecureField("密码（6 位数字）", text: $password)
+                    SecureField(
+                        "密码（6 位数字）",
+                        text: Binding(
+                            get: { passwordEntry.value },
+                            set: { passwordEntry.update($0) }
+                        )
+                    )
                         .accessibilityIdentifier("payment.electricity.password")
                         .keyboardType(.numberPad)
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: password) { _, value in
-                            password = String(value.filter { $0.isNumber }.prefix(6))
-                        }
+                    if let inlineError = passwordEntry.inlineError {
+                        Text(inlineError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("payment.electricity.password-error")
+                    }
                 } actions: {
                     Button("确认") { submit() }
                         .accessibilityIdentifier("payment.electricity.confirm")
-                    Button("取消", role: .cancel) { password = ""; showsPasswordDialog = false }
+                    Button("取消", role: .cancel) {
+                        passwordEntry.reset()
+                        showsPasswordDialog = false
+                    }
                 }
             }
         }
@@ -394,6 +489,16 @@ struct ElectricityPaymentView: View {
         .sheet(isPresented: $showsOfficialPortal) {
             OfficialPaymentPortalView(url: OfficialSchoolPaymentPortal.loginURL)
                 .ignoresSafeArea()
+        }
+        .alert("确认操作", isPresented: $showsChargeHistoryReset) {
+            Button("确认", role: .destructive) {
+                withAnimation { chargeHistory.clear() }
+                scheduleFeedbackDismissal()
+            }
+            .accessibilityIdentifier("payment.electricity.charge-history-reset-confirm")
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("您确定要将累计充值金额清零吗？此操作不可撤销。")
         }
         .paymentValidationAlert($validationMessage)
     }
@@ -412,6 +517,20 @@ struct ElectricityPaymentView: View {
                 }
                 PaymentMenuRow(title: "选择房间", value: room.ifEmpty("请选择房间"), options: rooms, identifier: "payment.electricity.room") { room = $0 }
                 PaymentValueRow(title: "信息", value: electricityInformation)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation { chargeHistory.revealInfo() }
+                        scheduleFeedbackDismissal()
+                    }
+                    .onLongPressGesture {
+                        showsChargeHistoryReset = true
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("信息")
+                    .accessibilityValue(electricityInformation)
+                    .accessibilityHint("连续点击五次查看累计充值记录，长按清空记录")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityIdentifier("payment.electricity.info")
             }
         }
         .padding(.horizontal, 16)
@@ -463,19 +582,37 @@ struct ElectricityPaymentView: View {
 
     private func submit() {
         guard let selectedRoom else { return }
+        guard passwordEntry.validate() else { return }
         do {
+            let paymentAmount = try PaymentAmount(amount)
             let request = try PaymentRequest(
                 feature: .electricity,
                 method: .campusAccount,
-                amount: PaymentAmount(amount),
+                amount: paymentAmount,
                 accountID: selectedRoom.id,
                 accountLabel: selectedRoom.label,
-                authorization: password
+                authorization: passwordEntry.value
             )
-            password = ""
+            passwordEntry.reset()
             showsPasswordDialog = false
-            Task { await coordinator.submit(request) }
+            Task { @MainActor in
+                await coordinator.submit(request)
+                chargeHistory.record(
+                    amount: paymentAmount,
+                    after: coordinator.phase
+                )
+            }
         } catch { validationMessage = error.localizedDescription }
+    }
+
+    private func scheduleFeedbackDismissal() {
+        guard let message = chargeHistory.feedback else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
+            withAnimation {
+                chargeHistory.dismissFeedback(ifMatching: message)
+            }
+        }
     }
 
     private func unique(_ values: [String]) -> [String] {
@@ -587,14 +724,46 @@ private struct PaymentMenuRow: View {
 }
 
 private struct PaymentStateButton: View {
+    @Environment(\.colorScheme) private var colorScheme
     let phase: PaymentPhase
     let identifier: String
+    let leadingTitle: String?
+    let leadingIdentifier: String?
+    let leadingAction: (() -> Void)?
     let confirm: () -> Void
     let reconcile: () -> Void
     let reset: () -> Void
 
+    init(
+        phase: PaymentPhase,
+        identifier: String,
+        leadingTitle: String? = nil,
+        leadingIdentifier: String? = nil,
+        confirm: @escaping () -> Void,
+        reconcile: @escaping () -> Void,
+        reset: @escaping () -> Void,
+        leadingAction: (() -> Void)? = nil
+    ) {
+        self.phase = phase
+        self.identifier = identifier
+        self.leadingTitle = leadingTitle
+        self.leadingIdentifier = leadingIdentifier
+        self.leadingAction = leadingAction
+        self.confirm = confirm
+        self.reconcile = reconcile
+        self.reset = reset
+    }
+
     var body: some View {
         HStack {
+            if let leadingTitle, let leadingAction {
+                Button(leadingTitle, action: leadingAction)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 16)
+                    .accessibilityIdentifier(leadingIdentifier ?? "")
+            }
             Spacer()
             Group {
                 switch phase {

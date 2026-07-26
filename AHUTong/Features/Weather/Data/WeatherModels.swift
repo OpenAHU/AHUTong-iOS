@@ -7,6 +7,7 @@ struct WeatherResponse: Codable, Equatable, Sendable {
     let adcode: String?
     let weather: String?
     let weatherIcon: String?
+    let weatherCode: String?
     let temperature: Double?
     let windDirection: String?
     let windPower: String?
@@ -34,6 +35,7 @@ struct WeatherResponse: Codable, Equatable, Sendable {
         case province, city, district, adcode, weather, temperature, humidity
         case visibility, pressure, precipitation, cloud, aqi, alerts, forecast
         case weatherIcon = "weather_icon"
+        case weatherCode = "weather_code"
         case windDirection = "wind_direction"
         case windPower = "wind_power"
         case reportTime = "report_time"
@@ -224,6 +226,27 @@ struct WeatherDisplayPreferences: Codable, Equatable, Sendable {
     var showAirQuality = true
     var showHourlyForecast = true
     var showLifeIndices = true
+}
+
+enum WeatherHomeMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case detailed
+    case compact
+
+    var id: String { rawValue }
+    var title: String { self == .detailed ? "详细" : "精简" }
+
+    static func resolve(_ rawValue: String?) -> Self {
+        rawValue.flatMap(Self.init(rawValue:)) ?? .detailed
+    }
+}
+
+struct WeatherHomeConfiguration: Codable, Equatable, Sendable {
+    var showOnHome = false
+    var mode = WeatherHomeMode.detailed
+    var showLocation = true
+    var showTemperature = true
+    var showCondition = true
+    var showAirQuality = true
 }
 
 enum WeatherError: Error, Equatable, Sendable {

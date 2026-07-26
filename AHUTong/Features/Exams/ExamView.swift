@@ -34,6 +34,14 @@ enum CampusExamDisplayStatus: Equatable {
     }
 }
 
+enum CampusExamLocationFormatter {
+    static func shortened(_ value: String) -> String {
+        let parts = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count >= 3, let first = parts.first, let last = parts.last else { return value }
+        return "\(first) \(last)"
+    }
+}
+
 @MainActor
 final class ExamViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<[CampusExam]> = .idle
@@ -101,6 +109,7 @@ struct ExamView: View {
     @StateObject private var model: ExamViewModel
     @State private var query = ""
     @State private var isSearching = false
+    @State private var showsFinishedExams = false
 
     init(appModel: AppModel) {
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
@@ -118,11 +127,11 @@ struct ExamView: View {
     var body: some View {
         AndroidScreen {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 16) {
                     header
                     content
                 }
-                .padding(.bottom, 32)
+                .padding(.bottom, 80)
             }
             .scrollIndicators(.hidden)
         }
@@ -157,7 +166,17 @@ struct ExamView: View {
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView().frame(maxWidth: .infinity, minHeight: 320)
+            VStack(spacing: 12) {
+                ProgressView()
+                    .controlSize(.regular)
+                    .tint(AndroidParityPalette.systemTheme)
+                    .frame(width: 32, height: 32)
+                Text("加载中…")
+                    .androidScaledFont(size: 14, relativeTo: .subheadline)
+                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 120)
         case .empty:
             emptyText("目前没有任何考试")
         case let .failed(error):
@@ -171,17 +190,61 @@ struct ExamView: View {
             if matched.isEmpty {
                 emptyText(isSearching && !query.isEmpty ? "未找到包含「\(query)」的考试" : "目前没有任何考试")
             } else {
-                LazyVStack(spacing: 2) {
-                    ForEach(matched.sorted(by: examSort)) { exam in examCard(exam) }
+                let sorted = matched.sorted(by: examSort)
+                let active = sorted.filter {
+                    CampusExamDisplayStatus.resolve(
+                        time: $0.time,
+                        isFinished: $0.isFinished,
+                        now: statusReferenceDate
+                    ) != .finished
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                let finished = sorted.filter {
+                    CampusExamDisplayStatus.resolve(
+                        time: $0.time,
+                        isFinished: $0.isFinished,
+                        now: statusReferenceDate
+                    ) == .finished
+                }
+                LazyVStack(spacing: 12) {
+                    ForEach(active) { exam in examCard(exam) }
+                    if !finished.isEmpty {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showsFinishedExams.toggle()
+                            }
+                        } label: {
+                            HStack {
+                                Text("已结束 (\(finished.count))")
+                                    .font(.subheadline.weight(.medium))
+                                Spacer()
+                                Image(systemName: showsFinishedExams ? "chevron.up" : "chevron.down")
+                            }
+                            .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+                            .padding(.horizontal, 20)
+                            .frame(height: 52)
+                            .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("exams.finished-toggle")
+                        .accessibilityValue(showsFinishedExams ? "收起" : "展开")
+
+                        if showsFinishedExams {
+                            ForEach(finished) { exam in examCard(exam) }
+                        }
+                    }
+                }
                 .padding(.horizontal, 16)
             }
         }
     }
 
     private func emptyText(_ text: String) -> some View {
-        Text(text).font(.title3).frame(maxWidth: .infinity, alignment: .leading).padding(24)
+        Text(text)
+            .font(.body)
+            .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 80)
     }
 
     private func examSort(_ lhs: CampusExam, _ rhs: CampusExam) -> Bool {
@@ -193,33 +256,51 @@ struct ExamView: View {
 
     private func examCard(_ exam: CampusExam) -> some View {
         let status = CampusExamDisplayStatus.resolve(time: exam.time, isFinished: exam.isFinished, now: statusReferenceDate)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(exam.course).font(.headline.bold()).lineLimit(1)
-                Text(status.title)
+                Spacer(minLength: 0)
+                Label(status.title, systemImage: statusIcon(status))
                     .font(.caption)
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(statusColor(status), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Spacer(minLength: 0)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(statusColor(status), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .padding(8)
-            Text("考试时间：\(exam.time)").font(.body).foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-            Text("地点：\(exam.location)，座位号：\(exam.seatNumber)").font(.subheadline).foregroundStyle(.secondary)
+            Label(exam.time, systemImage: "clock.fill")
+                .font(.body)
+                .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+            Label(CampusExamLocationFormatter.shortened(exam.location), systemImage: "mappin.and.ellipse")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Label("座位号：\(exam.seatNumber)", systemImage: "chair.lounge.fill")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24).padding(.vertical, 16)
-        .background(AndroidParityPalette.surface(colorScheme))
+        .padding(20)
+        .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("exams.card.\(exam.id)")
     }
 
     private func statusColor(_ status: CampusExamDisplayStatus) -> Color {
         switch status {
-        case .ongoing: Color(red: 1, green: 193 / 255, blue: 7 / 255)
+        case .ongoing:
+            colorScheme == .dark
+                ? AndroidParityPalette.systemTheme.opacity(0.52)
+                : AndroidParityPalette.systemTheme.opacity(0.18)
         case .notStarted: AndroidParityPalette.success
         case .finished: .gray
         case .invalid: .red
+        }
+    }
+
+    private func statusIcon(_ status: CampusExamDisplayStatus) -> String {
+        switch status {
+        case .ongoing: "clock.fill"
+        case .notStarted: "clock"
+        case .finished: "checkmark.circle.fill"
+        case .invalid: "xmark.circle.fill"
         }
     }
 }

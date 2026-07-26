@@ -25,13 +25,17 @@ targets:
     platform: iOS
     sources:
       - path: AHUTong
+      - path: Vendor/GuiXu-Rust/LICENSE
+        buildPhase: resources
+      - path: Vendor/GuiXu-Rust/NOTICE
+        buildPhase: resources
     dependencies:
       - target: AHUTongWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.openahu.ahutong
         PRODUCT_NAME: AHUTong
-        MARKETING_VERSION: 3.1.9
+        MARKETING_VERSION: 3.2.0
         CURRENT_PROJECT_VERSION: 1
         VERSIONING_SYSTEM: apple-generic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -70,7 +74,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.openahu.ahutong.widget
         PRODUCT_NAME: AHUTongWidget
-        MARKETING_VERSION: 3.1.9
+        MARKETING_VERSION: 3.2.0
         CURRENT_PROJECT_VERSION: 1
         INFOPLIST_FILE: AHUTongWidget/Info.plist
         GENERATE_INFOPLIST_FILE: NO

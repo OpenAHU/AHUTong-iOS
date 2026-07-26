@@ -6,21 +6,27 @@ final class GradeViewModel: ObservableObject {
     @Published private(set) var profiles: [CampusGradeStudentProfile] = []
     @Published private(set) var selectedProfileID = ""
     @Published private(set) var rank: CampusGradeRankInfo?
+    @Published private(set) var profileErrors: [String: String] = [:]
     private let api: any CampusCoreAPI
     private let cache: JSONStore<GradeCache>
     private var reports: [String: CampusGradeReport] = [:]
     private var ranks: [String: CampusGradeRankInfo] = [:]
 
-    init(api: any CampusCoreAPI, userID: String) {
+    init(
+        api: any CampusCoreAPI,
+        userID: String,
+        store: any DataStore = AppPersistence.migratingFileCache()
+    ) {
         self.api = api
         cache = JSONStore(
-            store: UserScopedStore(store: AppPersistence.migratingFileCache(), userID: userID),
+            store: UserScopedStore(store: store, userID: userID),
             key: "grades.v2"
         )
     }
 
     func load(demo: Bool = false) async {
         state = .loading
+        profileErrors = [:]
         if demo {
             switch DemoDataState.current {
             case .normal:
@@ -47,15 +53,29 @@ final class GradeViewModel: ObservableObject {
             }
             var loadedReports: [String: CampusGradeReport] = [:]
             var loadedRanks: [String: CampusGradeRankInfo] = [:]
+            var loadedErrors: [String: String] = [:]
+            var firstError: Error?
             for profile in loadedProfiles {
-                let report = profile.id.isEmpty ? try await api.grades() : try await api.grades(studentID: profile.id)
-                loadedReports[profile.id] = report
-                if !profile.id.isEmpty, let value = try await api.gradeRank(studentID: profile.id) {
-                    loadedRanks[profile.id] = value
+                do {
+                    let report = profile.id.isEmpty
+                        ? try await api.grades()
+                        : try await api.grades(studentID: profile.id)
+                    loadedReports[profile.id] = report
+                    if !profile.id.isEmpty,
+                       let value = try? await api.gradeRank(studentID: profile.id) {
+                        loadedRanks[profile.id] = value
+                    }
+                } catch {
+                    firstError = firstError ?? error
+                    loadedErrors[profile.id] = error.localizedDescription
                 }
+            }
+            guard !loadedReports.isEmpty else {
+                throw firstError ?? CampusCoreError.invalidResponse
             }
             let fresh = GradeCache(profiles: loadedProfiles, reports: loadedReports, ranks: loadedRanks)
             try await cache.save(fresh)
+            profileErrors = loadedErrors
             apply(fresh)
         } catch {
             if cached == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
@@ -66,7 +86,11 @@ final class GradeViewModel: ObservableObject {
         selectedProfileID = profile.id
         rank = ranks[profile.id]
         guard let report = reports[profile.id] else {
-            state = .empty
+            if let message = profileErrors[profile.id] {
+                state = .failed(AppErrorState(message: "「\(profile.displayName)」加载失败：\(message)"))
+            } else {
+                state = .empty
+            }
             return
         }
         state = report.grades.isEmpty ? .empty : .loaded(report)
@@ -76,8 +100,10 @@ final class GradeViewModel: ObservableObject {
         profiles = value.profiles
         reports = value.reports
         ranks = value.ranks
-        let profileID = value.profiles.first(where: { $0.id == selectedProfileID })?.id
-            ?? value.profiles.first?.id
+        let profileID = value.profiles.first(where: {
+            $0.id == selectedProfileID && value.reports[$0.id] != nil
+        })?.id
+            ?? value.profiles.first(where: { value.reports[$0.id] != nil })?.id
             ?? value.reports.keys.sorted().first
             ?? ""
         selectedProfileID = profileID
@@ -130,12 +156,18 @@ struct GradeView: View {
     @StateObject private var model: GradeViewModel
     @State private var query = ""
     @State private var selectedSemester = AppRuntime.isDemoSession
-        ? "2025-2026-1"
+        ? (
+            GradeViewModel.demoReport.grades.max(by: {
+                ($0.semesterID ?? 0) < ($1.semesterID ?? 0)
+            })?.semesterName ?? GradeView.currentSemesterName
+        )
         : GradeView.currentSemesterName
     @State private var isSearching = false
     @State private var showsSemesterMenu = false
+    private let appModel: AppModel
 
     init(appModel: AppModel) {
+        self.appModel = appModel
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
         _model = StateObject(wrappedValue: GradeViewModel(api: appModel.campusAPI, userID: userID))
     }
@@ -279,11 +311,41 @@ struct GradeView: View {
     }
 
     private func gradeCard(_ grade: CampusGrade) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let needsEvaluation = GradeEvaluationGate.isRequired(grade.score)
+            || GradeEvaluationGate.isRequired(grade.detail)
+        let displayDetail = GradeEvaluationGate.displayText(grade.detail)
+        return VStack(alignment: .leading, spacing: 8) {
             Text(grade.courseName).font(.headline.bold())
-            Text("成绩: \(grade.score)    绩点: \(grade.gradePoint?.formatted() ?? "")    学分: \(grade.credit?.formatted() ?? "")")
-                .font(.body).foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+            if needsEvaluation {
+                HStack(spacing: 4) {
+                    Text("成绩:")
+                    NavigationLink {
+                        EvaluationView(appModel: appModel).androidDetailScreen()
+                    } label: {
+                        Text(GradeEvaluationGate.message)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(AndroidParityPalette.systemTheme)
+                    }
+                    .buttonStyle(.plain)
+                    Text("  绩点: \(grade.gradePoint?.formatted() ?? "")    学分: \(grade.credit?.formatted() ?? "")")
+                }
+                .font(.body)
+                .accessibilityIdentifier("grades.evaluation-gate")
+            } else {
+                Text(
+                    "成绩: \(GradeEvaluationGate.displayText(grade.score))"
+                        + "    绩点: \(grade.gradePoint?.formatted() ?? "")"
+                        + "    学分: \(grade.credit?.formatted() ?? "")"
+                )
+                .font(.body)
+                .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+            }
             Text("\(grade.courseProperty) (\(grade.courseCode))").font(.subheadline).foregroundStyle(.secondary)
+            if !needsEvaluation, !displayDetail.isEmpty {
+                Text(displayDetail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 24).padding(.vertical, 16)

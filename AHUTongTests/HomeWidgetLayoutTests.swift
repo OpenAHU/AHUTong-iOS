@@ -37,6 +37,18 @@ final class HomeWidgetLayoutTests: XCTestCase {
         XCTAssertEqual(layout.slots[5], "weather")
     }
 
+    func testToolsFollowAndroidRegistryOrderAndRestoreRemovedPaymentWidgets() {
+        let defaultIDs = AndroidToolItem.visible(in: HomeWidgetLayout()).map(\.id)
+        XCTAssertFalse(defaultIDs.contains("bathroom"))
+        XCTAssertFalse(defaultIDs.contains("electricity"))
+        XCTAssertEqual(defaultIDs.last, "network-recharge")
+
+        let emptyLayout = HomeWidgetLayout(slots: Array(repeating: nil, count: HomeWidgetLayout.slotCount))
+        let allIDs = AndroidToolItem.visible(in: emptyLayout).map(\.id)
+        XCTAssertEqual(Array(allIDs.prefix(2)), ["bathroom", "electricity"])
+        XCTAssertEqual(allIDs.last, "network-recharge")
+    }
+
     @MainActor
     func testCourseSummaryMatchesAndroidOngoingCourseAtFixedBaselineTime() {
         var calendar = Calendar(identifier: .gregorian)
@@ -74,5 +86,56 @@ final class HomeWidgetLayoutTests: XCTestCase {
         )
         XCTAssertEqual(after.title, "今日课程")
         XCTAssertEqual(after.headline, "已全部上完")
+    }
+
+    func testCourseTimelineSeparatesCompletedOngoingAndUpcomingCourses() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let courses = [
+            Course(
+                weekday: 1,
+                startWeek: 1,
+                endWeek: 16,
+                location: "博学南楼 A101",
+                name: "第一节",
+                teacher: "教师",
+                duration: 2,
+                startPeriod: 1,
+                courseID: "timeline-1",
+                weekIndexes: Array(1...16)
+            ),
+            Course(
+                weekday: 1,
+                startWeek: 1,
+                endWeek: 16,
+                location: "博学南楼 A102",
+                name: "第二节",
+                teacher: "教师",
+                duration: 2,
+                startPeriod: 3,
+                courseID: "timeline-2",
+                weekIndexes: Array(1...16)
+            ),
+            Course(
+                weekday: 1,
+                startWeek: 1,
+                endWeek: 16,
+                location: "博学南楼 A103",
+                name: "第三节",
+                teacher: "教师",
+                duration: 2,
+                startPeriod: 6,
+                courseID: "timeline-3",
+                weekIndexes: Array(1...16)
+            )
+        ]
+        let now = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 13, hour: 10, minute: 20))
+        )
+
+        XCTAssertEqual(
+            HomeCourseTimeline.states(for: courses, now: now, calendar: calendar),
+            [.completed, .ongoing, .upcoming]
+        )
     }
 }

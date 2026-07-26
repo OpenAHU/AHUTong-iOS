@@ -11,6 +11,14 @@ private struct CookieDump: Decodable {
     let cookies: String
 }
 
+private struct CampusCardTokenResponse: Decodable {
+    let accessToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+    }
+}
+
 actor RustLocalServer {
     static let shared = RustLocalServer()
 
@@ -57,6 +65,7 @@ protocol CampusCoreAPI: Sendable {
     func gradeRank(studentID: String) async throws -> CampusGradeRankInfo?
     func cardBalance() async throws -> Double
     func cardQRCode() async throws -> String
+    func cardAccessToken() async throws -> String
     func refreshSession() async throws
     func persistSessionCookies() async throws
 }
@@ -66,8 +75,9 @@ extension CampusCoreAPI {
     func grades(studentID: String) async throws -> CampusGradeReport { try await grades() }
     func gradeProfiles() async throws -> [CampusGradeStudentProfile] { [] }
     func gradeRank(studentID: String) async throws -> CampusGradeRankInfo? { nil }
+    func cardAccessToken() async throws -> String { throw CampusCoreError.credentialsUnavailable }
     func refreshSession() async throws { throw CampusCoreError.credentialsUnavailable }
-    func persistSessionCookies() async throws {}
+    func persistSessionCookies() async throws { throw CampusCoreError.invalidResponse }
 }
 
 actor RustCampusCoreAPI: CampusCoreAPI {
@@ -160,6 +170,13 @@ actor RustCampusCoreAPI: CampusCoreAPI {
 
     func cardQRCode() async throws -> String {
         try cardParser.qrPayload(from: try await authenticatedRequest(path: "/ycard/qrcode"))
+    }
+
+    func cardAccessToken() async throws -> String {
+        let data = try await authenticatedRequest(path: "/ycard/refresh_token", method: "POST")
+        let response = try JSONDecoder().decode(CampusCardTokenResponse.self, from: data)
+        guard !response.accessToken.isEmpty else { throw CampusCoreError.invalidResponse }
+        return response.accessToken
     }
 
     func refreshSession() async throws {

@@ -39,6 +39,47 @@ struct CampusCookie: Codable, Equatable, Sendable {
         let matchesSecurity = secure != true || url.scheme?.lowercased() == "https"
         return matchesDomain && matchesPath && matchesSecurity
     }
+
+    func isScoped(to serviceURL: URL) -> Bool {
+        guard matches(serviceURL) else { return false }
+        let cookiePath = (path ?? "/").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cookiePath != "/", !cookiePath.isEmpty else {
+            // Root cookies carry the shared CAS/JWXT session. Clearing them
+            // for one feature would log every other campus service out.
+            return false
+        }
+        let normalizedCookiePath = cookiePath.hasSuffix("/")
+            ? String(cookiePath.dropLast())
+            : cookiePath
+        let normalizedServicePath = serviceURL.path.hasSuffix("/")
+            ? String(serviceURL.path.dropLast())
+            : serviceURL.path
+        return normalizedServicePath == normalizedCookiePath
+            || normalizedServicePath.hasPrefix("\(normalizedCookiePath)/")
+    }
+}
+
+struct CampusHTTPResponse: Sendable {
+    let data: Data
+    let statusCode: Int
+    let finalURL: URL?
+    let headers: [String: String]
+
+    func header(_ name: String) -> String? {
+        headers.first { $0.key.caseInsensitiveCompare(name) == .orderedSame }?.value
+    }
+}
+
+private final class CampusRedirectBlockingDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
 }
 
 actor CampusAuthenticatedClient {
@@ -57,28 +98,85 @@ actor CampusAuthenticatedClient {
         body: Data? = nil,
         contentType: String? = nil
     ) async throws -> Data {
-        try await data(
+        try await response(
             url: url,
             method: method,
             body: body,
             contentType: contentType,
-            mayRefreshSession: true
+            headers: [:],
+            followsRedirects: true,
+            mayRefreshSession: true,
+            notifiesSessionExpiry: true
+        ).data
+    }
+
+    func response(
+        url: URL,
+        method: String = "GET",
+        body: Data? = nil,
+        contentType: String? = nil,
+        headers: [String: String] = [:],
+        followsRedirects: Bool = true,
+        refreshesSessionOnUnauthorized: Bool = true
+    ) async throws -> CampusHTTPResponse {
+        try await response(
+            url: url,
+            method: method,
+            body: body,
+            contentType: contentType,
+            headers: headers,
+            followsRedirects: followsRedirects,
+            mayRefreshSession: refreshesSessionOnUnauthorized,
+            notifiesSessionExpiry: refreshesSessionOnUnauthorized
         )
     }
 
-    private func data(
+    @discardableResult
+    func clearCookies(matching url: URL) async throws -> Int {
+        try await clearCookies { $0.matches(url) }
+    }
+
+    @discardableResult
+    func clearCookies(scopedTo serviceURL: URL) async throws -> Int {
+        try await clearCookies { $0.isScoped(to: serviceURL) }
+    }
+
+    private func clearCookies(
+        where shouldRemove: (CampusCookie) -> Bool
+    ) async throws -> Int {
+        let rawCookies = try await campusAPI.cookiesFlat()
+        let cookies: [CampusCookie]
+        do {
+            cookies = try JSONDecoder().decode([CampusCookie].self, from: Data(rawCookies.utf8))
+        } catch {
+            throw CampusWebError.invalidResponse
+        }
+        let retained = cookies.filter { !shouldRemove($0) }
+        let removedCount = cookies.count - retained.count
+        guard removedCount > 0 else { return 0 }
+        let json = String(decoding: try JSONEncoder().encode(retained), as: UTF8.self)
+        try await campusAPI.initialize(cookiesJSON: json)
+        try await campusAPI.persistSessionCookies()
+        return removedCount
+    }
+
+    private func response(
         url: URL,
         method: String,
         body: Data?,
         contentType: String?,
-        mayRefreshSession: Bool
-    ) async throws -> Data {
+        headers: [String: String],
+        followsRedirects: Bool,
+        mayRefreshSession: Bool,
+        notifiesSessionExpiry: Bool
+    ) async throws -> CampusHTTPResponse {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.httpBody = body
         request.timeoutInterval = 30
         request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+        headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
 
         let rawCookies = try await campusAPI.cookiesFlat()
         let cookies = (try? JSONDecoder().decode([CampusCookie].self, from: Data(rawCookies.utf8))) ?? []
@@ -88,11 +186,24 @@ actor CampusAuthenticatedClient {
             .joined(separator: "; ")
         if !header.isEmpty { request.setValue(header, forHTTPHeaderField: "Cookie") }
 
-        let (data, response) = try await session.data(for: request)
+        let redirectDelegate = followsRedirects ? nil : CampusRedirectBlockingDelegate()
+        let (data, response) = try await session.data(for: request, delegate: redirectDelegate)
         guard let response = response as? HTTPURLResponse else { throw CampusWebError.invalidResponse }
-        try await persistResponseCookies(response, for: url, existing: cookies)
+        try await persistResponseCookies(response, for: response.url ?? url, existing: cookies)
         let finalPath = response.url?.path.lowercased() ?? ""
-        if response.statusCode == 401 || response.statusCode == 403 || finalPath.contains("tologin") || finalPath.contains("/cas/login") {
+        let responseHeaders = response.allHeaderFields.reduce(into: [String: String]()) { result, item in
+            guard let key = item.key as? String else { return }
+            result[key] = String(describing: item.value)
+        }
+        let redirectPath = responseHeaders.first {
+            $0.key.caseInsensitiveCompare("Location") == .orderedSame
+        }?.value.lowercased() ?? ""
+        if response.statusCode == 401
+            || response.statusCode == 403
+            || finalPath.contains("tologin")
+            || finalPath.contains("/cas/login")
+            || redirectPath.contains("tologin")
+            || redirectPath.contains("/cas/login") {
             if mayRefreshSession {
                 logger.notice("Campus web session expired; refreshing path=\(url.path)")
                 do {
@@ -104,22 +215,31 @@ actor CampusAuthenticatedClient {
                     }
                     throw error
                 }
-                return try await self.data(
+                return try await self.response(
                     url: url,
                     method: method,
                     body: body,
                     contentType: contentType,
-                    mayRefreshSession: false
+                    headers: headers,
+                    followsRedirects: followsRedirects,
+                    mayRefreshSession: false,
+                    notifiesSessionExpiry: notifiesSessionExpiry
                 )
             }
-            await notifySessionExpired()
+            if notifiesSessionExpiry { await notifySessionExpired() }
             throw CampusWebError.unauthorized
         }
-        guard (200..<300).contains(response.statusCode) else {
+        let acceptedRedirect = !followsRedirects && (300..<400).contains(response.statusCode)
+        guard (200..<300).contains(response.statusCode) || acceptedRedirect else {
             logger.notice("Campus web request failed status=\(response.statusCode) path=\(url.path)")
             throw CampusWebError.server("校园服务请求失败（\(response.statusCode)）")
         }
-        return data
+        return CampusHTTPResponse(
+            data: data,
+            statusCode: response.statusCode,
+            finalURL: response.url,
+            headers: responseHeaders
+        )
     }
 
     private func persistResponseCookies(

@@ -123,18 +123,16 @@ struct WeatherPreferencesStore: Sendable {
     }
 
     func load() async -> WeatherDisplayPreferences {
-        do {
-            guard let data = try await store.data(forKey: key) else {
-                return WeatherDisplayPreferences()
-            }
-            return try JSONDecoder().decode(WeatherDisplayPreferences.self, from: data)
-        } catch {
+        if (try? await store.data(forKey: key)) != nil {
+            // Android 3.2 no longer exposes per-section controls for the
+            // weather page. Remove the retired value so users who disabled a
+            // section in an older build do not get permanently hidden data.
             try? await store.removeValue(forKey: key)
-            return WeatherDisplayPreferences()
         }
+        return WeatherDisplayPreferences()
     }
 
-    func save(_ preferences: WeatherDisplayPreferences) async throws {
-        try await store.set(JSONEncoder().encode(preferences), forKey: key)
+    func save(_: WeatherDisplayPreferences) async throws {
+        try await store.removeValue(forKey: key)
     }
 }

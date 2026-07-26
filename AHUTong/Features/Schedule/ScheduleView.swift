@@ -454,7 +454,7 @@ struct ScheduleView: View {
                             .androidScaledFont(size: 11, relativeTo: .caption2, weight: .bold)
                             .lineLimit(group.courses.count <= 2 ? 3 : 2)
                         Spacer(minLength: 0)
-                        Text("\(course.startWeek)-\(course.endWeek)周")
+                        Text(ScheduleTextFormatter.weekRange(for: course))
                             .androidScaledFont(size: 10, relativeTo: .caption2, weight: .bold)
                             .frame(maxWidth: .infinity)
                         Text(shortLocation(course.location))
@@ -471,7 +471,7 @@ struct ScheduleView: View {
                     .background(courseColor(course.name).opacity(active ? 1 : 0.45))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(course.name)，第\(course.startWeek)到\(course.endWeek)周，\(course.location)")
+                .accessibilityLabel("\(course.name)，\(ScheduleTextFormatter.weekRange(for: course))，\(course.location)")
                 .accessibilityIdentifier(
                     ScheduleWeekNavigation.courseIdentifier(
                         courseID: course.courseID,
@@ -542,11 +542,7 @@ struct ScheduleView: View {
     private var scheduleGridHeight: CGFloat { 64 + 13 * 52 + 24 }
 
     private func shortLocation(_ location: String) -> String {
-        location.replacingOccurrences(of: "博学北楼", with: "博北")
-            .replacingOccurrences(of: "博学南楼", with: "博南")
-            .replacingOccurrences(of: "笃行南楼", with: "笃南")
-            .replacingOccurrences(of: "笃行北楼", with: "笃北")
-            .replacingOccurrences(of: "互联大楼", with: "互楼")
+        ScheduleTextFormatter.shortLocation(location)
     }
 }
 

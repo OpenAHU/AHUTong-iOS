@@ -137,12 +137,12 @@ struct CampusCardPanel: View {
     private var balanceCard: some View {
         HStack(spacing: 0) {
             Button { showsQRCode = true } label: {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("校园卡余额").font(.headline.bold()).padding(.top, 15)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("校园卡余额").font(.headline.bold())
                     balanceText.font(.title2.bold()).lineLimit(1).minimumScaleFactor(0.72)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

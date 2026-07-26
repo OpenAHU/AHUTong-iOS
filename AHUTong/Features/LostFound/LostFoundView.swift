@@ -12,6 +12,7 @@ final class LostFoundViewModel: ObservableObject {
     @Published private(set) var catalog = LostFoundCatalog(campuses: [], types: [])
     @Published private(set) var state: LoadableState<[LostFoundItem]> = .idle
     @Published private(set) var mutation: MutationState = .idle
+    @Published private(set) var myPostsState: LoadableState<[LostFoundItem]> = .idle
     @Published private(set) var currentState = 1
     @Published private(set) var hasMore = false
     @Published private(set) var isLoadingMore = false
@@ -43,10 +44,6 @@ final class LostFoundViewModel: ObservableObject {
         (state.value ?? []).filter {
             $0.matches(query: searchQuery, campusID: selectedCampusID, typeID: selectedTypeID)
         }
-    }
-
-    var myPosts: [LostFoundItem] {
-        (state.value ?? []).filter { $0.pubuser?.idNumber == currentUserID }
     }
 
     func load() async {
@@ -113,6 +110,16 @@ final class LostFoundViewModel: ObservableObject {
         }
     }
 
+    func loadMyPosts() async {
+        myPostsState = .loading
+        do {
+            let items = try await remote.ownedPosts(userID: currentUserID)
+            myPostsState = items.isEmpty ? .empty : .loaded(items)
+        } catch {
+            myPostsState = .failed(AppErrorState(message: error.localizedDescription))
+        }
+    }
+
     func publish(_ draft: LostFoundPublishDraft) async -> Bool {
         if let message = draft.validationMessage {
             mutation = .failed(message)
@@ -139,7 +146,9 @@ final class LostFoundViewModel: ObservableObject {
         mutation = .working
         do {
             try await remote.delete(id: item.id)
-            await load()
+            async let list: Void = load()
+            async let owned: Void = loadMyPosts()
+            _ = await (list, owned)
             mutation = .succeeded("删除成功")
             return true
         } catch {
@@ -579,27 +588,49 @@ private struct LostFoundMyPostsView: View {
 
     var body: some View {
         AndroidScreen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 0) {
                 AndroidHeader(title: "管理我的帖子", large: true)
-                if model.myPosts.isEmpty {
+                switch model.myPostsState {
+                case .idle, .loading:
+                    ProgressView("加载我的帖子…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .empty:
                     AndroidEmptyState(text: "暂无帖子")
-                } else {
-                    ForEach(model.myPosts) { item in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(item.title).font(.headline)
-                                Text(item.createtime ?? "").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                case let .failed(error):
+                    VStack(spacing: 16) {
+                        Text(error.message)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(AndroidParityPalette.error)
+                        Button("重试") { Task { await model.loadMyPosts() } }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(32)
+                case let .loaded(items):
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(items) { item in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.title).font(.headline)
+                                        Text(item.state == 1 ? "失物招领" : "寻物启事")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Text(item.createtime ?? "").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button("删除", role: .destructive) { Task { _ = await model.delete(item) } }
+                                }
+                                .padding(16)
+                                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
                             }
-                            Spacer()
-                            Button("删除", role: .destructive) { Task { _ = await model.delete(item) } }
                         }
                         .padding(16)
                     }
                 }
-                Spacer()
             }
-            .padding(24)
         }
+        .task { await model.loadMyPosts() }
         .accessibilityIdentifier("lost-found.my-posts")
     }
 }

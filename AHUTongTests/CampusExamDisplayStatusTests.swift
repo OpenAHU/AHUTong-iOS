@@ -18,4 +18,12 @@ final class CampusExamDisplayStatusTests: XCTestCase {
         XCTAssertEqual(CampusExamDisplayStatus.resolve(time: "待公布", isFinished: true), .finished)
         XCTAssertEqual(CampusExamDisplayStatus.resolve(time: "待公布", isFinished: false), .invalid)
     }
+
+    func testShortensThreePartAndroidLocationButPreservesOtherFormats() {
+        XCTAssertEqual(
+            CampusExamLocationFormatter.shortened("磬苑校区-博学楼-博学楼A101"),
+            "磬苑校区 博学楼A101"
+        )
+        XCTAssertEqual(CampusExamLocationFormatter.shortened("博学南楼 A210"), "博学南楼 A210")
+    }
 }

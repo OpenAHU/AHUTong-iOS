@@ -19,7 +19,7 @@ struct WeatherView: View {
         }
         .sheet(isPresented: $showSettings) {
             AndroidWeatherSettings(model: model)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
         .task { await model.start(autoLocate: !AppRuntime.isDemoSession) }
@@ -329,57 +329,64 @@ private struct AndroidLifeIndexCard: View {
 }
 
 private struct AndroidWeatherSettings: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var model: WeatherViewModel
-    @AppStorage("weather.show-on-home") private var showOnHome = true
+    @AppStorage("weather.show-on-home") private var showOnHome = false
+    @AppStorage("weather.home.mode") private var homeMode = WeatherHomeMode.detailed.rawValue
+    @AppStorage("weather.home.show-location") private var homeShowsLocation = true
+    @AppStorage("weather.home.show-temperature") private var homeShowsTemperature = true
+    @AppStorage("weather.home.show-condition") private var homeShowsCondition = true
+    @AppStorage("weather.home.show-air-quality") private var homeShowsAirQuality = true
 
     var body: some View {
         AndroidScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("天气设置").font(.title2).fontWeight(.bold)
-                    Text("选择要显示的信息：").font(.body).foregroundStyle(.secondary)
+                    Text("选择首页天气样式和详细卡片信息：").font(.body).foregroundStyle(.secondary)
                     Spacer().frame(height: 8)
 
-                    Button {
-                        dismiss()
-                        Task { await model.useCurrentLocation() }
-                    } label: {
-                        Label("使用当前位置", systemImage: "location")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 8)
+                    Text("首页样式")
+                        .font(.headline)
+                    HStack(spacing: 8) {
+                        ForEach(WeatherHomeMode.allCases) { mode in
+                            Button {
+                                homeMode = mode.rawValue
+                            } label: {
+                                Text(mode.title)
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        WeatherHomeMode.resolve(homeMode) == mode
+                                            ? AndroidParityPalette.primaryTone80
+                                            : Color.secondary.opacity(0.1),
+                                        in: Capsule()
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(
+                                WeatherHomeMode.resolve(homeMode) == mode ? .isSelected : []
+                            )
+                        }
                     }
-                    .buttonStyle(.plain)
+                    Spacer().frame(height: 8)
 
                     Toggle("在首页显示天气", isOn: $showOnHome)
                         .padding(.vertical, 4)
-
-                    ForEach(WeatherPreferenceKey.allCases) { key in
-                        Toggle(
-                            key.title,
-                            isOn: Binding(
-                                get: { value(for: key) },
-                                set: { model.setPreference(key, enabled: $0) }
-                            )
-                        )
+                    Toggle("详细卡片显示城市名", isOn: $homeShowsLocation)
                         .padding(.vertical, 4)
-                    }
+                    Toggle("详细卡片显示温度", isOn: $homeShowsTemperature)
+                        .padding(.vertical, 4)
+                    Toggle("详细卡片显示天气状况", isOn: $homeShowsCondition)
+                        .padding(.vertical, 4)
+                    Toggle("详细卡片显示空气质量", isOn: $homeShowsAirQuality)
+                        .padding(.vertical, 4)
+                    Spacer().frame(height: 24)
                 }
                 .padding(24)
             }
         }
-    }
-
-    private func value(for key: WeatherPreferenceKey) -> Bool {
-        switch key {
-        case .location: model.preferences.showLocation
-        case .temperature: model.preferences.showTemperature
-        case .condition: model.preferences.showCondition
-        case .airQuality: model.preferences.showAirQuality
-        case .hourly: model.preferences.showHourlyForecast
-        case .lifeIndices: model.preferences.showLifeIndices
-        }
+        .accessibilityIdentifier("weather.settings")
     }
 }
 

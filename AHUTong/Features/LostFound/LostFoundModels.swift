@@ -86,6 +86,7 @@ struct LostFoundCatalog: Codable, Equatable, Sendable {
 protocol LostFoundRemote: Sendable {
     func catalog() async throws -> LostFoundCatalog
     func page(state: Int, page: Int, size: Int) async throws -> LostFoundPage
+    func ownedPosts(userID: String) async throws -> [LostFoundItem]
     func publish(_ draft: LostFoundPublishDraft) async throws -> LostFoundItem
     func delete(id: String) async throws
 }

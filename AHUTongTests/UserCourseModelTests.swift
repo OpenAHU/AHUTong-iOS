@@ -57,4 +57,36 @@ final class UserCourseModelTests: XCTestCase {
         XCTAssertTrue(course.occurs(inWeek: 4))
         XCTAssertFalse(course.occurs(inWeek: 5))
     }
+
+    func testScheduleTextMatchesAndroidLocationAndWeekRules() {
+        let biweekly = Course(
+            weekday: 1,
+            startWeek: 1,
+            endWeek: 9,
+            location: "博学南楼 A101 [临时教室]",
+            name: "测试课程",
+            teacher: "老师",
+            duration: 2,
+            startPeriod: 1,
+            courseID: "format",
+            weekIndexes: [1, 3, 5, 7, 9]
+        )
+        let irregular = Course(
+            weekday: 1,
+            startWeek: 1,
+            endWeek: 8,
+            location: "体育场",
+            name: "测试课程",
+            teacher: "老师",
+            duration: 2,
+            startPeriod: 1,
+            courseID: "irregular",
+            weekIndexes: [1, 2, 5, 8]
+        )
+
+        XCTAssertEqual(ScheduleTextFormatter.shortLocation(biweekly.location), "博南A101")
+        XCTAssertEqual(ScheduleTextFormatter.shortLocation(irregular.location), "体")
+        XCTAssertEqual(ScheduleTextFormatter.weekRange(for: biweekly), "1-9单周")
+        XCTAssertEqual(ScheduleTextFormatter.weekRange(for: irregular), "1/2/5/8周")
+    }
 }

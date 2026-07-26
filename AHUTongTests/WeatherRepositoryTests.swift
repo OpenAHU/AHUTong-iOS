@@ -87,24 +87,28 @@ final class WeatherRepositoryTests: XCTestCase {
     }
 
     @MainActor
-    func testDisplayPreferencesRoundTripAndRecoverCorruption() async throws {
+    func testRetiredDisplayPreferencesAreRemovedAndAllWeatherSectionsRecover() async throws {
         let dataStore = InMemoryDataStore()
         let store = WeatherPreferencesStore(store: dataStore)
-        var expected = WeatherDisplayPreferences()
-        expected.showAirQuality = false
-        expected.showHourlyForecast = false
-        try await store.save(expected)
-        let saved = await store.load()
-
-        XCTAssertEqual(saved, expected)
-
-        try await dataStore.set(Data("broken".utf8), forKey: "weather.display-preferences.v1")
+        var legacy = WeatherDisplayPreferences()
+        legacy.showAirQuality = false
+        legacy.showHourlyForecast = false
+        legacy.showLifeIndices = false
+        try await dataStore.set(
+            JSONEncoder().encode(legacy),
+            forKey: "weather.display-preferences.v1"
+        )
         let recovered = await store.load()
+
         XCTAssertEqual(recovered, WeatherDisplayPreferences())
+        let removed = try await dataStore.data(
+            forKey: "weather.display-preferences.v1"
+        )
+        XCTAssertNil(removed)
     }
 
     @MainActor
-    func testDeniedGPSFallsBackToIPAndSettingsAffectModel() async {
+    func testDeniedGPSFallsBackToIPWithAllWeatherSectionsVisible() async {
         let remote = WeatherRemoteStub(response: Self.fixture)
         let model = WeatherViewModel(
             repository: WeatherRepository(remote: remote, cache: InMemoryDataStore()),
@@ -113,13 +117,12 @@ final class WeatherRepositoryTests: XCTestCase {
         )
 
         await model.useCurrentLocation()
-        model.setPreference(.airQuality, enabled: false)
         let queries = await remote.queries
 
         XCTAssertEqual(queries, [.ip])
         XCTAssertEqual(model.state.value?.response.city, "合肥市")
         XCTAssertTrue(model.notice?.contains("IP 定位") == true)
-        XCTAssertFalse(model.preferences.showAirQuality)
+        XCTAssertEqual(model.preferences, WeatherDisplayPreferences())
     }
 
     @MainActor
@@ -136,6 +139,43 @@ final class WeatherRepositoryTests: XCTestCase {
 
         XCTAssertEqual(queries, [.city("芜湖市")])
         XCTAssertTrue(model.notice?.contains("当前位置") == true)
+    }
+
+    func testHomeModesRecoverUnknownValuesAndConfigurationRoundTrips() throws {
+        XCTAssertEqual(WeatherHomeMode.resolve("compact"), .compact)
+        XCTAssertEqual(WeatherHomeMode.resolve("future-mode"), .detailed)
+        XCTAssertEqual(WeatherHomeMode.resolve(nil), .detailed)
+        XCTAssertFalse(WeatherHomeConfiguration().showOnHome)
+
+        let expected = WeatherHomeConfiguration(
+            showOnHome: true,
+            mode: .compact,
+            showLocation: false,
+            showTemperature: true,
+            showCondition: false,
+            showAirQuality: true
+        )
+        let decoded = try JSONDecoder().decode(
+            WeatherHomeConfiguration.self,
+            from: JSONEncoder().encode(expected)
+        )
+        XCTAssertEqual(decoded, expected)
+    }
+
+    func testCompactHomePresentationUsesWeatherCodeAndMetrics() throws {
+        XCTAssertEqual(HomeWeatherPresentation.glyph(Self.fixture), "≋")
+        XCTAssertEqual(HomeWeatherPresentation.metricLines(Self.fixture), ["UV 6", "湿 99%"])
+        XCTAssertEqual(
+            HomeWeatherPresentation.detail(weather: Self.fixture, showsAirQuality: true),
+            "东南风 1级 · 空气26"
+        )
+
+        let rain = try JSONDecoder().decode(
+            WeatherResponse.self,
+            from: Data(#"{"city":"合肥市","weather":"阵雨","weather_code":"305","temperature":28}"#.utf8)
+        )
+        XCTAssertEqual(rain.weatherCode, "305")
+        XCTAssertEqual(HomeWeatherPresentation.glyph(rain), "☔")
     }
 
     private static let fixtureData = Data(

@@ -6,13 +6,15 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| 总体状态 | 客户端迁移收口；学校官方支付页已作为真实生产入口接入，原生直连与对账仍受 D-005 外部阻塞 |
-| 当前里程碑 | 恢复总览课表与下学期预览：设置改为可靠整行交互，SDK 按教务实际学期列表解析下一学期 |
-| 当前焦点 | 总览按 Android 同时间槽纵向分组；下学期切换具备独立数据、取消竞态和真实 semester ID 解析 |
-| 下一步 | 用户在 iPhone 13 Pro 使用校园账号切换下学期并刷新，确认教务系统实际课程数据 |
-| 用户/平台功能进度 | 20 / 23 个切片满足严格完成定义（87.0%）；剩余 3 个均为受 D-005、R-003、R-004 外部依赖阻断的真实支付切片，不以 Mock 冒充完成 |
-| 当前分支 | `codex/fix/schedule-overview-next-term` |
-| 最近更新 | 2026-07-17 |
+| 总体状态 | 已按 Android `2c33b0b` 重新全量审计；26 / 26 个切片均有 iOS 客户端实现或安全平台替代，原生四类扣款与对账仍受 D-005、R-003、R-004 外部阻塞 |
+| 当前里程碑 | 收口 Android 3.2.0 新增的教学评价、招商银行充值、网费充值，以及考试、资料库、首页、天气、设置等既有切片扩展 |
+| 当前焦点 | 当前候选代码、Rust/GuiXu 持久化、单元/UI 测试进入 macOS CI、未签名 IPA 与 Release Archive 验证 |
+| 下一步 | macOS 三条 workflow 全绿后回填证据；用户在 iPhone 13 Pro 用授权校园账号验证招商银行网页链路与外部支付边界 |
+| 客户端实现覆盖 | 26 / 26（100%）；表示功能代码或安全平台替代已经落地，不等于真实扣款已验收 |
+| Android 生产行为对齐 | 22 / 26（84.6%）；PAY-01、PAY-02、PAY-03、PAY-05 的原生扣款无法在缺少安全网关与授权沙箱时等价实现 |
+| 严格完成定义 | 10 / 26（38.5%）；12 个非阻塞切片尚未取得最新基线对应的 macOS CI 或真实招商银行账号证据，因此旧证据不沿用 |
+| 当前分支 | `codex/fix/final-migration-gaps` |
+| 最近更新 | 2026-07-26 |
 
 ## 1. 目标与边界
 
@@ -26,9 +28,9 @@
 
 - 应用启动、协议确认、登录、会话恢复与退出。
 - 四个主入口：主页、课表、小工具、设置。
-- 课表、成绩、考试、空闲教室、校历和电话本。
-- 校园卡余额与付款码、校园卡充值、浴室缴费、电控缴费。
-- 天气、失物招领、学习资料。
+- 课表、成绩、教学评价、考试、空闲教室、校历和电话本。
+- 校园卡余额与付款码、校园卡充值、招商银行充值、浴室缴费、电控缴费和网费充值。
+- 天气、失物招领、学习资料浏览/Markdown 阅读/下载管理。
 - 首页自定义、课表桌面组件、课程提醒与可选 Live Activity。
 - 测试、CI、辅助功能、隐私、安全与 App Store 发布准备。
 
@@ -59,11 +61,14 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 | 仓库 | 基线 | 说明 |
 | --- | --- | --- |
 | AIO | `031ed3c2c599240a62184d928c3bcfbb22866607` | 迁移 worktree 的 detached HEAD |
-| Android | `2a30a54e74127ce1b4f75763596b470bd0b9d01b` | 本路线图的功能与代码参考基线 |
+| AIO 3.2.0 复审 worktree | `205a19916dcba5d30da5925ed46d8bf453689113` | 当前 `ios-final-completion-audit` detached worktree 的根仓基线 |
+| Android 原始固定基线 | `2a30a54e74127ce1b4f75763596b470bd0b9d01b` | 2026-07-14～17 已完成切片及旧 UI 证据的产品参考 |
+| Android 3.2.0 复审基线 | `2c33b0b` | 2026-07-26 重新全量审计；新增教学评价、招商银行充值、网费充值，并扩展考试、资料库、首页、天气、设置等行为 |
 | iOS | `96d33412ae47471d209b2e21c7b9715fc278d4f9` | 迁移开始前的 `main`；仅含两行 README |
 | Android `sdk` gitlink | `8c2d6b8113cb0f2ea6bb45cd74fa950e39dc956d` | 已按需浅拉，并固定为 iOS `Vendor/sdk` 的业务实现基线 |
-| iOS `sdk` 适配 | `1177864f4063b65220dc18c6742fb5d7ebe45ae5` | 在 Apple C ABI、GuiXu KV、Cookie 安全模式与持久化错误边界上继续补齐下学期课表、多学籍与成绩排名服务接口；已推送分支 `codex/feat/apple-guixu-persistence` |
+| iOS `sdk` 适配 | `c8a5fb34469684da0277e74456404e180c7b81af` | Apple C ABI、GuiXu KV、Cookie 安全模式、持久化错误边界、下学期课表、多学籍与成绩排名服务接口；远端 `codex/fix/next-semester-resolution` 分支可达 |
 | Android `GuiXu-Rust` gitlink | `2481ab378395b5ee6db21021524ad051d98b888f` | 已按需浅拉，并固定为 iOS `Vendor/GuiXu-Rust` 的解析依赖基线 |
+| iOS `GuiXu-Rust` 适配 | `387f8105436ba8f8a59f6b6093fb0a2c0ce7b674` | 修复稀疏数字键重开语义并恢复 Apache 2.0 LICENSE/NOTICE 归属；远端 `rust-rewrite` 分支可达 |
 
 基线不得静默替换。Android 参考版本变化时，必须在这里追加新 SHA，并在变更日志说明重新对照了哪些功能与契约。
 
@@ -238,31 +243,36 @@ iOS/
 
 课表总览/下学期收口证据 `E-20260717-06`：共同交互根因是 iOS 把 `Toggle` 放进 SwiftUI `.alert` actions，而系统 Alert 只保证按钮动作，两个开关因此不可可靠点击；下学期数据层还把目标学期 ID 固定写成“当前 ID + 20”，编号间隔变化时会请求错误学期。iOS commit `b78bcde` 改为 310pt 原生 Sheet，两个设置项均采用 Android 同款整行可点击按钮、可视开关、按压高亮/缩放/轻触觉及“开启/关闭”辅助功能值；总览按星期/开始节次/时长纵向分组同时间课程，显示周次范围并弱化非本周课程；下学期使用独立 Demo/真实数据，`.task(id:)` 取消过期加载以避免快速切换被旧请求覆盖，“回到当前周”会先退出预览。SDK commit `c8a5fb3` 从页面 `semesters` 实际列表按学期顺序选择下一 ID，仅在列表缺失时回退旧 offset；`cargo test -- --nocapture` 11 项全绿，其中 2 项覆盖非固定间隔和倒序列表。最终 CI `29537917170` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 142 个单元测试与 6 个 UI 测试；`ScheduleWeekNavigationTests` 5 项通过，UI 专项连续验证左右分页、总览从“关闭”变“开启”并出现非本周课程、下学期从“关闭”变“开启”并替换为下学期课程。Artifact `AHUTong-ui-parity-xcresult-78` 为 19,625,818 bytes。未签名 IPA run `29537917146` 上传 `AHUTong-unsigned-ipa-78`，IPA 为 5,556,882 bytes，SHA-256 `061FB4B210520A17D07163DD931607F9D957C63421AD9B461D0EC51EEBCF645D`；Release run `29537917347` 上传 9,699,477 bytes 的 `AHUTong-release-readiness-32`。首次代码 run `29536631558` 的 142 单测全绿，但暴露原 Toggle 点按仍保持关闭，同时既有工具页长链偶发未找到成绩入口；改为唯一整行按钮后最终同功能提交全绿。真实下学期是否已发布及具体课程仍须用户校园账号在物理 iPhone 13 Pro 刷新验证。
 
+Android 3.2.0 复审候选证据 `E-20260726-01`：产品参考更新为远端 `2c33b0b`，相对旧基线新增 ACA-04 教学评价、PAY-04 招商银行充值、PAY-05 网费充值三个独立切片，并重新对照课表/首页/成绩/考试/校园卡/电话本/天气/资料库/设置/运维十个既有切片。当前 iOS 候选已补齐真实评教 API 与提交、招商银行 Token/Cookie/WebView 安全链路、网费账户读取和官方入口、资料库 LFS/Markdown/下载、考试与首页视觉、天气升级兼容、失物“我的发布”、真实隐私说明、GuiXu 许可证，以及浴室/电控本地交互；评教只清理服务路径 Cookie，不删除共享 CAS 根 Cookie。Windows 本地 `Vendor/sdk cargo test --locked` 11 项、`Vendor/GuiXu-Rust cargo test --locked` 5 项通过，`git diff --check` 通过。macOS CI、未签名 IPA、Release Archive 及最终 commit 尚待本轮推送后回填；PAY-04 还需要授权校园账号/物理 iPhone，PAY-01/02/03/05 原生扣款仍不具备 D-005 安全网关与 R-004 沙箱，未执行任何自动扣款。
+
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
 | AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003~D-005 | 已完成 | 固定 Rust SDK 的验证码/CAS/Cookie 链路以 Apple staticlib 接入；初始化 GuiXu 前先清空 Rust 内存 Cookie，iOS 以 `persist_session=0` 禁止 Cookie 写入 GuiXu，冷启动只从按学号隔离的 ThisDeviceOnly Keychain 恢复，过期时凭据重登，无凭据时安全清理，退出同时清理会话与 Widget 快照 | `CampusSessionStoreTests` 4 项、`CredentialStoreTests` 4 项及登录正常/工作中/错误状态在 `E-20260715-01` 全通过；SDK Keychain-only 持久化及最终 macOS 验证见 `E-20260715-02`；授权校园账号与物理机属于部署回归；Commits `d8516f2`、`77a5ae5`、`edfd219`，SDK `e826156` | 2026-07-15 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 已完成 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入 cache-first/refresh/stale-cache Repository；业务缓存通过 Apple C ABI 写入 GuiXu，物理键为 SHA-256 摘要且逻辑键强制账号命名空间；升级时一次性读取旧 UserDefaults/文件缓存、写入 GuiXu 后删除旧副本；Widget 快照与提醒刷新仍由同一课表结果驱动 | 原课表 Repository/文件缓存/周次/模型 12 项及新增 GuiXu FFI/迁移 2 项测试；全状态 UI 见 `E-20260715-01`，最终 macOS 复验见 `E-20260715-02`；Commits `d8516f2`、`edfd219`，SDK `e826156` | 2026-07-15 |
-| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周、真实日期、单双周卡片、重叠课程分栏、刷新、课程详情和加载/空/错误态完整；总览按 Android 同时间槽纵向分组，设置整行可点击；下学期从教务实际列表解析目标 ID，并取消过期切换任务 | 原 UI 证据见 `E-20260714-01`，原生左右分页见 `E-20260717-04`；总览/下学期交互、Rust 学期契约及最终 macOS 回归见 `E-20260717-06` | 2026-07-17 |
-| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程、天气、8 槽位去重/增删/换位、编辑工具库与持久化已实现；Android 10 个工具注册表保持同序 | `HomeWidgetLayoutTests` 5 项覆盖布局和固定时间的进行中/下一节/已结束状态；首页正常及三种状态双端证据见 `E-20260714-01`；Commits `e339a7b`、`b3c098c`、`f23f130` | 2026-07-14 |
-| ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | SDK `/grade`、`/grade/profiles`、`/grade/rank`、递归兼容解析、真实多学籍切换、GPA/学期排名、学期筛选、搜索、账号隔离离线缓存和全状态 Android UI 已实现 | Rust 多学籍/排名解析 2 项及 Swift 成绩回归通过；原四状态证据见 `E-20260714-01`，最终 SDK/CI 见 `E-20260715-04` | 2026-07-15 |
-| ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和加载/空/错态均已实现；Rust 当前 HTML 解析不再使用不支持的 look-around，并兼容属性/空白变化；iOS 容错数字座位号与空字段 | 原四状态证据见 `E-20260714-01`；Rust HTML 契约、Swift 解码和考试卡 UI 回归见 `E-20260717-05` | 2026-07-17 |
+| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 待验证 | 20 周左右分页、真实日期、单双周、重叠课程、总览、下学期、课程详情和全状态完整；新增 Android 3.2.0 同款地点缩写、周次范围及总览可读文本 | 原功能证据见 `E-20260714-01`、`E-20260717-04`、`E-20260717-06`；本轮 `ScheduleTextFormatter` 与回归测试待 `E-20260726-01` macOS 复验 | 2026-07-26 |
+| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 待验证 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、编辑工具库、已放工具过滤和账号隔离持久化完整；紧凑天气点击只进入天气，不与课程入口冲突 | `HomeWidgetLayoutTests`、紧凑天气 UI 专项及既有双端证据；当前候选待 `E-20260726-01` macOS 复验 | 2026-07-26 |
+| ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 待验证 | SDK 成绩/学籍/排名、筛选/搜索与账号隔离缓存完整；按 Android 3.2.0 识别仅有 `gradeDetail` 的“请先完成评教”受限成绩并进入真实评价页，单学籍失败不遮蔽其他学籍 | 新增 gradeDetail-only 解析、评价 gate、单学籍隔离和 Demo 学期回归；待 `E-20260726-01` macOS 复验 | 2026-07-26 |
+| ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 待验证 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和全状态均已实现；按 Android 3.2.0 折叠已结束考试、缩短地点并重做详情卡与加载/空状态 | 原解析修复见 `E-20260717-05`；新增显示状态与当前候选 UI 待 `E-20260726-01` macOS 复验 | 2026-07-26 |
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 已完成 | 真实楼栋 GET 与空闲列表 POST 契约、校区/楼栋多选、节次、日期范围、查询结果和加载/空/错状态完整；页面标题、紫色查询按钮、12 间确定性结果和卡片密度与 Android 对齐 | `FreeClassroomTests` 4 项及双端正常/加载/空/错误截图在 `E-20260715-01` 通过；Commits `d8516f2`、`1c0f950` | 2026-07-15 |
-| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 已完成 | 余额刷新、动态二维码、凭据过期和刷新/关闭工具栏完整；按用户要求移除录屏状态监听及付款码遮罩，录屏时余额与二维码保持可见 | `CampusCardResponseParserTests` 3 项覆盖余额、二维码和失败响应；付款码 UI 回归见 `E-20260715-02`；测试二维码为确定性非生产 fixture；Commits `85959a6`、`feb82b8`、`7907702`、`eae0cd8` | 2026-07-15 |
+| ACA-04 | 教学评价 | `main/Evaluation.kt`、`EvaluationViewModel.kt`、`EvaluationRepository.kt` | `Features/Evaluation/` | P3 / ACA-01、AUTH-02 | 待验证 | 从受限成绩或工具页进入；真实 Token/Cookie 引导、学年/菜单初始化、任务/问卷加载、单项与预设批量提交、检查结果、会话失效重试、账号隔离预设及全状态 UI 完整 | `EvaluationTests` 覆盖路由、契约、问卷、预设、提交和非零业务码重试；Demo/UI 路径待 `E-20260726-01` macOS 复验 | 2026-07-26 |
+| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 待验证 | 余额刷新、动态二维码、凭据过期和刷新/关闭工具栏完整；按用户要求录屏保持可见；余额区按 Android 3.2.0 左列纵向居中，并提供招商银行充值偏好入口 | 既有解析/付款码证据见 `E-20260715-02`；本轮余额与入口 UI 待 `E-20260726-01` macOS 复验 | 2026-07-26 |
 | PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 金额校验、幂等订单、银行卡/支付宝选择、第三方返回与对账状态机已实现；生产新增学校官方 HTTPS 支付入口，当前表单不随跳转提交，打开页面不记成功；原生直连继续安全阻断 | `PaymentTests` 新增官方 CAS/同域 HTTPS URL 契约；CI 增加不创建订单的 HEAD/302 探测并通过，见 `E-20260717-01`；原生解除条件仍是服务端签名网关、凭据轮换和受控支付验收 | 2026-07-17 |
-| PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 浴室选择、手机号、金额、仅内存密码与恢复状态机保留；生产确认改为打开学校官方页面并要求在校方页面重新选择，避免客户端接触上游签名/密码 | 官方 URL 契约与无扣款连通性探测共享覆盖，见 `E-20260717-01`；原生解除条件同 PAY-01，并需授权浴室账户 | 2026-07-17 |
-| PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 校区→楼栋→楼层→房间级联、金额、仅内存密码与结果状态机保留；生产提供学校官方页面，不把本地空目录或未配置网关误写成扣款失败 | 官方 URL 契约与无扣款连通性探测共享覆盖，见 `E-20260717-01`；原生解除条件同 PAY-01，并需授权房间/电表 | 2026-07-17 |
+| PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 浴室选择、手机号、金额、仅内存密码与恢复状态机保留；六位密码错误在弹窗内红字反馈且输入即清除；生产确认进入官方页，不复制客户端签名材料 | 本地密码状态和 UI 专项待 `E-20260726-01`；原生解除条件同 PAY-01，并需授权浴室账户 | 2026-07-26 |
+| PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 校区→楼栋→楼层→房间级联、金额、仅内存密码与结果状态机完整；仅确认成功后按账号累计充值，信息行五击查看、长按确认清零；生产官方页不在本地记成功 | `PaymentLocalParityTests` 与 UI 专项待 `E-20260726-01`；原生解除条件同 PAY-01，并需授权房间/电表 | 2026-07-26 |
+| PAY-04 | 招商银行校园卡充值 | `main/CmbCardRecharge.kt`、`YcardApi.kt`、`PreferencesManager.kt` | `Features/Payments/CMBRechargeView.swift` | P5 / CARD-01、AUTH-02 | 待验证 | 获取校园卡 access token，以内存 Cookie 打开校方充值 WebView；只允许校方充值域和招商银行必要跳转，阻止认证材料外泄；支持“仅本次/以后默认”账号隔离偏好并注入 Android 同款可信页面样式 | `NewPaymentFeatureTests` 覆盖入口 URL、Cookie 域/Path、脚本、白名单与偏好；macOS 构建待 `E-20260726-01`，授权账号与物理 iPhone 仍待验证 | 2026-07-26 |
+| PAY-05 | 网费充值 | `main/NetworkRecharge.kt`、`NetworkRechargeViewModel.kt`、`YcardApi.kt` | `Features/Payments/NetworkRechargeView.swift` | P5 / AUTH-02、D-005 | 阻塞 | 已实现真实账户/套餐/金额查询、入口预热、Bearer/Cookie/Referer 契约、内存响应 Cookie 和官方入口；仓库不复制 Android 客户端签名材料，原生最终扣款安全阻断 | `NewPaymentFeatureTests` 覆盖请求头、可信 Cookie、内存持久化和安全边界；原生解除条件同 PAY-01，并需授权网费账户/沙箱 | 2026-07-26 |
 | INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、PhotoKit 保存照片及权限降级完整；黑色全屏、校历居中、右下保存/退出与加载/错误态按 Android 重做 | `SchoolCalendarRepositoryTests` 5 项覆盖缓存、回退、损坏恢复与照片保存 adapter；校历 UI 见 `E-20260714-01`，最终 device/权限文案编译见 `E-20260715-04` | 2026-07-15 |
-| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 本地分类、搜索、校区号码和拨号确认完整；Android 标题/搜索、横向分类胶囊、列表密度和拨号对话框已重做 | `PhoneBookTests` 4 项覆盖目录、搜索和安全拨号 URL；电话本双端证据见 `E-20260714-01`；Commits `6a84c55`、`c40eb24`、`6561f25` | 2026-07-14 |
-| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 已完成 | 天气页首入 GPS、拒绝后 IP 降级、城市搜索、首页显示开关、实况、预报、小时、AQI、生活指数和账号隔离缓存完整；Android 标题/搜索/卡片/设置面板保持一致 | `WeatherRepositoryTests` 7 项覆盖解析、首入定位、三类查询、缓存隔离、偏好和拒绝降级；UI 见 `E-20260714-01`，最终复验见 `E-20260715-04` | 2026-07-15 |
+| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 待验证 | 9 类 57 个本地条目、搜索、校区号码与拨号确认完整；重新对照 Android 3.2.0 更新后的电话条目、注释和列表顺序，不申请通讯录权限 | 既有 `PhoneBookTests` 与双端证据见 `E-20260714-01`；最新 Android 基线复验待 `E-20260726-01` | 2026-07-26 |
+| INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 待验证 | 首入 GPS、拒绝后 IP 降级、城市搜索、实况/预报/小时/AQI/生活指数、账号隔离缓存及首页详细/紧凑卡完整；详情页始终显示 Android 3.2.0 全量信息，升级时删除已下线的旧六项隐藏偏好 | `WeatherRepositoryTests` 新增旧偏好恢复与首页卡模式覆盖；当前候选待 `E-20260726-01` macOS 复验 | 2026-07-26 |
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 已完成 | 认证请求层复用 Rust 会话 Cookie 并识别 401/403/登录重定向；真实 campus/type/list 端点、失物/寻物双列表、校区/类型/全文筛选、分页、详情和受控图片加载完整 | `LostFoundTests` 的契约解码、跨字段筛选和无重复分页 3 项及双端列表/详情/三态截图在 `E-20260715-01` 通过；Commits `d8516f2`、`7b688b7`、`aeda622`、`1c0f950` | 2026-07-15 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；所有权由可靠用户标识判定，“我的帖子”、字段校验和失败提示完整；未确认的图片上传能力不伪造 | `LostFoundTests` 的草稿校验、远端确认后可见、拒绝删除他人/成功删除本人 3 项及双端 60% 发布面板在 `E-20260715-01` 通过；Commits `d8516f2`、`aeda622`、`77a5ae5` | 2026-07-15 |
-| CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 仓库/目录浏览、缓存、URLSession 临时文件流式落盘、进度、Quick Look/系统分享、单个和批量删除完整；Android 页面结构已重做 | `StudyRepositoryServiceTests` 6 项覆盖六仓契约、目录缓存、双源下载进度和删除；UI 见 `E-20260714-01`，最终 device 构建见 `E-20260715-04` | 2026-07-15 |
-| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 已完成 | 设置首页及通知、通知增强、Android 主题色、贡献名单、隐藏 Debug、意见反馈和偏好持久化完整；所有可点击行具备按压高亮/缩放/轻触觉反馈并尊重减弱动态效果；设置列表不显示 Debug，只保留 App 卡片 8 连点入口；原生 Tab Bar 始终跟随系统 | 原设置/偏好证据见 `E-20260714-01`～`03`；液态玻璃入口删除见 `E-20260716-02`；Debug 可见行移除见 `E-20260717-02`；交互反馈见 `E-20260717-03` | 2026-07-17 |
+| CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 待验证 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 新增路径、面包屑、LFS、下载完整性和凭据边界覆盖；UI 候选待 `E-20260726-01` | 2026-07-26 |
+| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待验证 | 设置首页、通知、通知增强、主题色、招商银行默认充值、站内贡献名单、反馈和偏好持久化完整；点击反馈、隐藏 Debug 8 连点、原生 Tab Bar 默认玻璃均保留；许可证补齐 GuiXu LICENSE/NOTICE | 既有设置证据见 `E-20260716-02`、`E-20260717-02`、`E-20260717-03`；新增偏好/许可证测试待 `E-20260726-01` | 2026-07-26 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 已完成 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整 | `ScheduleWidgetSnapshotTests` 5 项含跨周推进；原 Widget 证据见 `E-20260715-01`，最终 Extension/IPA/Archive 见 `E-20260715-04` | 2026-07-15 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、时区日期、前台/时区变化重排完整；ActivityKit 锁屏与灵动岛下一节课倒计时、设置开关和 Debug 测试入口完整 | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归 | 2026-07-15 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | Android 同算法灰度、本地兜底/Debug 覆盖、App 卡片 8 连点隐藏入口、不可逆账号摘要、脱敏日志、隐私清单/数据地图、敏感信息扫描、Release Archive、未签名 IPA 与 Personal Team 发布清单完整；第三方崩溃/统计/广告保持关闭 | `ReleaseOperationsTests` 8 项及 Archive/IPA/全套 macOS CI 见 `E-20260715-02`；隐藏入口专项回归见 `E-20260717-02`；物理机 7 天签名是部署回归，不冒充已执行证据 | 2026-07-17 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 待验证 | 灰度、隐藏 Debug、账号摘要、脱敏日志、版本化真实隐私协议/数据地图、GuiXu 归属、隐私清单、敏感扫描、Release Archive、未签名 IPA 与 Personal Team 清单完整；第三方崩溃/统计/广告保持关闭 | 本地 Rust SDK 11 项、GuiXu 5 项通过；当前 3.2.0 候选待 `E-20260726-01` 的 CI、IPA 与 Archive | 2026-07-26 |
 
 ### 8.1 全量复查收口（2026-07-15）
 
@@ -517,3 +527,4 @@ iOS/
 | 2026-07-17 | SCH-005 | 对齐 Android `HorizontalPager`：课表主体改为原生 1～20 周分页，左右拖动跟手吸附，顶部周次与回到当前周双向同步；修正分页父级标识传播，保留当前页课程卡点击和辅助功能语义 | `ScheduleWeekNavigationTests` 覆盖周范围、边界与当前页课程标识；真实左滑 1→2 周、右滑 2→1 周及课程卡存在性由 UI 自动化验证，最终证据见 `E-20260717-04` | `aa4387f`、`ce732e0`、`7589911` |
 | 2026-07-17 | ACA-006 | 修复考场查询：Rust 当前 HTML 解析移除运行时会崩溃的不支持 look-around，兼容表格换行、属性乱序、单双引号和两类座位号；iOS 对空字段/数字类型容错并增加考试卡 UI 标识 | Rust 9 项全绿（含 2 项新表格契约），Swift 解码 2 项及最终 macOS/IPA/Archive 见 `E-20260717-05` | iOS `1f23ee2`；SDK `ebf7024` |
 | 2026-07-17 | SCH-006 | 修复课表设置中的无效 Alert Toggle：改为可交互 Sheet 与 Android 同款整行按钮；总览按同时间槽纵向分组，下学期独立加载并从教务 semesters 列表选择实际下一 ID | Rust 11 项、Swift 142 单测 + 6 UI 全绿；CI `29537917170`、IPA `29537917146`、Archive `29537917347`，见 `E-20260717-06` | iOS `b78bcde`；SDK `c8a5fb3` |
+| 2026-07-26 | AUDIT-003 | 将产品参考更新到 Android 3.2.0 `2c33b0b`，分母由 23 增至 26；实现教学评价、招商银行充值、网费充值，并收口课表/首页/成绩/考试/校园卡/天气/失物/资料库/设置/隐私/GuiXu 持久化与许可证差异。客户端实现覆盖 26 / 26，但严格状态在新证据生成前回退到 10 / 26；不把四类受阻原生扣款或未验真的招商银行账号链路记为完成 | Windows：Rust SDK 11 项、GuiXu 5 项、`git diff --check` 通过；macOS CI、IPA、Archive 和授权账号证据待 `E-20260726-01` 回填 | 待提交 |

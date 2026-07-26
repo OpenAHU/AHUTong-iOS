@@ -56,6 +56,18 @@ struct CampusLostFoundRemote: LostFoundRemote {
         return envelope.object
     }
 
+    func ownedPosts(userID: String) async throws -> [LostFoundItem] {
+        guard !userID.isEmpty else { return [] }
+        async let lost = allPages(state: 1)
+        async let found = allPages(state: 2)
+        let (lostItems, foundItems) = try await (lost, found)
+        let values = lostItems + foundItems
+        var seen: Set<String> = []
+        return values
+            .filter { $0.pubuser?.idNumber == userID && seen.insert($0.id).inserted }
+            .sorted { ($0.createtime ?? "") > ($1.createtime ?? "") }
+    }
+
     func publish(_ draft: LostFoundPublishDraft) async throws -> LostFoundItem {
         if let message = draft.validationMessage { throw CampusWebError.server(message) }
         let payload = PublishPayload(
@@ -107,6 +119,18 @@ struct CampusLostFoundRemote: LostFoundRemote {
     }
 
     private static func success(_ code: Int) -> Bool { code == 0 || code == 200 }
+
+    private func allPages(state: Int) async throws -> [LostFoundItem] {
+        let size = 100
+        let first = try await page(state: state, page: 1, size: size)
+        guard first.pages > 1 else { return first.list }
+        var items = first.list
+        for pageNumber in 2...min(first.pages, 100) {
+            let next = try await page(state: state, page: pageNumber, size: size)
+            items.append(contentsOf: next.list)
+        }
+        return items
+    }
 }
 
 actor DemoLostFoundRemote: LostFoundRemote {
@@ -142,6 +166,12 @@ actor DemoLostFoundRemote: LostFoundRemote {
             pages: max(1, Int(ceil(Double(matching.count) / Double(size)))),
             list: Array(matching[start..<end])
         )
+    }
+
+    func ownedPosts(userID: String) -> [LostFoundItem] {
+        items
+            .filter { $0.pubuser?.idNumber == userID }
+            .sorted { ($0.createtime ?? "") > ($1.createtime ?? "") }
     }
 
     func publish(_ draft: LostFoundPublishDraft) throws -> LostFoundItem {

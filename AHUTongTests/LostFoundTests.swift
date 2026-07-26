@@ -55,6 +55,22 @@ final class LostFoundTests: XCTestCase {
         XCTAssertFalse(page.list.contains { $0.id == owned.id })
     }
 
+    func testOwnedPostsAggregatesBothStatesIndependentlyFromVisiblePage() async throws {
+        let remote = DemoLostFoundRemote()
+        var lost = validDraft()
+        lost.title = "我发布的失物"
+        lost.state = 1
+        var found = validDraft()
+        found.title = "我发布的寻物"
+        found.state = 2
+        let first = try await remote.publish(lost)
+        let second = try await remote.publish(found)
+
+        let owned = await remote.ownedPosts(userID: "AB220001")
+        XCTAssertEqual(Set(owned.map(\.id)), Set([first.id, second.id]))
+        XCTAssertTrue(owned.allSatisfy { $0.pubuser?.idNumber == "AB220001" })
+    }
+
     private func validDraft() -> LostFoundPublishDraft {
         var draft = LostFoundPublishDraft()
         draft.contact = "测试同学"
