@@ -449,7 +449,7 @@ private struct CMBRechargeWebViewRepresentable: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, @preconcurrency WKNavigationDelegate, @preconcurrency WKUIDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private weak var state: CMBRechargeWebState?
         private var progressObservation: NSKeyValueObservation?
         private var loadedRequestID: Int?

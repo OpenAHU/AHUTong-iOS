@@ -705,11 +705,18 @@ enum HomeWeatherPresentation {
             || nextSix.contains { hour in
                 guard let value = hour.weather else { return false }
                 return rainWords.contains { value.contains($0) }
-            }
+        }
         let rain = probability.map { "雨 \($0)%" } ?? (hasRain ? "雨 --" : nil)
-        let ultraviolet = weather.ultraviolet.map { "UV \(Int($0.rounded()))" }
-            ?? weather.hourlyForecast?.first?.ultravioletIndex.map { "UV \($0)" }
-            ?? weather.forecast?.first?.ultravioletIndex.map { "UV \($0)" }
+        let ultraviolet: String?
+        if let currentValue = weather.ultraviolet {
+            ultraviolet = "UV \(Int(currentValue.rounded()))"
+        } else if let hourlyValue = weather.hourlyForecast?.first?.ultravioletIndex {
+            ultraviolet = "UV \(hourlyValue)"
+        } else if let dailyValue = weather.forecast?.first?.ultravioletIndex {
+            ultraviolet = "UV \(dailyValue)"
+        } else {
+            ultraviolet = nil
+        }
         let fallback = weather.humidity.map { "湿 \($0)%" } ?? weather.windPower.map { "风 \($0)" }
         return [rain, ultraviolet, fallback].compactMap { $0 }.prefix(2).map { $0 }
     }

@@ -657,7 +657,7 @@ struct StudyRepositoryService: Sendable {
         guard size > 0, size <= RepositoryGitLFSPointer.maximumPointerBytes else {
             return nil
         }
-        return RepositoryGitLFSPointer.parse(Data(contentsOf: fileURL))
+        return RepositoryGitLFSPointer.parse(try Data(contentsOf: fileURL))
     }
 
     private func validateGitLFSFile(
