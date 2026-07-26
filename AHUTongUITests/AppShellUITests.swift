@@ -555,7 +555,9 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = [
             "--demo-consent",
             "--demo-session",
-            "--demo-weather-compact"
+            "--demo-weather-compact",
+            "-debug.mock.endpoint.weather",
+            #"{"city":"合肥市","weather":"晴","weather_code":"100","temperature":28,"humidity":65,"uv":6}"#
         ]
         app.launch()
 

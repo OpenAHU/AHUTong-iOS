@@ -164,7 +164,7 @@ final class WeatherRepositoryTests: XCTestCase {
 
     func testCompactHomePresentationUsesWeatherCodeAndMetrics() throws {
         XCTAssertEqual(HomeWeatherPresentation.glyph(Self.fixture), "≋")
-        XCTAssertEqual(HomeWeatherPresentation.metricLines(Self.fixture), ["UV 6", "湿 99%"])
+        XCTAssertEqual(HomeWeatherPresentation.metricLines(Self.fixture), ["雨 --", "UV 6"])
         XCTAssertEqual(
             HomeWeatherPresentation.detail(weather: Self.fixture, showsAirQuality: true),
             "东南风 1级 · 空气26"
