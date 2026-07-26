@@ -24,4 +24,16 @@ final class LoadableStateTests: XCTestCase {
             LoadableState<String>.failed(error)
         )
     }
+
+    func testDebugEndpointUsesDeterministicCommandLineOverride() {
+        let weather = #"{"city":"合肥市","weather":"晴","temperature":28}"#
+
+        XCTAssertEqual(
+            DebugRuntimeSettings.endpointJSON(
+                "weather",
+                arguments: ["AHUTong", "--demo-endpoint-weather=\(weather)"]
+            ),
+            weather
+        )
+    }
 }

@@ -62,8 +62,15 @@ enum DebugRuntimeSettings {
 
     static let endpoints = ["schedule", "grade", "exam", "free-classroom", "lost-found", "weather"]
 
-    static func endpointJSON(_ endpoint: String) -> String {
-        UserDefaults.standard.string(forKey: endpointKeyPrefix + endpoint) ?? "{}"
+    static func endpointJSON(
+        _ endpoint: String,
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String {
+        let prefix = "--demo-endpoint-\(endpoint)="
+        if let argument = arguments.first(where: { $0.hasPrefix(prefix) }) {
+            return String(argument.dropFirst(prefix.count))
+        }
+        return UserDefaults.standard.string(forKey: endpointKeyPrefix + endpoint) ?? "{}"
     }
 
     static func setEndpointJSON(_ value: String, endpoint: String) throws {

@@ -291,8 +291,7 @@ final class AppShellUITests: XCTestCase {
             app.launchArguments = arguments
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            tabButton("tools", app: app).tap()
-            app.buttons["tools.grade"].tap()
+            openTool("tools.grade", app: app)
             XCTAssertTrue(app.descendants(matching: .any)["grades.screen"].waitForExistence(timeout: 4))
             waitForRendering()
             capture("state-\(state)-grades", app: app)
@@ -319,8 +318,7 @@ final class AppShellUITests: XCTestCase {
             app.launchArguments = arguments
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            tabButton("tools", app: app).tap()
-            app.buttons["tools.free-classroom"].tap()
+            openTool("tools.free-classroom", app: app)
             XCTAssertTrue(app.buttons["free-classroom.search"].waitForExistence(timeout: 4))
             app.buttons["free-classroom.search"].tap()
             let classroomState = app.descendants(matching: .any)["free-classroom.\(state)"]
@@ -332,8 +330,7 @@ final class AppShellUITests: XCTestCase {
             app.launchArguments = arguments
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            tabButton("tools", app: app).tap()
-            app.buttons["tools.lost-found"].tap()
+            openTool("tools.lost-found", app: app)
             let lostFoundState = app.descendants(matching: .any)["lost-found.\(state)"]
             XCTAssertTrue(lostFoundState.waitForExistence(timeout: 4))
             waitForRendering()
@@ -556,8 +553,7 @@ final class AppShellUITests: XCTestCase {
             "--demo-consent",
             "--demo-session",
             "--demo-weather-compact",
-            "-debug.mock.endpoint.weather",
-            #"{"city":"合肥市","weather":"晴","weather_code":"100","temperature":28,"humidity":65,"uv":6}"#
+            #"--demo-endpoint-weather={"city":"合肥市","weather":"晴","weather_code":"100","temperature":28,"humidity":65,"uv":6}"#
         ]
         app.launch()
 
@@ -640,6 +636,14 @@ final class AppShellUITests: XCTestCase {
             "settings": "设置"
         ]
         return app.tabBars.buttons[titles[identifier] ?? identifier]
+    }
+
+    @MainActor
+    private func openTool(_ identifier: String, app: XCUIApplication) {
+        tabButton("tools", app: app).tap()
+        let tool = app.buttons[identifier]
+        XCTAssertTrue(tool.waitForExistence(timeout: 4))
+        tool.tap()
     }
 
     @MainActor
