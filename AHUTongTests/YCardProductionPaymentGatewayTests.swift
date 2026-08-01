@@ -1119,8 +1119,11 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
         XCTAssertEqual(YCardProductionTestURLProtocol.requestCount, 1)
     }
 
-    func testEachElectricityOrderUsesItsOwnFreshPasswordMap() async throws {
-        let mappingChecks = YCardProductionLockedBox<[Bool]>([])
+    func testEachElectricityOrderUsesItsOwnFreshPasswordMapAndUUID() async throws {
+        let keyboardOrderBindings = YCardProductionLockedBox<[Bool]>([])
+        let finalMaterialBindings = YCardProductionLockedBox<[Bool]>([])
+        let firstUUID = String(repeating: "1", count: 32)
+        let secondUUID = String(repeating: "2", count: 32)
         let firstExpected = String(decoding: [51, 53, 55, 57, 56, 54], as: UTF8.self)
         let secondExpected = String(decoding: [48, 50, 52, 54, 56, 57], as: UTF8.self)
         YCardProductionTestURLProtocol.handler = { request, index in
@@ -1131,13 +1134,21 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
                     json: #"{"code":200,"success":true,"data":{"orderid":"ELEC-MAP-1"},"msg":"ok"}"#
                 )
             case 2:
+                keyboardOrderBindings.withValue {
+                    $0.append(formValues(request)["orderid"] == "ELEC-MAP-1")
+                }
                 return try response(
                     request,
                     json: #"{"code":200,"success":true,"data":{"passwordMap":{"11111111111111111111111111111111":"9081726354"}},"msg":"ok"}"#
                 )
             case 3:
-                mappingChecks.withValue {
-                    $0.append(formValues(request)["password"] == firstExpected)
+                let form = formValues(request)
+                finalMaterialBindings.withValue {
+                    $0.append(
+                        form["orderid"] == "ELEC-MAP-1"
+                            && form["uuid"] == firstUUID
+                            && form["password"] == firstExpected
+                    )
                 }
                 return try response(
                     request,
@@ -1154,13 +1165,21 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
                     json: #"{"code":200,"success":true,"data":{"orderid":"ELEC-MAP-2"},"msg":"ok"}"#
                 )
             case 6:
+                keyboardOrderBindings.withValue {
+                    $0.append(formValues(request)["orderid"] == "ELEC-MAP-2")
+                }
                 return try response(
                     request,
                     json: #"{"code":200,"success":true,"data":{"passwordMap":{"22222222222222222222222222222222":"1029384756"}},"msg":"ok"}"#
                 )
             case 7:
-                mappingChecks.withValue {
-                    $0.append(formValues(request)["password"] == secondExpected)
+                let form = formValues(request)
+                finalMaterialBindings.withValue {
+                    $0.append(
+                        form["orderid"] == "ELEC-MAP-2"
+                            && form["uuid"] == secondUUID
+                            && form["password"] == secondExpected
+                    )
                 }
                 return try response(
                     request,
@@ -1185,7 +1204,127 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
             )
             assertConfirmed(try await gateway.submitPreparedConfirmation(prepared))
         }
-        XCTAssertTrue(mappingChecks.value == [true, true])
+        XCTAssertTrue(keyboardOrderBindings.value == [true, true])
+        XCTAssertTrue(finalMaterialBindings.value == [true, true])
+    }
+
+    func testEachNetworkOrderUsesItsOwnFreshPasswordMapAndUUID() async throws {
+        let keyboardOrderBindings = YCardProductionLockedBox<[Bool]>([])
+        let finalMaterialBindings = YCardProductionLockedBox<[Bool]>([])
+        let firstUUID = String(repeating: "3", count: 32)
+        let secondUUID = String(repeating: "4", count: 32)
+        let firstMap = String(
+            decoding: [57, 48, 56, 49, 55, 50, 54, 51, 53, 52],
+            as: UTF8.self
+        )
+        let secondMap = String(
+            decoding: [49, 48, 50, 57, 51, 56, 52, 55, 53, 54],
+            as: UTF8.self
+        )
+        let firstExpected = String(decoding: [51, 53, 55, 57, 56, 54], as: UTF8.self)
+        let secondExpected = String(decoding: [48, 50, 52, 54, 56, 57], as: UTF8.self)
+        let firstKeyboardResponse = try dynamicKeyboardResponse(
+            uuid: firstUUID,
+            map: firstMap
+        )
+        let secondKeyboardResponse = try dynamicKeyboardResponse(
+            uuid: secondUUID,
+            map: secondMap
+        )
+
+        YCardProductionTestURLProtocol.handler = { request, index in
+            switch index {
+            case 1:
+                return try response(request, status: 302)
+            case 2:
+                return try response(request, json: #"{"code":200,"msg":"ok"}"#)
+            case 3:
+                return try response(
+                    request,
+                    json: #"{"code":200,"feeitem":{"name":"fixture"},"msg":"ok"}"#
+                )
+            case 4, 8, 12:
+                return try response(
+                    request,
+                    json: #"{"code":200,"map":{"showData":{},"data":{"account":"fixture"}},"msg":"ok"}"#
+                )
+            case 5:
+                return try response(
+                    request,
+                    json: #"{"code":200,"success":true,"data":{"orderid":"NET-MAP-1"},"msg":"ok"}"#
+                )
+            case 6:
+                keyboardOrderBindings.withValue {
+                    $0.append(formValues(request)["orderid"] == "NET-MAP-1")
+                }
+                return try response(request, json: firstKeyboardResponse)
+            case 7:
+                let form = formValues(request)
+                finalMaterialBindings.withValue {
+                    $0.append(
+                        form["orderid"] == "NET-MAP-1"
+                            && form["uuid"] == firstUUID
+                            && form["password"] == firstExpected
+                    )
+                }
+                return try response(
+                    request,
+                    json: #"{"code":200,"success":true,"data":"accepted","msg":"ok"}"#
+                )
+            case 9:
+                return try response(
+                    request,
+                    json: #"{"code":200,"success":true,"data":{"orderid":"NET-MAP-2"},"msg":"ok"}"#
+                )
+            case 10:
+                keyboardOrderBindings.withValue {
+                    $0.append(formValues(request)["orderid"] == "NET-MAP-2")
+                }
+                return try response(request, json: secondKeyboardResponse)
+            case 11:
+                let form = formValues(request)
+                finalMaterialBindings.withValue {
+                    $0.append(
+                        form["orderid"] == "NET-MAP-2"
+                            && form["uuid"] == secondUUID
+                            && form["password"] == secondExpected
+                    )
+                }
+                return try response(
+                    request,
+                    json: #"{"code":200,"success":true,"data":"accepted","msg":"ok"}"#
+                )
+            default:
+                throw YCardProductionMockError.unexpectedRequest
+            }
+        }
+
+        let gateway = makeGateway()
+        let request = try paymentRequest(
+            feature: .networkRecharge,
+            method: .campusAccount,
+            context: .networkRecharge(
+                thirdPartyJSON: #"{"account":"fixture","balance":"10.00"}"#
+            )
+        )
+        for (index, key) in ["fresh-network-map-key-1", "fresh-network-map-key-2"].enumerated() {
+            let order = try await gateway.createOrder(
+                request: request,
+                idempotencyKey: key
+            )
+            XCTAssertEqual(order.id, "NET-MAP-\(index + 1)")
+            let prepared = try await gateway.prepareConfirmation(
+                orderID: order.id,
+                feature: .networkRecharge,
+                method: .campusAccount,
+                authorization: try transientAuthorization()
+            )
+            assertConfirmed(try await gateway.submitPreparedConfirmation(prepared))
+        }
+
+        XCTAssertTrue(keyboardOrderBindings.value == [true, true])
+        XCTAssertTrue(finalMaterialBindings.value == [true, true])
+        XCTAssertEqual(YCardProductionTestURLProtocol.requestCount, 12)
     }
 
     func testMockModeWithoutRegisteredURLProtocolCannotSendDebit() async {
@@ -1211,6 +1350,78 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
         guard case .unknown = status else {
             return XCTFail("Expected unknown result")
         }
+    }
+
+    func testCardAndBathroomCode200RemainConfirmedWhenSuccessIsFalse() {
+        let response = Data(#"{"code":200,"success":false}"#.utf8)
+
+        for feature in [PaymentFeature.cardRecharge, .bathroom] {
+            assertConfirmed(
+                YCardProductionPaymentDecoder.finalStatus(
+                    from: response,
+                    feature: feature
+                )
+            )
+        }
+    }
+
+    func testCardAndBathroomNon200RemainRejectedWhenSuccessIsTrue() {
+        let response = Data(#"{"code":500,"success":true}"#.utf8)
+
+        for feature in [PaymentFeature.cardRecharge, .bathroom] {
+            assertRejected(
+                YCardProductionPaymentDecoder.finalStatus(
+                    from: response,
+                    feature: feature
+                )
+            )
+        }
+    }
+
+    func testElectricityAndNetworkKeepTheirFeatureSpecificSuccessRules() {
+        let successFalse = Data(#"{"code":200,"success":false,"data":"receipt"}"#.utf8)
+        assertRejected(
+            YCardProductionPaymentDecoder.finalStatus(
+                from: successFalse,
+                feature: .electricity
+            )
+        )
+        assertRejected(
+            YCardProductionPaymentDecoder.finalStatus(
+                from: successFalse,
+                feature: .networkRecharge
+            )
+        )
+
+        let emptyNetworkData = Data(#"{"code":200,"success":true,"data":""}"#.utf8)
+        assertRejected(
+            YCardProductionPaymentDecoder.finalStatus(
+                from: emptyNetworkData,
+                feature: .networkRecharge
+            )
+        )
+
+        let blankNetworkData = Data(#"{"code":200,"success":true,"data":" \n\t"}"#.utf8)
+        assertRejected(
+            YCardProductionPaymentDecoder.finalStatus(
+                from: blankNetworkData,
+                feature: .networkRecharge
+            )
+        )
+
+        let accepted = Data(#"{"code":200,"success":true,"data":"receipt"}"#.utf8)
+        assertConfirmed(
+            YCardProductionPaymentDecoder.finalStatus(
+                from: accepted,
+                feature: .electricity
+            )
+        )
+        assertConfirmed(
+            YCardProductionPaymentDecoder.finalStatus(
+                from: accepted,
+                feature: .networkRecharge
+            )
+        )
     }
 
     private func makeGateway() -> YCardProductionPaymentGateway {
@@ -1259,6 +1470,17 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
         )
     }
 
+    private func dynamicKeyboardResponse(uuid: String, map: String) throws -> String {
+        let object: [String: Any] = [
+            "code": 200,
+            "success": true,
+            "data": ["passwordMap": [uuid: map]],
+            "msg": "ok"
+        ]
+        let data = try JSONSerialization.data(withJSONObject: object)
+        return try XCTUnwrap(String(data: data, encoding: .utf8))
+    }
+
     private func assertConfirmed(
         _ status: PaymentOrderStatus,
         file: StaticString = #filePath,
@@ -1266,6 +1488,16 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
     ) {
         guard case .confirmed = status else {
             return XCTFail("Expected confirmed status", file: file, line: line)
+        }
+    }
+
+    private func assertRejected(
+        _ status: PaymentOrderStatus,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard case .rejected = status else {
+            return XCTFail("Expected rejected status", file: file, line: line)
         }
     }
 }

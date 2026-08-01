@@ -1237,13 +1237,14 @@ enum YCardProductionPaymentDecoder {
         let confirmed: Bool
         switch feature {
         case .cardRecharge, .bathroom:
-            confirmed = code == 200 && success != false
+            confirmed = code == 200
         case .electricity:
             confirmed = code == 200 && success == true
         case .networkRecharge:
+            let resultData = root["data"] as? String
             confirmed = code == 200
                 && success == true
-                && (root["data"] as? String)?.isEmpty == false
+                && resultData?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         }
         if confirmed {
             return .confirmed("学校支付服务已确认成功")
