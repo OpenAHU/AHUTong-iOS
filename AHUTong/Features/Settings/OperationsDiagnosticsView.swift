@@ -6,25 +6,17 @@ final class OperationsDiagnosticsModel: ObservableObject {
     @Published private(set) var states: [GrayFeatureState] = []
     @Published private(set) var diagnostics = ReleaseDiagnostics.current()
     @Published private(set) var operationMessage: String?
-    @Published private(set) var paymentPortalProbePhase:
-        OfficialPaymentPortalProbePhase = .idle
 
     private let service = GrayReleaseService()
     private let userID: String?
     private let demo: Bool
-    private let paymentPortalProbe: any OfficialPaymentPortalProbing
 
     init(
         userID: String?,
-        demo: Bool = AppRuntime.isDemoSession,
-        paymentPortalProbe: (any OfficialPaymentPortalProbing)? = nil
+        demo: Bool = AppRuntime.isDemoSession
     ) {
         self.userID = userID
         self.demo = demo
-        self.paymentPortalProbe = paymentPortalProbe
-            ?? OfficialPaymentPortalProbeFactory.make(
-                isDemoSession: demo
-            )
     }
 
     func load() async {
@@ -124,26 +116,6 @@ final class OperationsDiagnosticsModel: ObservableObject {
         operationMessage = value
     }
 
-    func runOfficialPaymentPortalProbe() async {
-        guard paymentPortalProbePhase != .running else { return }
-        paymentPortalProbePhase = .running
-
-        let outcome = await paymentPortalProbe.probe()
-        guard !Task.isCancelled else {
-            paymentPortalProbePhase = .idle
-            return
-        }
-
-        switch outcome {
-        case let .passed(report):
-            paymentPortalProbePhase = .passed(report)
-        case .failed(.cancelled):
-            paymentPortalProbePhase = .idle
-        case let .failed(failure):
-            paymentPortalProbePhase = .failed(failure)
-        }
-    }
-
     private func overrideKey(_ feature: GrayFeature) -> String {
         "debug.gray.\(feature.key)"
     }
@@ -162,13 +134,11 @@ struct OperationsDiagnosticsView: View {
 
     init(
         userID: String?,
-        appModel: AppModel,
-        paymentPortalProbe: (any OfficialPaymentPortalProbing)? = nil
+        appModel: AppModel
     ) {
         self.appModel = appModel
         _model = StateObject(wrappedValue: OperationsDiagnosticsModel(
-            userID: userID,
-            paymentPortalProbe: paymentPortalProbe
+            userID: userID
         ))
     }
 
@@ -257,29 +227,14 @@ struct OperationsDiagnosticsView: View {
                         )
                         DebugStatusRow(
                             label: "支付生产网关",
-                            value: model.diagnostics.productionPaymentGatewayConfigured ? "已配置" : "未配置（安全阻断）"
+                            value: model.diagnostics.productionPaymentGatewayConfigured ? "已配置（客户端协议兼容）" : "未配置"
                         )
                     }
 
                     debugSection(
                         title: "支付验收",
-                        subtitle: "无凭据入口探测与 PAY-04 原生 HEAD 探测相互独立；两者都不会把入口可达记为支付成功。"
+                        subtitle: "自动化只验证离线协议契约；真实小额支付仅由授权用户在真机手动执行。"
                     ) {
-                        NavigationLink {
-                            OfficialPaymentPortalProbeView(model: model)
-                                .androidDetailScreen()
-                        } label: {
-                            operationsNavigationRow(
-                                title: "学校官方入口无扣款探测",
-                                detail: paymentProbeSummary,
-                                systemImage: "checkmark.shield"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier(
-                            "operations.payment-probe.entry"
-                        )
-
                         NavigationLink {
                             CMBRechargeView(
                                 appModel: appModel,
@@ -421,19 +376,6 @@ struct OperationsDiagnosticsView: View {
             .padding(16)
         }
         .padding(.horizontal, 16)
-    }
-
-    private var paymentProbeSummary: String {
-        switch model.paymentPortalProbePhase {
-        case .idle:
-            "尚未探测"
-        case .running:
-            "探测中"
-        case .passed:
-            "无凭据入口可达；未发起扣款"
-        case .failed:
-            "入口异常；未发起扣款"
-        }
     }
 
     private func operationsNavigationRow(

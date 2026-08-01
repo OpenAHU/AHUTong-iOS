@@ -1,17 +1,8 @@
 import Foundation
-import SafariServices
 import SwiftUI
-
-enum NetworkRechargeOperation: Equatable, Sendable {
-    case warmUpEntry
-    case readConfiguration
-    case readAccount
-    case nativeDebit
-}
 
 enum NetworkRechargeSafetyError: LocalizedError, Equatable {
     case disallowedEndpoint
-    case nativeDebitDisabled
     case invalidResponse
     case unavailable
 
@@ -19,8 +10,6 @@ enum NetworkRechargeSafetyError: LocalizedError, Equatable {
         switch self {
         case .disallowedEndpoint:
             "已阻止不在只读白名单中的校园卡请求"
-        case .nativeDebitDisabled:
-            "iOS 客户端不在本机生成扣款签名，请前往学校官方门户完成充值"
         case .invalidResponse:
             "学校网费服务返回了无法识别的数据"
         case .unavailable:
@@ -30,7 +19,6 @@ enum NetworkRechargeSafetyError: LocalizedError, Equatable {
 }
 
 enum NetworkRechargeRequestPolicy {
-    static let nativeDebitEnabled = false
     static let credentialPersistence: CMBRechargeCredentialPersistence = .memoryOnly
 
     private static let allowedRequests: Set<String> = [
@@ -38,12 +26,6 @@ enum NetworkRechargeRequestPolicy {
         "GET /charge/feeitem/toAppitem",
         "POST /charge/feeitem/getThirdData"
     ]
-
-    static func authorize(_ operation: NetworkRechargeOperation) throws {
-        if operation == .nativeDebit {
-            throw NetworkRechargeSafetyError.nativeDebitDisabled
-        }
-    }
 
     static func authorize(_ request: URLRequest) throws {
         guard let url = request.url,
@@ -121,7 +103,46 @@ struct NetworkRechargeFeeItem: Decodable, Equatable, Sendable {
 }
 
 struct NetworkRechargeAccountDetail: Decodable, Equatable, Sendable {
+    let stateTime: String?
+    let stateMemo: String?
+    let balance: String?
+    let useTime: String?
+    let tsmAbstract: String?
+    let useMoney: String?
+    let useFlow: String?
     let account: String?
+    let userState: String?
+    let startDate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case stateTime = "state_time"
+        case stateMemo = "state_memo"
+        case balance
+        case useTime = "use_time"
+        case tsmAbstract
+        case useMoney = "use_money"
+        case useFlow = "use_flow"
+        case account
+        case userState = "user_state"
+        case startDate = "start_date"
+    }
+}
+
+private enum YCardNetworkThirdPartyJSON {
+    static func encode(_ detail: NetworkRechargeAccountDetail) -> Data {
+        var object = YCardGsonCompatibleJSONObject()
+        object.append("state_time", string: detail.stateTime)
+        object.append("state_memo", string: detail.stateMemo)
+        object.append("balance", string: detail.balance)
+        object.append("use_time", string: detail.useTime)
+        object.append("tsmAbstract", string: detail.tsmAbstract)
+        object.append("use_money", string: detail.useMoney)
+        object.append("use_flow", string: detail.useFlow)
+        object.append("account", string: detail.account)
+        object.append("user_state", string: detail.userState)
+        object.append("start_date", string: detail.startDate)
+        return object.data
+    }
 }
 
 private struct NetworkRechargeFeeEnvelope: Decodable {
@@ -150,6 +171,25 @@ struct NetworkRechargeSnapshot: Equatable, Sendable {
     let quickAmounts: [String]
     let maximumAmountText: String?
     let billingUnit: String?
+    let thirdPartyJSON: Data?
+
+    init(
+        feeName: String,
+        account: String,
+        statistics: [(label: String, value: String)],
+        quickAmounts: [String],
+        maximumAmountText: String?,
+        billingUnit: String?,
+        thirdPartyJSON: Data? = nil
+    ) {
+        self.feeName = feeName
+        self.account = account
+        self.statistics = statistics
+        self.quickAmounts = quickAmounts
+        self.maximumAmountText = maximumAmountText
+        self.billingUnit = billingUnit
+        self.thirdPartyJSON = thirdPartyJSON
+    }
 
     static func == (lhs: NetworkRechargeSnapshot, rhs: NetworkRechargeSnapshot) -> Bool {
         let statisticsMatch = lhs.statistics.elementsEqual(rhs.statistics) {
@@ -160,7 +200,8 @@ struct NetworkRechargeSnapshot: Equatable, Sendable {
             statisticsMatch &&
             lhs.quickAmounts == rhs.quickAmounts &&
             lhs.maximumAmountText == rhs.maximumAmountText &&
-            lhs.billingUnit == rhs.billingUnit
+            lhs.billingUnit == rhs.billingUnit &&
+            lhs.thirdPartyJSON == rhs.thirdPartyJSON
     }
 
     var maximumAmount: Decimal? {
@@ -230,7 +271,8 @@ enum NetworkRechargeDecoder {
             statistics: statistics,
             quickAmounts: quickAmounts,
             maximumAmountText: feeItem.maxMoney?.nilIfEmpty ?? feeItem.dayMaxMoney?.nilIfEmpty,
-            billingUnit: feeItem.billingUnit?.nilIfEmpty
+            billingUnit: feeItem.billingUnit?.nilIfEmpty,
+            thirdPartyJSON: YCardNetworkThirdPartyJSON.encode(detail)
         )
     }
 }
@@ -345,21 +387,20 @@ private final class NetworkRechargeNoRedirectDelegate: NSObject, URLSessionTaskD
 actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
     private static let origin = URL(string: "https://ycard.ahu.edu.cn")!
 
+    private struct InFlightLoad {
+        let id: UUID
+        let task: Task<NetworkRechargeSnapshot, Error>
+    }
+
     private let campusAPI: any CampusCoreAPI
     private let session: URLSession
     private var accessToken: String?
     private var sessionCookies: [CampusCookie] = []
+    private var inFlightLoad: InFlightLoad?
 
     init(campusAPI: any CampusCoreAPI) {
         self.campusAPI = campusAPI
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        configuration.urlCache = nil
-        configuration.urlCredentialStorage = nil
-        configuration.httpShouldSetCookies = true
-        configuration.httpCookieAcceptPolicy = .onlyFromMainDocumentDomain
-        configuration.timeoutIntervalForRequest = 15
-        configuration.timeoutIntervalForResource = 30
+        let configuration = Self.makeConfiguration()
         session = URLSession(
             configuration: configuration,
             delegate: NetworkRechargeNoRedirectDelegate(),
@@ -367,7 +408,64 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
         )
     }
 
+    init(
+        campusAPI: any CampusCoreAPI,
+        configuration: URLSessionConfiguration
+    ) {
+        self.campusAPI = campusAPI
+        let configuration = Self.harden(configuration)
+        session = URLSession(
+            configuration: configuration,
+            delegate: NetworkRechargeNoRedirectDelegate(),
+            delegateQueue: nil
+        )
+    }
+
+    static func makeConfiguration(
+        protocolClasses: [AnyClass]? = nil
+    ) -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = protocolClasses
+        return harden(configuration)
+    }
+
+    private static func harden(
+        _ configuration: URLSessionConfiguration
+    ) -> URLSessionConfiguration {
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        configuration.urlCache = nil
+        configuration.urlCredentialStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        configuration.waitsForConnectivity = false
+        return configuration
+    }
+
+    deinit {
+        session.invalidateAndCancel()
+    }
+
     func load() async throws -> NetworkRechargeSnapshot {
+        if let inFlightLoad {
+            return try await inFlightLoad.task.value
+        }
+        let id = UUID()
+        let task = Task { try await self.performLoad() }
+        inFlightLoad = InFlightLoad(id: id, task: task)
+        do {
+            let snapshot = try await task.value
+            clearInFlightLoad(id: id)
+            return snapshot
+        } catch {
+            clearInFlightLoad(id: id)
+            throw error
+        }
+    }
+
+    private func performLoad() async throws -> NetworkRechargeSnapshot {
         let token = try await campusAPI.cardAccessToken()
         accessToken = token
         let rawCookies = (try? await campusAPI.cookiesFlat()) ?? "[]"
@@ -383,13 +481,11 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
         try await warmUp(accessToken: token)
         try await selectNetworkFeeItem()
         let configuration = try await request(
-            operation: .readConfiguration,
             method: "GET",
             path: "/charge/feeitem/singleFeeitem",
             queryItems: [URLQueryItem(name: "feeitemid", value: "431")]
         )
         let account = try await request(
-            operation: .readAccount,
             method: "POST",
             path: "/charge/feeitem/getThirdData",
             formItems: [
@@ -404,8 +500,12 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
         )
     }
 
+    private func clearInFlightLoad(id: UUID) {
+        guard inFlightLoad?.id == id else { return }
+        inFlightLoad = nil
+    }
+
     private func warmUp(accessToken: String) async throws {
-        try NetworkRechargeRequestPolicy.authorize(.warmUpEntry)
         let response = try await response(
             method: "GET",
             path: "/charge/feeitem/toAppitem",
@@ -425,7 +525,6 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
 
     private func selectNetworkFeeItem() async throws {
         let data = try await request(
-            operation: .readAccount,
             method: "POST",
             path: "/charge/feeitem/getThirdData",
             formItems: [
@@ -440,13 +539,11 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
     }
 
     private func request(
-        operation: NetworkRechargeOperation,
         method: String,
         path: String,
         queryItems: [URLQueryItem] = [],
         formItems: [URLQueryItem] = []
     ) async throws -> Data {
-        try NetworkRechargeRequestPolicy.authorize(operation)
         let (data, response) = try await dataAndResponse(
             method: method,
             path: path,
@@ -521,9 +618,13 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
             forHTTPHeaderField: "User-Agent"
         )
         if !formItems.isEmpty {
-            var formComponents = URLComponents()
-            formComponents.queryItems = formItems
-            request.httpBody = formComponents.percentEncodedQuery?.data(using: .utf8)
+            let fields = try formItems.map { item -> (name: String, value: String) in
+                guard let value = item.value else {
+                    throw NetworkRechargeSafetyError.disallowedEndpoint
+                }
+                return (name: item.name, value: value)
+            }
+            request.httpBody = YCardFormURLEncoder.data(fields)
             request.setValue(
                 "application/x-www-form-urlencoded; charset=utf-8",
                 forHTTPHeaderField: "Content-Type"
@@ -602,22 +703,30 @@ final class NetworkRechargeViewModel: ObservableObject {
 
     @Published private(set) var state: State = .loading
     private let dataSource: any NetworkRechargeDataSource
+    private var loadRevision = 0
 
     init(dataSource: any NetworkRechargeDataSource) {
         self.dataSource = dataSource
     }
 
     func load() async {
+        loadRevision += 1
+        let revision = loadRevision
         state = .loading
         do {
-            state = .ready(try await dataSource.load())
+            let snapshot = try await dataSource.load()
+            guard revision == loadRevision else { return }
+            state = .ready(snapshot)
         } catch is CancellationError {
             return
         } catch let error as NetworkRechargeSafetyError {
+            guard revision == loadRevision else { return }
             state = .failed(error.localizedDescription)
         } catch let error as CampusCoreError where error == .unauthorized {
+            guard revision == loadRevision else { return }
             state = .failed("校园卡登录状态已失效，请重新登录后重试")
         } catch {
+            guard revision == loadRevision else { return }
             state = .failed(NetworkRechargeSafetyError.unavailable.localizedDescription)
         }
     }
@@ -626,19 +735,27 @@ final class NetworkRechargeViewModel: ObservableObject {
 struct NetworkRechargeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: NetworkRechargeViewModel
+    @StateObject private var coordinator: PaymentCoordinator
     @State private var amount = ""
+    @State private var passwordEntry = CampusPaymentPasswordEntry()
+    @State private var showsPasswordDialog = false
     @State private var validationMessage: String?
-    @State private var showsOfficialPortal = false
     @State private var demoVerificationMessage: String?
 
     private let demo: Bool
 
     init(
         appModel: AppModel,
-        dataSource: (any NetworkRechargeDataSource)? = nil
+        dataSource: (any NetworkRechargeDataSource)? = nil,
+        gateway: (any PaymentGateway)? = nil
     ) {
         let isDemo = AppRuntime.isDemoSession
         demo = isDemo
+        let userID = if case let .authenticated(user) = appModel.sessionState {
+            user.studentID
+        } else {
+            "demo"
+        }
         let resolvedDataSource: any NetworkRechargeDataSource
         if let dataSource {
             resolvedDataSource = dataSource
@@ -656,6 +773,18 @@ struct NetworkRechargeView: View {
         _model = StateObject(
             wrappedValue: NetworkRechargeViewModel(dataSource: resolvedDataSource)
         )
+        _coordinator = StateObject(
+            wrappedValue: PaymentCoordinator(
+                feature: .networkRecharge,
+                gateway: gateway ?? PaymentGatewayFactory.make(
+                    demo: isDemo,
+                    production: YCardProductionPaymentGateway(
+                        campusAPI: appModel.campusAPI
+                    )
+                ),
+                userID: userID
+            )
+        )
     }
 
     var body: some View {
@@ -668,8 +797,14 @@ struct NetworkRechargeView: View {
                     switch model.state {
                     case .loading:
                         loadingCard
+                        if coordinator.phase != .idle {
+                            recoveryActionButton
+                        }
                     case let .failed(message):
                         errorCard(message)
+                        if coordinator.phase != .idle {
+                            recoveryActionButton
+                        }
                     case let .ready(snapshot):
                         accountCard(snapshot)
                         amountCard(snapshot)
@@ -683,13 +818,25 @@ struct NetworkRechargeView: View {
                 .padding(.bottom, 48)
             }
             .scrollDismissesKeyboard(.interactively)
+
+            if showsPasswordDialog {
+                passwordDialog
+            }
         }
         .task {
+            await coordinator.resumePendingOrder()
             await model.load()
         }
-        .sheet(isPresented: $showsOfficialPortal) {
-            NetworkRechargeOfficialPortalView(url: OfficialSchoolPaymentPortal.loginURL)
-                .ignoresSafeArea()
+        .onChange(of: coordinator.phase) { _, phase in
+            guard case .succeeded = phase else { return }
+            if demo {
+                demoVerificationMessage = "Demo 验证完成，未发起真实扣款"
+            }
+            Task { await model.load() }
+        }
+        .onDisappear {
+            passwordEntry.reset()
+            showsPasswordDialog = false
         }
         .alert("无法继续", isPresented: Binding(
             get: { validationMessage != nil },
@@ -812,7 +959,7 @@ struct NetworkRechargeView: View {
                 Text(
                     demo
                     ? "Demo 模式只验证账户、金额、限额和完成状态，不请求真实扣款。"
-                    : "账户和统计仅做只读查询。App 不保存校园卡密码，也不在本机生成扣款签名；确认后会进入学校官方 HTTPS 门户。"
+                    : "充值使用校园卡协议完成。六位密码只在本次确认期间短暂留在内存，完成映射后立即清空。"
                 )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -824,23 +971,40 @@ struct NetworkRechargeView: View {
     }
 
     private func actionButton(_ snapshot: NetworkRechargeSnapshot) -> some View {
-        HStack {
-            Spacer()
-            Button {
-                continueSafely(with: snapshot)
-            } label: {
-                Label(
-                    demo ? "验证充值流程" : "进入学校官方门户",
-                    systemImage: demo ? "checkmark.circle" : "safari"
-                )
-                .fontWeight(.semibold)
-                .padding(.horizontal, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .accessibilityIdentifier("payment.network.continue")
+        PaymentStateButton(
+            phase: coordinator.phase,
+            identifier: "payment.network.continue"
+        ) {
+            validateAndShowPassword(snapshot)
+        } continueConfirmation: {
+            showsPasswordDialog = true
+        } reconcile: {
+            Task { await coordinator.continuePendingOrder() }
+        } reset: {
+            resetOrContinueConfirmation()
         }
-        .padding(.horizontal, 16)
+    }
+
+    private var recoveryActionButton: some View {
+        PaymentStateButton(
+            phase: coordinator.phase,
+            identifier: "payment.network.continue"
+        ) {
+            coordinator.reset()
+        } continueConfirmation: {
+            showsPasswordDialog = true
+        } reconcile: {
+            Task { await coordinator.continuePendingOrder() }
+        } reset: {
+            resetOrContinueConfirmation()
+        }
+    }
+
+    private func resetOrContinueConfirmation() {
+        coordinator.reset()
+        if case .awaitingConfirmation = coordinator.phase {
+            showsPasswordDialog = true
+        }
     }
 
     private func verificationCard(_ message: String) -> some View {
@@ -886,42 +1050,121 @@ struct NetworkRechargeView: View {
         return "\(integer).\(String(fraction))"
     }
 
-    private func continueSafely(with snapshot: NetworkRechargeSnapshot) {
+    private var passwordDialog: some View {
+        AndroidPaymentDialog(
+            title: "请输入校园卡密码",
+            identifier: "payment.network.password-dialog"
+        ) {
+            SecureField(
+                "密码（6 位数字）",
+                text: Binding(
+                    get: { passwordEntry.value },
+                    set: { passwordEntry.update($0) }
+                )
+            )
+            .accessibilityIdentifier("payment.network.password")
+            .keyboardType(.numberPad)
+            .textFieldStyle(.roundedBorder)
+            if let inlineError = passwordEntry.inlineError {
+                Text(inlineError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("payment.network.password-error")
+            }
+        } actions: {
+            Button("确认") { submitNetworkPayment() }
+                .accessibilityIdentifier("payment.network.confirm")
+            Button("取消", role: .cancel) {
+                passwordEntry.reset()
+                showsPasswordDialog = false
+            }
+        }
+    }
+
+    private func validateAndShowPassword(_ snapshot: NetworkRechargeSnapshot) {
         do {
-            let validated = try NetworkRechargeAmount(
+            _ = try NetworkRechargeAmount(
                 amount,
                 maximum: snapshot.maximumAmount
             )
-            if demo {
-                demoVerificationMessage = "Demo 验证完成：\(validated.text) 元，未发起任何扣款"
-            } else {
-                try NetworkRechargeRequestPolicy.authorize(.nativeDebit)
+            guard !snapshot.account.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty else {
+                throw PaymentValidationError.missingAccount
             }
-        } catch NetworkRechargeSafetyError.nativeDebitDisabled {
-            // Production never executes a native debit. A user gesture opens
-            // the official school portal, where the amount must be confirmed
-            // again before any payment can occur.
-            showsOfficialPortal = true
+            if !demo, snapshot.thirdPartyJSON == nil {
+                throw PaymentValidationError.invalidTransactionContext
+            }
+            showsPasswordDialog = true
         } catch {
             validationMessage = error.localizedDescription
         }
     }
-}
 
-private struct NetworkRechargeOfficialPortalView: UIViewControllerRepresentable {
-    let url: URL
+    private func submitNetworkPayment() {
+        guard passwordEntry.validate() else { return }
+        if case .awaitingConfirmation = coordinator.phase {
+            do {
+                let authorization = try TransientPaymentAuthorization(
+                    digits: passwordEntry.value
+                )
+                passwordEntry.reset()
+                showsPasswordDialog = false
+                Task {
+                    await coordinator.continuePendingOrder(
+                        authorization: authorization
+                    )
+                }
+            } catch {
+                passwordEntry.reset()
+                showsPasswordDialog = false
+                validationMessage = error.localizedDescription
+            }
+            return
+        }
 
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let configuration = SFSafariViewController.Configuration()
-        configuration.entersReaderIfAvailable = false
-        configuration.barCollapsingEnabled = true
-        return SFSafariViewController(url: url, configuration: configuration)
+        guard case let .ready(snapshot) = model.state else { return }
+        do {
+            let networkAmount = try NetworkRechargeAmount(
+                amount,
+                maximum: snapshot.maximumAmount
+            )
+            let context: PaymentTransactionContext
+            if demo {
+                context = .demo
+            } else {
+                guard let data = snapshot.thirdPartyJSON,
+                      let thirdPartyJSON = String(data: data, encoding: .utf8) else {
+                    throw PaymentValidationError.invalidTransactionContext
+                }
+                context = .networkRecharge(thirdPartyJSON: thirdPartyJSON)
+            }
+            let request = try PaymentRequest(
+                feature: .networkRecharge,
+                method: .campusAccount,
+                amount: PaymentAmount(networkAmount.text),
+                accountID: snapshot.account,
+                accountLabel: snapshot.feeName,
+                context: context
+            )
+            let authorization = try TransientPaymentAuthorization(
+                digits: passwordEntry.value
+            )
+            passwordEntry.reset()
+            showsPasswordDialog = false
+            demoVerificationMessage = nil
+            Task {
+                await coordinator.submit(
+                    request,
+                    authorization: authorization
+                )
+            }
+        } catch {
+            passwordEntry.reset()
+            showsPasswordDialog = false
+            validationMessage = error.localizedDescription
+        }
     }
-
-    func updateUIViewController(
-        _ controller: SFSafariViewController,
-        context: Context
-    ) { }
 }
 
 private extension String {

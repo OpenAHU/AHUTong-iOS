@@ -1,4 +1,3 @@
-import SafariServices
 import SwiftUI
 import UIKit
 
@@ -12,7 +11,6 @@ struct CardRechargeView: View {
     @State private var showsMethodDialog = false
     @State private var showsCMBPreferenceDialog = false
     @State private var showsCMBRecharge = false
-    @State private var showsOfficialPortal = false
     @State private var validationMessage: String?
     private let appModel: AppModel
     private let demo: Bool
@@ -25,7 +23,12 @@ struct CardRechargeView: View {
         self.appModel = appModel
         let isDemo = AppRuntime.isDemoSession
         demo = isDemo
-        let resolved = gateway ?? PaymentGatewayFactory.make(demo: isDemo)
+        let resolved = gateway ?? PaymentGatewayFactory.make(
+            demo: isDemo,
+            production: YCardProductionPaymentGateway(
+                campusAPI: appModel.campusAPI
+            )
+        )
         let resolvedAccountDataSource: any CardRechargeAccountDataSource
         if let accountDataSource {
             resolvedAccountDataSource = accountDataSource
@@ -63,11 +66,6 @@ struct CardRechargeView: View {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "校园卡充值", large: true)
                         .accessibilityIdentifier("payment.card.screen")
-                    if !demo {
-                        OfficialPaymentPortalCard(feature: .cardRecharge) {
-                            showsOfficialPortal = true
-                        }
-                    }
                     accountCard
                     PaymentAmountCard(title: "充值金额", amount: $amount, identifier: "payment.card.amount")
                     PaymentStateButton(
@@ -77,6 +75,8 @@ struct CardRechargeView: View {
                         leadingIdentifier: "payment.card.cmb-entry"
                     ) {
                         validateAndShowMethods()
+                    } continueConfirmation: {
+                        Task { await coordinator.continuePendingOrder() }
                     } reconcile: {
                         Task { await coordinator.resumeExternalReturn() }
                     } reset: {
@@ -135,16 +135,8 @@ struct CardRechargeView: View {
             }
         }
         .task {
-            await accountModel.load()
             await coordinator.resumePendingOrder()
-        }
-        .sheet(isPresented: $showsOfficialPortal) {
-            OfficialPaymentPortalView(url: OfficialSchoolPaymentPortal.loginURL)
-                .ignoresSafeArea()
-        }
-        .onChange(of: showsOfficialPortal) { _, isPresented in
-            guard !isPresented, !demo else { return }
-            Task { await accountModel.load() }
+            await accountModel.load()
         }
         .onOpenURL { url in
             guard url.scheme == "ahutong", url.host == "payment-return" else { return }
@@ -152,6 +144,10 @@ struct CardRechargeView: View {
         }
         .navigationDestination(isPresented: $showsCMBRecharge) {
             CMBRechargeView(appModel: appModel).androidDetailScreen()
+        }
+        .onChange(of: coordinator.phase) { _, phase in
+            guard case .succeeded = phase else { return }
+            Task { await accountModel.load() }
         }
         .alert("无法继续", isPresented: Binding(
             get: { validationMessage != nil },
@@ -221,23 +217,20 @@ struct CardRechargeView: View {
 
     private func submit(method: PaymentMethod) {
         showsMethodDialog = false
-        guard demo else {
-            switch method {
-            case .alipay:
-                openAlipayCampusCard()
-            case .bankCard, .campusAccount:
-                showsOfficialPortal = true
-            }
+        if !demo, method == .alipay {
+            openAlipayCampusCard()
             return
         }
         Task {
             do {
+                let account = try accountModel.requireReadyAccount()
                 let request = try PaymentRequest(
                     feature: .cardRecharge,
                     method: method,
                     amount: PaymentAmount(amount),
-                    accountID: demo ? PaymentDemoCatalog.cardAccountID : user.studentID,
-                    accountLabel: demo ? PaymentDemoCatalog.cardAccountLabel : "\(user.name) 校园卡"
+                    accountID: account.id,
+                    accountLabel: account.displayName,
+                    context: demo ? .demo : .card(cardType: account.type)
                 )
                 if let url = await coordinator.submit(request) {
                     if demo {
@@ -245,8 +238,10 @@ struct CardRechargeView: View {
                     } else {
                         if UIApplication.shared.canOpenURL(url) {
                             openURL(url)
-                        } else if let fallback = URL(string: "https://www.wmslz.com/s/M6KARh485j3") {
-                            openURL(fallback)
+                        } else if AlipayCampusCardHandoff.isAllowed(
+                            AlipayCampusCardHandoff.fallbackURL
+                        ) {
+                            openURL(AlipayCampusCardHandoff.fallbackURL)
                         } else {
                             await coordinator.cancel()
                         }
@@ -262,7 +257,7 @@ struct CardRechargeView: View {
         if demo {
             return "请选择支付方式。银行卡支付将从绑定的银行卡扣除￥\(amount)元；支付宝支付会跳转校园卡小程序。"
         }
-        return "请选择支付方式。银行卡支付将在学校官方页面重新确认￥\(amount)元；支付宝支付只打开校园卡小程序，App 不传递姓名、学号、金额或支付凭据。"
+        return "请选择支付方式。银行卡支付将按校园卡协议提交￥\(amount)元；支付宝支付只打开校园卡小程序，App 不传递姓名、学号、金额或支付凭据。"
     }
 
     private func openAlipayCampusCard() {
@@ -274,8 +269,12 @@ struct CardRechargeView: View {
         }
         if UIApplication.shared.canOpenURL(AlipayCampusCardHandoff.appURL) {
             openURL(AlipayCampusCardHandoff.appURL)
+        } else if AlipayCampusCardHandoff.isAllowed(
+            AlipayCampusCardHandoff.fallbackURL
+        ) {
+            openURL(AlipayCampusCardHandoff.fallbackURL)
         } else {
-            validationMessage = "未检测到支付宝，请使用学校官方支付页完成充值"
+            validationMessage = "支付宝校园卡入口暂不可用"
         }
     }
 }
@@ -288,7 +287,6 @@ struct BathroomPaymentView: View {
     @State private var amount = ""
     @State private var passwordEntry = CampusPaymentPasswordEntry()
     @State private var showsPasswordDialog = false
-    @State private var showsOfficialPortal = false
     @State private var validationMessage: String?
     private let demo: Bool
 
@@ -312,7 +310,12 @@ struct BathroomPaymentView: View {
         }
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(
             feature: .bathroom,
-            gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo),
+            gateway: gateway ?? PaymentGatewayFactory.make(
+                demo: isDemo,
+                production: YCardProductionPaymentGateway(
+                    campusAPI: appModel.campusAPI
+                )
+            ),
             userID: userID
         ))
         _accountModel = StateObject(
@@ -328,18 +331,15 @@ struct BathroomPaymentView: View {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "浴室缴费", large: true)
                         .accessibilityIdentifier("payment.bathroom.screen")
-                    if !demo {
-                        OfficialPaymentPortalCard(feature: .bathroom) {
-                            showsOfficialPortal = true
-                        }
-                    }
                     lookupCard
                     PaymentAmountCard(title: "缴费金额", amount: $amount, identifier: "payment.bathroom.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.bathroom.state") {
                         validateAndShowPassword()
+                    } continueConfirmation: {
+                        showsPasswordDialog = true
                     } reconcile: {
                         Task { await coordinator.resumePendingOrder() }
-                    } reset: { coordinator.reset() }
+                    } reset: { resetOrContinueConfirmation() }
                 }
                 .padding(.bottom, 48)
             }
@@ -354,9 +354,13 @@ struct BathroomPaymentView: View {
         .task {
             await coordinator.resumePendingOrder()
         }
-        .sheet(isPresented: $showsOfficialPortal) {
-            OfficialPaymentPortalView(url: OfficialSchoolPaymentPortal.loginURL)
-                .ignoresSafeArea()
+        .onChange(of: coordinator.phase) { _, phase in
+            guard case .succeeded = phase else { return }
+            lookup()
+        }
+        .onDisappear {
+            passwordEntry.reset()
+            showsPasswordDialog = false
         }
         .paymentValidationAlert($validationMessage)
     }
@@ -474,36 +478,84 @@ struct BathroomPaymentView: View {
         }
     }
 
+    private func resetOrContinueConfirmation() {
+        coordinator.reset()
+        if case .awaitingConfirmation = coordinator.phase {
+            showsPasswordDialog = true
+        }
+    }
+
     private func validateAndShowPassword() {
         do {
             guard accountModel.account != nil else {
                 throw PaymentValidationError.missingAccount
             }
             _ = try PaymentAmount(amount)
-            if demo {
-                showsPasswordDialog = true
-            } else {
-                showsOfficialPortal = true
-            }
+            showsPasswordDialog = true
         } catch { validationMessage = error.localizedDescription }
     }
 
     private func submit() {
-        guard let account = accountModel.account else { return }
         guard passwordEntry.validate() else { return }
+        if case .awaitingConfirmation = coordinator.phase {
+            do {
+                let authorization = try TransientPaymentAuthorization(
+                    digits: passwordEntry.value
+                )
+                passwordEntry.reset()
+                showsPasswordDialog = false
+                Task {
+                    await coordinator.continuePendingOrder(
+                        authorization: authorization
+                    )
+                }
+            } catch {
+                passwordEntry.reset()
+                showsPasswordDialog = false
+                validationMessage = error.localizedDescription
+            }
+            return
+        }
+        guard let account = accountModel.account else { return }
         do {
+            let context: PaymentTransactionContext
+            if demo {
+                context = .demo
+            } else {
+                guard let data = accountModel.thirdPartyJSON,
+                      let thirdPartyJSON = String(data: data, encoding: .utf8) else {
+                    throw PaymentValidationError.invalidTransactionContext
+                }
+                let feeItemID = selectedName == "竹园/龙河" ? "409" : "430"
+                context = .bathroom(
+                    feeItemID: feeItemID,
+                    thirdPartyJSON: thirdPartyJSON
+                )
+            }
             let request = try PaymentRequest(
                 feature: .bathroom,
                 method: .campusAccount,
                 amount: PaymentAmount(amount),
                 accountID: account.id,
                 accountLabel: account.name,
-                authorization: passwordEntry.value
+                context: context
+            )
+            let authorization = try TransientPaymentAuthorization(
+                digits: passwordEntry.value
             )
             passwordEntry.reset()
             showsPasswordDialog = false
-            Task { await coordinator.submit(request) }
-        } catch { validationMessage = error.localizedDescription }
+            Task {
+                await coordinator.submit(
+                    request,
+                    authorization: authorization
+                )
+            }
+        } catch {
+            passwordEntry.reset()
+            showsPasswordDialog = false
+            validationMessage = error.localizedDescription
+        }
     }
 
     private func passwordDialog(title: String, identifier: String, submit: @escaping () -> Void) -> some View {
@@ -543,7 +595,6 @@ struct ElectricityPaymentView: View {
     @State private var amount = ""
     @State private var passwordEntry = CampusPaymentPasswordEntry()
     @State private var showsPasswordDialog = false
-    @State private var showsOfficialPortal = false
     @State private var showsChargeHistoryReset = false
     @State private var validationMessage: String?
     private let demo: Bool
@@ -569,7 +620,12 @@ struct ElectricityPaymentView: View {
         }
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(
             feature: .electricity,
-            gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo),
+            gateway: gateway ?? PaymentGatewayFactory.make(
+                demo: isDemo,
+                production: YCardProductionPaymentGateway(
+                    campusAPI: appModel.campusAPI
+                )
+            ),
             userID: userID
         ))
         _chargeHistory = StateObject(
@@ -588,11 +644,6 @@ struct ElectricityPaymentView: View {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "电控缴费", large: true)
                         .accessibilityIdentifier("payment.electricity.screen")
-                    if !demo {
-                        OfficialPaymentPortalCard(feature: .electricity) {
-                            showsOfficialPortal = true
-                        }
-                    }
                     locationCard
                     if let feedback = chargeHistory.feedback {
                         Text(feedback)
@@ -611,9 +662,11 @@ struct ElectricityPaymentView: View {
                     PaymentAmountCard(title: "缴费金额", amount: $amount, identifier: "payment.electricity.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.electricity.state") {
                         validateAndShowPassword()
+                    } continueConfirmation: {
+                        showsPasswordDialog = true
                     } reconcile: {
                         Task { await coordinator.resumePendingOrder() }
-                    } reset: { coordinator.reset() }
+                    } reset: { resetOrContinueConfirmation() }
                 }
                 .padding(.bottom, 48)
             }
@@ -651,15 +704,17 @@ struct ElectricityPaymentView: View {
             }
         }
         .task {
-            await accountModel.load()
             await coordinator.resumePendingOrder()
+            await accountModel.load()
         }
         .onDisappear {
+            passwordEntry.reset()
+            showsPasswordDialog = false
             Task { await accountModel.clearCredentials() }
         }
-        .sheet(isPresented: $showsOfficialPortal) {
-            OfficialPaymentPortalView(url: OfficialSchoolPaymentPortal.loginURL)
-                .ignoresSafeArea()
+        .onChange(of: coordinator.phase) { _, phase in
+            guard case .succeeded = phase else { return }
+            accountModel.retry()
         }
         .alert("确认操作", isPresented: $showsChargeHistoryReset) {
             Button("确认", role: .destructive) {
@@ -775,18 +830,50 @@ struct ElectricityPaymentView: View {
                 throw PaymentValidationError.missingAccount
             }
             _ = try PaymentAmount(amount)
-            if demo {
-                showsPasswordDialog = true
-            } else {
-                showsOfficialPortal = true
-            }
+            showsPasswordDialog = true
         } catch { validationMessage = error.localizedDescription }
     }
 
+    private func resetOrContinueConfirmation() {
+        coordinator.reset()
+        if case .awaitingConfirmation = coordinator.phase {
+            showsPasswordDialog = true
+        }
+    }
+
     private func submit() {
-        guard let selectedRoom = accountModel.selectedRoom else { return }
         guard passwordEntry.validate() else { return }
+        if case .awaitingConfirmation = coordinator.phase {
+            do {
+                let authorization = try TransientPaymentAuthorization(
+                    digits: passwordEntry.value
+                )
+                passwordEntry.reset()
+                showsPasswordDialog = false
+                Task {
+                    await coordinator.continuePendingOrder(
+                        authorization: authorization
+                    )
+                }
+            } catch {
+                passwordEntry.reset()
+                showsPasswordDialog = false
+                validationMessage = error.localizedDescription
+            }
+            return
+        }
+        guard let selectedRoom = accountModel.selectedRoom else { return }
         do {
+            let context: PaymentTransactionContext
+            if demo {
+                context = .demo
+            } else {
+                guard let data = accountModel.selectedRoomThirdPartyJSON,
+                      let thirdPartyJSON = String(data: data, encoding: .utf8) else {
+                    throw PaymentValidationError.invalidTransactionContext
+                }
+                context = .electricity(thirdPartyJSON: thirdPartyJSON)
+            }
             let paymentAmount = try PaymentAmount(amount)
             let request = try PaymentRequest(
                 feature: .electricity,
@@ -794,18 +881,28 @@ struct ElectricityPaymentView: View {
                 amount: paymentAmount,
                 accountID: selectedRoom.id,
                 accountLabel: selectedRoom.label,
-                authorization: passwordEntry.value
+                context: context
+            )
+            let authorization = try TransientPaymentAuthorization(
+                digits: passwordEntry.value
             )
             passwordEntry.reset()
             showsPasswordDialog = false
             Task { @MainActor in
-                await coordinator.submit(request)
+                await coordinator.submit(
+                    request,
+                    authorization: authorization
+                )
                 chargeHistory.record(
                     amount: paymentAmount,
                     after: coordinator.phase
                 )
             }
-        } catch { validationMessage = error.localizedDescription }
+        } catch {
+            passwordEntry.reset()
+            showsPasswordDialog = false
+            validationMessage = error.localizedDescription
+        }
     }
 
     private func scheduleFeedbackDismissal() {
@@ -818,32 +915,6 @@ struct ElectricityPaymentView: View {
         }
     }
 
-}
-
-private struct OfficialPaymentPortalCard: View {
-    let feature: PaymentFeature
-    let open: () -> Void
-
-    var body: some View {
-        AndroidCard(radius: 16) {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("学校官方支付", systemImage: "checkmark.shield.fill")
-                    .font(.headline)
-                Text("真实\(feature.displayName)由学校官方 HTTPS 页面处理。请在官方页面重新选择业务、账户和金额；打开页面本身不会扣款。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text("完成后返回 App，并以官方账单或余额变化为准。App 不保存官方页面内输入的支付密码。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("打开学校官方支付页", action: open)
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("payment.official-portal.\(feature.rawValue)")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-        }
-        .padding(.horizontal, 16)
-    }
 }
 
 private struct PaymentReadOnlyStateRow: View {
@@ -863,19 +934,6 @@ private struct PaymentReadOnlyStateRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
     }
-}
-
-private struct OfficialPaymentPortalView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let configuration = SFSafariViewController.Configuration()
-        configuration.entersReaderIfAvailable = false
-        configuration.barCollapsingEnabled = true
-        return SFSafariViewController(url: url, configuration: configuration)
-    }
-
-    func updateUIViewController(_ controller: SFSafariViewController, context: Context) { }
 }
 
 private struct PaymentAmountCard: View {
@@ -942,7 +1000,7 @@ private struct PaymentMenuRow: View {
     }
 }
 
-private struct PaymentStateButton: View {
+struct PaymentStateButton: View {
     @Environment(\.colorScheme) private var colorScheme
     let phase: PaymentPhase
     let identifier: String
@@ -950,6 +1008,7 @@ private struct PaymentStateButton: View {
     let leadingIdentifier: String?
     let leadingAction: (() -> Void)?
     let confirm: () -> Void
+    let continueConfirmation: () -> Void
     let reconcile: () -> Void
     let reset: () -> Void
 
@@ -959,6 +1018,7 @@ private struct PaymentStateButton: View {
         leadingTitle: String? = nil,
         leadingIdentifier: String? = nil,
         confirm: @escaping () -> Void,
+        continueConfirmation: (() -> Void)? = nil,
         reconcile: @escaping () -> Void,
         reset: @escaping () -> Void,
         leadingAction: (() -> Void)? = nil
@@ -969,6 +1029,7 @@ private struct PaymentStateButton: View {
         self.leadingIdentifier = leadingIdentifier
         self.leadingAction = leadingAction
         self.confirm = confirm
+        self.continueConfirmation = continueConfirmation ?? confirm
         self.reconcile = reconcile
         self.reset = reset
     }
@@ -990,6 +1051,8 @@ private struct PaymentStateButton: View {
                     Button("确认", action: confirm)
                 case .creating, .confirming, .reconciling:
                     HStack(spacing: 12) { ProgressView(); Text("支付中...").fontWeight(.bold) }
+                case .awaitingConfirmation:
+                    Button("继续确认支付", action: continueConfirmation)
                 case .awaitingExternal:
                     Button("核验支付结果", action: reconcile)
                 case let .succeeded(orderID, _):
@@ -1000,6 +1063,8 @@ private struct PaymentStateButton: View {
                     Button { reset() } label: { Label("支付已取消", systemImage: "xmark") }
                 case let .unknown(_, message):
                     Button(action: reconcile) { Label("结果待确认：\(message)", systemImage: "questionmark") }
+                case let .creationUnknown(message):
+                    Label("建单待确认：\(message)", systemImage: "questionmark")
                 }
             }
             .buttonStyle(.plain)
@@ -1015,7 +1080,7 @@ private struct PaymentStateButton: View {
     private var backgroundColor: Color {
         switch phase {
         case .failed: .red
-        case .unknown: .orange
+        case .unknown, .creationUnknown: .orange
         case .idle: AndroidParityPalette.primaryTone90
         default: AndroidParityPalette.primaryTone80
         }
@@ -1023,13 +1088,13 @@ private struct PaymentStateButton: View {
 
     private var phaseColor: Color {
         switch phase {
-        case .failed, .unknown: .white
+        case .failed, .unknown, .creationUnknown: .white
         default: .black
         }
     }
 }
 
-private struct AndroidPaymentDialog<Content: View, Actions: View>: View {
+struct AndroidPaymentDialog<Content: View, Actions: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     let title: String
     let identifier: String

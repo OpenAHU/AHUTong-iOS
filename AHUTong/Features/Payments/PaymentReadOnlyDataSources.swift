@@ -176,21 +176,15 @@ enum YCardReadOnlyRequestPolicy {
               )?.queryItems?.isEmpty != false else {
             throw YCardReadOnlyError.disallowedEndpoint
         }
-        guard let body = request.httpBody,
-              let query = String(data: body, encoding: .utf8) else {
+        guard let body = request.httpBody else {
             throw YCardReadOnlyError.disallowedEndpoint
         }
-        var components = URLComponents()
-        components.percentEncodedQuery = query
-        guard let items = components.queryItems else {
+        let values: [String: String]
+        do {
+            values = try YCardServerFormDecoder.values(body)
+        } catch {
             throw YCardReadOnlyError.disallowedEndpoint
         }
-        guard Set(items.map(\.name)).count == items.count else {
-            throw YCardReadOnlyError.disallowedEndpoint
-        }
-        let values = Dictionary(uniqueKeysWithValues:
-            items.map { ($0.name, $0.value ?? "") }
-        )
         guard values.values.allSatisfy({ !$0.isEmpty }),
               let feeItemID = values["feeitemid"],
               let type = values["type"],
@@ -408,9 +402,13 @@ actor YCardReadOnlyClient {
             request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
         }
         if !formItems.isEmpty {
-            var formComponents = URLComponents()
-            formComponents.queryItems = formItems
-            request.httpBody = formComponents.percentEncodedQuery?.data(using: .utf8)
+            let fields = try formItems.map { item -> (name: String, value: String) in
+                guard let value = item.value else {
+                    throw YCardReadOnlyError.disallowedEndpoint
+                }
+                return (name: item.name, value: value)
+            }
+            request.httpBody = YCardFormURLEncoder.data(fields)
             request.setValue(
                 "application/x-www-form-urlencoded; charset=utf-8",
                 forHTTPHeaderField: "Content-Type"
@@ -483,6 +481,17 @@ struct CardRechargeAccountSnapshot: Equatable, Sendable {
 struct BathroomLookupResult: Equatable, Sendable {
     let account: BathroomPaymentAccount?
     let message: String?
+    let thirdPartyJSON: Data?
+
+    init(
+        account: BathroomPaymentAccount?,
+        message: String?,
+        thirdPartyJSON: Data? = nil
+    ) {
+        self.account = account
+        self.message = message
+        self.thirdPartyJSON = thirdPartyJSON
+    }
 }
 
 struct YCardSelectionOption:
@@ -496,6 +505,128 @@ struct YCardSelectionOption:
     let value: String
 
     var id: String { value }
+}
+
+struct ElectricityRoomLookupResult: Equatable, Sendable {
+    let room: ElectricityRoom
+    let thirdPartyJSON: Data?
+}
+
+struct YCardGsonCompatibleJSONObject {
+    private var members: [String] = []
+
+    mutating func append(_ key: String, string value: String?) {
+        guard let value else { return }
+        members.append("\(Self.quote(key)):\(Self.quote(value))")
+    }
+
+    mutating func append(_ key: String, integer value: Int) {
+        members.append("\(Self.quote(key)):\(value)")
+    }
+
+    var data: Data {
+        Data("{\(members.joined(separator: ","))}".utf8)
+    }
+
+    private static func quote(_ value: String) -> String {
+        var result = "\""
+        for scalar in value.unicodeScalars {
+            switch scalar.value {
+            case 0x22:
+                result += "\\\""
+            case 0x5C:
+                result += "\\\\"
+            case 0x08:
+                result += "\\b"
+            case 0x09:
+                result += "\\t"
+            case 0x0A:
+                result += "\\n"
+            case 0x0C:
+                result += "\\f"
+            case 0x0D:
+                result += "\\r"
+            case 0x00...0x1F:
+                result += unicodeEscape(scalar.value)
+            case 0x27:
+                result += "\\u0027"
+            case 0x3C:
+                result += "\\u003c"
+            case 0x3D:
+                result += "\\u003d"
+            case 0x3E:
+                result += "\\u003e"
+            case 0x26:
+                result += "\\u0026"
+            case 0x2028:
+                result += "\\u2028"
+            case 0x2029:
+                result += "\\u2029"
+            default:
+                result.append(contentsOf: String(scalar))
+            }
+        }
+        result += "\""
+        return result
+    }
+
+    private static func unicodeEscape(_ value: UInt32) -> String {
+        let hex = String(value, radix: 16)
+        return "\\u\(String(repeating: "0", count: 4 - hex.count))\(hex)"
+    }
+}
+
+private enum YCardBathroomThirdPartyJSON {
+    static func encode(_ detail: BathroomEnvelope.Payload.Detail?) -> Data? {
+        guard let detail else { return nil }
+        var object = YCardGsonCompatibleJSONObject()
+        object.append("projectId", integer: detail.projectID)
+        object.append("projectName", string: detail.projectName)
+        object.append("accountId", integer: detail.accountID)
+        object.append("telPhone", string: detail.phone)
+        object.append("identifier", string: detail.identifier)
+        object.append("sex", string: detail.sex)
+        object.append("name", string: detail.name)
+        object.append("statusId", integer: detail.statusID)
+        object.append("accountMoney", integer: detail.accountMoney)
+        object.append("accountGivenMoney", integer: detail.accountGivenMoney)
+        object.append("alias", string: detail.alias)
+        object.append("tags", string: detail.tags)
+        object.append("isCard", integer: detail.isCard)
+        object.append("cardStatusId", integer: detail.cardStatusID)
+        object.append("isUseCode", integer: detail.isUseCode)
+        object.append("cardPhysicalId", string: detail.cardPhysicalID)
+        object.append("tsmAbstract", string: detail.tsmAbstract)
+        object.append("myCustomInfo", string: "手机号：\(detail.phone ?? "null")")
+        object.append("message", string: detail.message)
+        return object.data
+    }
+}
+
+private enum YCardElectricityThirdPartyJSON {
+    static func encode(_ detail: ElectricityRoomEnvelope.Payload.Detail?) -> Data? {
+        guard let detail else { return nil }
+        var object = YCardGsonCompatibleJSONObject()
+        object.append("area", string: detail.area ?? "")
+        object.append("buildingName", string: detail.buildingName ?? "")
+        object.append("areaName", string: detail.areaName ?? "")
+        object.append("extdata", string: "")
+        object.append("floorName", string: detail.floorName ?? "")
+        object.append("floor", string: detail.floor ?? "")
+        object.append("aid", string: detail.aid ?? "")
+        object.append("account", string: detail.account ?? "")
+        object.append("building", string: detail.building ?? "")
+        object.append("room", string: detail.room ?? "")
+        object.append("roomName", string: detail.roomName ?? "")
+        object.append(
+            "myCustomInfo",
+            string: "房间：\(detail.areaName ?? "null") " +
+                "\(detail.buildingName ?? "null") " +
+                "\(detail.floorName ?? "null") " +
+                "\(detail.roomName ?? "null")"
+        )
+        return object.data
+    }
 }
 
 enum YCardPaymentDecoder {
@@ -541,14 +672,18 @@ enum YCardPaymentDecoder {
               let display = payload.showData else {
             return BathroomLookupResult(
                 account: nil,
-                message: "未查询到浴室账户"
+                message: "未查询到浴室账户",
+                thirdPartyJSON: nil
             )
         }
         let phone = display.phone.nilIfEmpty
             ?? payload.data?.phone?.nilIfEmpty
             ?? requestedPhone
-        let identifier = payload.data?.accountID.map { String($0) }
-            ?? payload.data?.identifier?.nilIfEmpty
+        let identifier = payload.data.flatMap { detail in
+            detail.accountID == 0
+                ? detail.identifier?.nilIfEmpty
+                : String(detail.accountID)
+        }
             ?? "\(bathroomName)-\(phone)"
         guard let cashBalance = decimal(from: display.cashAmount),
               let giftBalance = decimal(from: display.giftAmount) else {
@@ -562,7 +697,8 @@ enum YCardPaymentDecoder {
                 cashBalance: cashBalance,
                 giftBalance: giftBalance
             ),
-            message: nil
+            message: nil,
+            thirdPartyJSON: YCardBathroomThirdPartyJSON.encode(payload.data)
         )
     }
 
@@ -586,6 +722,22 @@ enum YCardPaymentDecoder {
         floor: YCardSelectionOption,
         room: YCardSelectionOption
     ) throws -> ElectricityRoom {
+        try decodeElectricityRoomLookup(
+            data,
+            campus: campus,
+            building: building,
+            floor: floor,
+            room: room
+        ).room
+    }
+
+    static func decodeElectricityRoomLookup(
+        _ data: Data,
+        campus: YCardSelectionOption,
+        building: YCardSelectionOption,
+        floor: YCardSelectionOption,
+        room: YCardSelectionOption
+    ) throws -> ElectricityRoomLookupResult {
         let envelope: ElectricityRoomEnvelope
         do {
             envelope = try JSONDecoder().decode(
@@ -608,14 +760,17 @@ enum YCardPaymentDecoder {
         let identifier = details?.account?.nilIfEmpty
             ?? [campus.value, building.value, floor.value, room.value]
                 .joined(separator: "|")
-        return ElectricityRoom(
-            id: identifier,
-            campus: resolvedCampus,
-            building: resolvedBuilding,
-            floor: resolvedFloor,
-            room: resolvedRoom,
-            balance: balance(from: information),
-            information: information
+        return ElectricityRoomLookupResult(
+            room: ElectricityRoom(
+                id: identifier,
+                campus: resolvedCampus,
+                building: resolvedBuilding,
+                floor: resolvedFloor,
+                room: resolvedRoom,
+                balance: balance(from: information),
+                information: information
+            ),
+            thirdPartyJSON: YCardElectricityThirdPartyJSON.encode(details)
         )
     }
 
@@ -685,16 +840,72 @@ private struct BathroomEnvelope: Decodable {
         }
 
         struct Detail: Decodable {
-            let accountID: Int?
+            let projectID: Int
+            let projectName: String?
+            let accountID: Int
             let phone: String?
             let identifier: String?
+            let sex: String?
+            let name: String?
+            let statusID: Int
+            let accountMoney: Int
+            let accountGivenMoney: Int
+            let alias: String?
+            let tags: String?
+            let isCard: Int
+            let cardStatusID: Int
+            let isUseCode: Int
+            let cardPhysicalID: String?
+            let tsmAbstract: String?
             let message: String?
 
             enum CodingKeys: String, CodingKey {
+                case projectID = "projectId"
+                case projectName
                 case accountID = "accountId"
                 case phone = "telPhone"
                 case identifier
+                case sex
+                case name
+                case statusID = "statusId"
+                case accountMoney
+                case accountGivenMoney
+                case alias
+                case tags
+                case isCard
+                case cardStatusID = "cardStatusId"
+                case isUseCode
+                case cardPhysicalID = "cardPhysicalId"
+                case tsmAbstract
                 case message
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                projectID = try container.decodeIfPresent(Int.self, forKey: .projectID) ?? 0
+                projectName = try container.decodeIfPresent(String.self, forKey: .projectName)
+                accountID = try container.decodeIfPresent(Int.self, forKey: .accountID) ?? 0
+                phone = try container.decodeIfPresent(String.self, forKey: .phone)
+                identifier = try container.decodeIfPresent(String.self, forKey: .identifier)
+                sex = try container.decodeIfPresent(String.self, forKey: .sex)
+                name = try container.decodeIfPresent(String.self, forKey: .name)
+                statusID = try container.decodeIfPresent(Int.self, forKey: .statusID) ?? 0
+                accountMoney = try container.decodeIfPresent(Int.self, forKey: .accountMoney) ?? 0
+                accountGivenMoney = try container.decodeIfPresent(
+                    Int.self,
+                    forKey: .accountGivenMoney
+                ) ?? 0
+                alias = try container.decodeIfPresent(String.self, forKey: .alias)
+                tags = try container.decodeIfPresent(String.self, forKey: .tags)
+                isCard = try container.decodeIfPresent(Int.self, forKey: .isCard) ?? 0
+                cardStatusID = try container.decodeIfPresent(Int.self, forKey: .cardStatusID) ?? 0
+                isUseCode = try container.decodeIfPresent(Int.self, forKey: .isUseCode) ?? 0
+                cardPhysicalID = try container.decodeIfPresent(
+                    String.self,
+                    forKey: .cardPhysicalID
+                )
+                tsmAbstract = try container.decodeIfPresent(String.self, forKey: .tsmAbstract)
+                message = try container.decodeIfPresent(String.self, forKey: .message)
             }
         }
 
@@ -857,7 +1068,8 @@ struct DemoBathroomAccountDataSource: BathroomAccountDataSource {
         ) else {
             return BathroomLookupResult(
                 account: nil,
-                message: "未查询到浴室账户"
+                message: "未查询到浴室账户",
+                thirdPartyJSON: nil
             )
         }
         return BathroomLookupResult(
@@ -868,7 +1080,8 @@ struct DemoBathroomAccountDataSource: BathroomAccountDataSource {
                 cashBalance: fixture.cashBalance,
                 giftBalance: fixture.giftBalance
             ),
-            message: nil
+            message: nil,
+            thirdPartyJSON: nil
         )
     }
 }
@@ -890,7 +1103,7 @@ protocol ElectricityAccountDataSource: Sendable {
         building: YCardSelectionOption,
         floor: YCardSelectionOption,
         room: YCardSelectionOption
-    ) async throws -> ElectricityRoom
+    ) async throws -> ElectricityRoomLookupResult
     func clearCredentials() async
 }
 
@@ -947,7 +1160,7 @@ actor OfficialElectricityAccountDataSource: ElectricityAccountDataSource {
         building: YCardSelectionOption,
         floor: YCardSelectionOption,
         room: YCardSelectionOption
-    ) async throws -> ElectricityRoom {
+    ) async throws -> ElectricityRoomLookupResult {
         do {
             let data = try await client.request(
                 .feeItemData,
@@ -958,7 +1171,7 @@ actor OfficialElectricityAccountDataSource: ElectricityAccountDataSource {
                     room: room
                 )
             )
-            return try YCardPaymentDecoder.decodeElectricityRoom(
+            return try YCardPaymentDecoder.decodeElectricityRoomLookup(
                 data,
                 campus: campus,
                 building: building,
@@ -1043,7 +1256,7 @@ struct DemoElectricityAccountDataSource: ElectricityAccountDataSource {
         building: YCardSelectionOption,
         floor: YCardSelectionOption,
         room: YCardSelectionOption
-    ) async throws -> ElectricityRoom {
+    ) async throws -> ElectricityRoomLookupResult {
         guard let result = PaymentDemoCatalog.electricityRooms.first(where: {
             $0.campus == campus.name
                 && $0.building == building.name
@@ -1052,7 +1265,10 @@ struct DemoElectricityAccountDataSource: ElectricityAccountDataSource {
         }) else {
             throw YCardReadOnlyError.invalidResponse
         }
-        return result
+        return ElectricityRoomLookupResult(
+            room: result,
+            thirdPartyJSON: nil
+        )
     }
 
     func clearCredentials() async { }
@@ -1127,6 +1343,7 @@ final class BathroomAccountViewModel: ObservableObject {
     }
 
     @Published private(set) var state: State = .idle
+    @Published private(set) var thirdPartyJSON: Data?
     private let dataSource: any BathroomAccountDataSource
     private var revision = 0
 
@@ -1144,9 +1361,11 @@ final class BathroomAccountViewModel: ObservableObject {
         let requestRevision = revision
         guard YCardReadOnlyContract.isValidPhone(phone) else {
             state = .idle
+            thirdPartyJSON = nil
             return
         }
         state = .loading
+        thirdPartyJSON = nil
         do {
             let result = try await dataSource.lookup(
                 bathroomName: bathroomName,
@@ -1156,20 +1375,24 @@ final class BathroomAccountViewModel: ObservableObject {
             guard requestRevision == revision else { return }
             if let account = result.account {
                 state = .ready(account)
+                thirdPartyJSON = result.thirdPartyJSON
             } else {
                 state = .empty(result.message ?? "未查询到浴室账户")
+                thirdPartyJSON = nil
             }
         } catch is CancellationError {
             return
         } catch {
             guard requestRevision == revision else { return }
             state = .failed(finiteYCardReadOnlyMessage(error))
+            thirdPartyJSON = nil
         }
     }
 
     func reset() {
         revision += 1
         state = .idle
+        thirdPartyJSON = nil
     }
 }
 
@@ -1184,6 +1407,7 @@ final class ElectricityAccountViewModel: ObservableObject {
     @Published private(set) var selectedFloor: YCardSelectionOption?
     @Published private(set) var selectedRoomOption: YCardSelectionOption?
     @Published private(set) var selectedRoom: ElectricityRoom?
+    @Published private(set) var selectedRoomThirdPartyJSON: Data?
     @Published private(set) var isLoading = false
     @Published private(set) var emptyMessage: String?
     @Published private(set) var errorMessage: String?
@@ -1215,6 +1439,7 @@ final class ElectricityAccountViewModel: ObservableObject {
         selectedFloor = nil
         selectedRoomOption = nil
         selectedRoom = nil
+        selectedRoomThirdPartyJSON = nil
         buildings = []
         floors = []
         rooms = []
@@ -1239,6 +1464,7 @@ final class ElectricityAccountViewModel: ObservableObject {
         selectedFloor = nil
         selectedRoomOption = nil
         selectedRoom = nil
+        selectedRoomThirdPartyJSON = nil
         floors = []
         rooms = []
         task = Task { [weak self] in
@@ -1260,6 +1486,7 @@ final class ElectricityAccountViewModel: ObservableObject {
         selectedFloor = option
         selectedRoomOption = nil
         selectedRoom = nil
+        selectedRoomThirdPartyJSON = nil
         rooms = []
         task = Task { [weak self] in
             await self?.loadRooms(
@@ -1281,6 +1508,7 @@ final class ElectricityAccountViewModel: ObservableObject {
         let requestRevision = beginRequest()
         selectedRoomOption = option
         selectedRoom = nil
+        selectedRoomThirdPartyJSON = nil
         task = Task { [weak self] in
             await self?.loadRoom(
                 campus: campus,
@@ -1304,6 +1532,7 @@ final class ElectricityAccountViewModel: ObservableObject {
         selectedFloor = YCardSelectionOption(name: room.floor, value: room.floor)
         selectedRoomOption = YCardSelectionOption(name: room.room, value: room.room)
         selectedRoom = room
+        selectedRoomThirdPartyJSON = nil
     }
 
     func retry() {
@@ -1312,6 +1541,8 @@ final class ElectricityAccountViewModel: ObservableObject {
            let building = selectedBuilding,
            let floor = selectedFloor,
            let room = selectedRoomOption {
+            selectedRoom = nil
+            selectedRoomThirdPartyJSON = nil
             task = Task { [weak self] in
                 await self?.loadRoom(
                     campus: campus,
@@ -1360,6 +1591,7 @@ final class ElectricityAccountViewModel: ObservableObject {
         task = nil
         revision += 1
         isLoading = false
+        selectedRoomThirdPartyJSON = nil
         await dataSource.clearCredentials()
     }
 
@@ -1388,6 +1620,8 @@ final class ElectricityAccountViewModel: ObservableObject {
             return
         } catch {
             guard requestRevision == revision else { return }
+            selectedRoom = nil
+            selectedRoomThirdPartyJSON = nil
             errorMessage = finiteYCardReadOnlyMessage(error)
         }
     }
@@ -1486,11 +1720,14 @@ final class ElectricityAccountViewModel: ObservableObject {
             )
             try Task.checkCancellation()
             guard requestRevision == revision else { return }
-            selectedRoom = result
+            selectedRoom = result.room
+            selectedRoomThirdPartyJSON = result.thirdPartyJSON
         } catch is CancellationError {
             return
         } catch {
             guard requestRevision == revision else { return }
+            selectedRoom = nil
+            selectedRoomThirdPartyJSON = nil
             errorMessage = finiteYCardReadOnlyMessage(error)
         }
     }
@@ -1513,8 +1750,14 @@ enum AlipayCampusCardHandoff {
     static let appURL = URL(
         string: "alipays://platformapi/startapp?appId=2019090967125695&page=pages%2Findex%2Findex&chInfo=ch_share__chsub_CopyLink"
     )!
+    static let fallbackURL = URL(
+        string: "https://www.wmslz.com/s/M6KARh485j3"
+    )!
 
     static func isAllowed(_ url: URL) -> Bool {
+        if url.scheme?.lowercased() == "https" {
+            return url == fallbackURL
+        }
         guard url.scheme?.lowercased() == "alipays",
               url.host?.lowercased() == "platformapi",
               url.path == "/startapp",

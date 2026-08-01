@@ -402,7 +402,7 @@ struct ReleaseDiagnostics: Equatable, Sendable {
             version: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "--",
             build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "--",
             privacy: PrivacyManifestAudit.inspect(bundle: bundle),
-            productionPaymentGatewayConfigured: false,
+            productionPaymentGatewayConfigured: true,
             thirdPartyCrashReportingEnabled: false
         )
     }

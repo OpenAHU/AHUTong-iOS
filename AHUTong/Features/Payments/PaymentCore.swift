@@ -1,17 +1,22 @@
 import CryptoKit
 import Foundation
 import SwiftUI
+#if canImport(Darwin)
+import Darwin
+#endif
 
 enum PaymentFeature: String, Codable, CaseIterable, Sendable {
     case cardRecharge
     case bathroom
     case electricity
+    case networkRecharge
 
     var displayName: String {
         switch self {
         case .cardRecharge: "校园卡充值"
         case .bathroom: "浴室缴费"
         case .electricity: "电控缴费"
+        case .networkRecharge: "网费充值"
         }
     }
 }
@@ -22,13 +27,14 @@ enum PaymentMethod: String, Codable, Sendable {
     case campusAccount
 }
 
-enum PaymentValidationError: LocalizedError, Equatable {
+enum PaymentValidationError: LocalizedError, Equatable, Sendable {
     case missingAmount
     case invalidAmount
     case tooManyFractionDigits
     case exceedsLimit
     case missingAccount
     case invalidPassword
+    case invalidTransactionContext
 
     var errorDescription: String? {
         switch self {
@@ -38,6 +44,7 @@ enum PaymentValidationError: LocalizedError, Equatable {
         case .exceedsLimit: "单次金额不能超过 500 元"
         case .missingAccount: "请先选择缴费账户"
         case .invalidPassword: "密码必须是 6 位数字"
+        case .invalidTransactionContext: "支付业务上下文与当前功能不匹配"
         }
     }
 }
@@ -67,13 +74,85 @@ struct PaymentAmount: Equatable, Sendable {
     }
 }
 
+enum PaymentTransactionContext: Equatable, Sendable {
+    case card(cardType: String)
+    case bathroom(feeItemID: String, thirdPartyJSON: String)
+    case electricity(thirdPartyJSON: String)
+    case networkRecharge(thirdPartyJSON: String)
+    case demo
+
+    fileprivate func supports(_ feature: PaymentFeature) -> Bool {
+        switch (self, feature) {
+        case (.card, .cardRecharge),
+             (.bathroom, .bathroom),
+             (.electricity, .electricity),
+             (.networkRecharge, .networkRecharge):
+            true
+        case (.demo, _):
+            true
+        default:
+            false
+        }
+    }
+}
+
+final class TransientPaymentAuthorization: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: ContiguousArray<UInt8>
+    private var consumed = false
+
+    init(digits: String) throws {
+        let bytes = ContiguousArray(digits.utf8)
+        guard bytes.count == 6,
+              bytes.allSatisfy({ (48...57).contains($0) }) else {
+            throw PaymentValidationError.invalidPassword
+        }
+        storage = bytes
+    }
+
+    deinit {
+        clear()
+    }
+
+    var isCleared: Bool {
+        lock.withLock {
+            storage.allSatisfy { $0 == 0 }
+        }
+    }
+
+    func consumeASCIIBytes() throws -> ContiguousArray<UInt8> {
+        try lock.withLock {
+            guard !consumed else {
+                throw PaymentValidationError.invalidPassword
+            }
+            consumed = true
+            let bytes = storage
+            wipeStorage()
+            return bytes
+        }
+    }
+
+    func clear() {
+        lock.withLock {
+            consumed = true
+            wipeStorage()
+        }
+    }
+
+    private func wipeStorage() {
+        for index in storage.indices {
+            storage[index] = 0
+        }
+    }
+}
+
 struct PaymentRequest: Equatable, Sendable {
     let feature: PaymentFeature
     let method: PaymentMethod
     let amount: PaymentAmount
     let accountID: String
     let accountLabel: String
-    let authorization: String?
+    let context: PaymentTransactionContext
 
     init(
         feature: PaymentFeature,
@@ -81,24 +160,20 @@ struct PaymentRequest: Equatable, Sendable {
         amount: PaymentAmount,
         accountID: String,
         accountLabel: String,
-        authorization: String? = nil
+        context: PaymentTransactionContext
     ) throws {
         guard !accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw PaymentValidationError.missingAccount
         }
-        if method == .campusAccount {
-            guard let authorization,
-                  authorization.count == 6,
-                  authorization.allSatisfy({ $0.isNumber }) else {
-                throw PaymentValidationError.invalidPassword
-            }
+        guard context.supports(feature) else {
+            throw PaymentValidationError.invalidTransactionContext
         }
         self.feature = feature
         self.method = method
         self.amount = amount
         self.accountID = accountID
         self.accountLabel = accountLabel
-        self.authorization = authorization
+        self.context = context
     }
 }
 
@@ -114,125 +189,602 @@ enum PaymentOrderStatus: Equatable, Sendable {
     case unknown(String)
 }
 
-enum PaymentGatewayError: LocalizedError, Equatable {
-    case safetyServiceUnavailable
+enum PaymentGatewayError: LocalizedError, Equatable, Sendable {
+    case automatedDebitDisabled
     case timedOut
     case invalidResponse
     case featureMismatch
+    case definitelyRejected(String)
     case server(String)
 
     var errorDescription: String? {
         switch self {
-        case .safetyServiceUnavailable: "学校支付安全服务尚未配置，未发起任何扣款"
+        case .automatedDebitDisabled: "自动化环境禁止连接真实扣款接口，未发起任何扣款"
         case .timedOut: "支付请求超时，请先查询订单结果，勿重复提交"
         case .invalidResponse: "支付服务返回了无法识别的结果"
         case .featureMismatch: "支付请求与当前功能不匹配"
+        case let .definitelyRejected(message): message
         case let .server(message): message
         }
     }
 }
 
-enum OfficialSchoolPaymentPortal {
-    private static let loginEndpoint = URL(
-        string: "https://ycard.ahu.edu.cn/berserker-auth/cas/redirect/neusoftCas"
-    )!
-    private static let portalTarget = URL(
-        string: "https://ycard.ahu.edu.cn/plat/?name=loginTransit"
-    )!
-
-    static var loginURL: URL {
-        var components = URLComponents(
-            url: loginEndpoint,
-            resolvingAgainstBaseURL: false
-        )!
-        components.queryItems = [
-            URLQueryItem(name: "targetUrl", value: portalTarget.absoluteString)
-        ]
-        return components.url!
-    }
+protocol PreparedPaymentConfirmation: Sendable {
+    func clear()
 }
 
 protocol PaymentGateway: Sendable {
     func createOrder(request: PaymentRequest, idempotencyKey: String) async throws -> PaymentOrder
-    func confirm(orderID: String, authorization: String?) async throws -> PaymentOrderStatus
-    func status(orderID: String) async throws -> PaymentOrderStatus
-    func cancel(orderID: String) async
+    func prepareConfirmation(
+        orderID: String,
+        feature: PaymentFeature,
+        method: PaymentMethod,
+        authorization: TransientPaymentAuthorization?
+    ) async throws -> any PreparedPaymentConfirmation
+    func submitPreparedConfirmation(
+        _ prepared: any PreparedPaymentConfirmation
+    ) async throws -> PaymentOrderStatus
+    func status(
+        orderID: String,
+        feature: PaymentFeature,
+        method: PaymentMethod
+    ) async throws -> PaymentOrderStatus
 }
 
 enum PaymentPhase: Equatable {
     case idle
     case creating
     case confirming(String)
+    case awaitingConfirmation(String)
     case awaitingExternal(String)
     case reconciling(String)
     case succeeded(String, String)
     case failed(String)
     case cancelled
+    case creationUnknown(String)
     case unknown(String, String)
 
     var isBusy: Bool {
         switch self {
-        case .creating, .confirming, .awaitingExternal, .reconciling: true
+        case .creating, .confirming, .reconciling: true
         default: false
         }
     }
 }
 
-struct PendingPayment: Codable, Equatable {
-    let feature: PaymentFeature
-    let orderID: String
+enum PendingPaymentStage: String, Codable, Equatable, Sendable {
+    case creating
+    case creationUnknown
+    case orderCreated
+    case finalSubmissionStarted
+    case resultUnknown
 }
 
-struct PendingPaymentSubmission: Codable, Equatable {
+struct PendingPayment: Codable, Equatable, Sendable {
+    static let currentVersion = 2
+
+    let version: Int
     let feature: PaymentFeature
-    let idempotencyKey: String
-    let requestFingerprint: String
+    let orderID: String?
+    let method: PaymentMethod
+    let stage: PendingPaymentStage
+
+    init(
+        version: Int = Self.currentVersion,
+        feature: PaymentFeature,
+        orderID: String?,
+        method: PaymentMethod,
+        stage: PendingPaymentStage
+    ) {
+        self.version = version
+        self.feature = feature
+        self.orderID = orderID
+        self.method = method
+        self.stage = stage
+    }
+
+    var isValid: Bool {
+        guard version == Self.currentVersion else { return false }
+        let hasValidOrderID = orderID.map(Self.isValidOrderID) == true
+        switch stage {
+        case .creating, .creationUnknown:
+            guard orderID == nil else { return false }
+        case .orderCreated, .finalSubmissionStarted, .resultUnknown:
+            guard hasValidOrderID else { return false }
+        }
+        switch feature {
+        case .cardRecharge:
+            return method == .bankCard || method == .alipay
+        case .bathroom, .electricity, .networkRecharge:
+            return method == .campusAccount
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case feature
+        case orderID
+        case method
+        case stage
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        feature = try container.decode(PaymentFeature.self, forKey: .feature)
+        orderID = try container.decodeIfPresent(String.self, forKey: .orderID)
+        if let version = try container.decodeIfPresent(Int.self, forKey: .version) {
+            self.version = version
+            method = try container.decode(PaymentMethod.self, forKey: .method)
+            stage = try container.decode(PendingPaymentStage.self, forKey: .stage)
+        } else {
+            // Legacy records had only feature + orderID. Treat them as an
+            // already-submitted unknown result so an upgrade can never repeat
+            // either mutation.
+            self.version = Self.currentVersion
+            method = Self.legacyMethod(for: feature)
+            stage = .resultUnknown
+        }
+        guard isValid else {
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Invalid pending payment state"
+                )
+            )
+        }
+    }
+
+    private static func legacyMethod(for feature: PaymentFeature) -> PaymentMethod {
+        switch feature {
+        case .cardRecharge: .bankCard
+        case .bathroom, .electricity, .networkRecharge: .campusAccount
+        }
+    }
+
+    static func isValidOrderID(_ value: String) -> Bool {
+        !value.isEmpty
+            && value.utf8.count <= 256
+            && value.unicodeScalars.allSatisfy {
+                $0.value >= 0x21 && $0.value <= 0x7e
+            }
+    }
+}
+
+enum PendingPaymentLoadResult: Equatable, Sendable {
+    case empty
+    case value(PendingPayment)
+    case corrupt
+}
+
+enum PendingPaymentStoreWriteFault: Equatable, Sendable {
+    case none
+    case beforeRename
+    case directorySynchronization(Int)
 }
 
 @MainActor
 final class PendingPaymentStore {
     private let defaults: UserDefaults
     private let key: String
+    private let fileManager: FileManager
+    private let durableDirectoryURL: URL?
+    private let durableLogURL: URL?
+    private let durabilityAnchorURL: URL?
+    private let usesDurableLog: Bool
+    private let writeFault: PendingPaymentStoreWriteFault
+    private var directorySynchronizationAttempt = 0
 
-    private var submissionKey: String { "\(key).submission" }
+    private var legacySubmissionKey: String { "\(key).submission" }
 
-    init(defaults: UserDefaults = .standard, key: String = "payments.pending-order") {
+    convenience init(key: String = "payments.pending-order") {
+        let fileManager = FileManager.default
+        let applicationSupportURL = try? fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        self.init(
+            resolvedDurableDirectoryURL: applicationSupportURL?
+                .appendingPathComponent("AHUTong", isDirectory: true)
+                .appendingPathComponent("PaymentTransactions", isDirectory: true),
+            durabilityAnchorURL: applicationSupportURL?
+                .deletingLastPathComponent(),
+            legacyDefaults: .standard,
+            key: key,
+            fileManager: fileManager,
+            writeFault: .none
+        )
+    }
+
+    init(defaults: UserDefaults, key: String = "payments.pending-order") {
         self.defaults = defaults
         self.key = key
+        fileManager = .default
+        durableDirectoryURL = nil
+        durableLogURL = nil
+        durabilityAnchorURL = nil
+        usesDurableLog = false
+        writeFault = .none
+    }
+
+    init(
+        durableDirectoryURL: URL,
+        durabilityAnchorURL: URL? = nil,
+        legacyDefaults: UserDefaults,
+        key: String,
+        fileManager: FileManager = .default,
+        writeFault: PendingPaymentStoreWriteFault = .none
+    ) {
+        defaults = legacyDefaults
+        self.key = key
+        self.fileManager = fileManager
+        self.durableDirectoryURL = durableDirectoryURL
+        self.durabilityAnchorURL = durabilityAnchorURL
+            ?? Self.nearestExistingParent(
+                of: durableDirectoryURL,
+                fileManager: fileManager
+            )
+        durableLogURL = durableDirectoryURL.appendingPathComponent(
+            Self.logFileName(for: key),
+            isDirectory: false
+        )
+        usesDurableLog = true
+        self.writeFault = writeFault
+    }
+
+    private init(
+        resolvedDurableDirectoryURL: URL?,
+        durabilityAnchorURL: URL?,
+        legacyDefaults: UserDefaults,
+        key: String,
+        fileManager: FileManager,
+        writeFault: PendingPaymentStoreWriteFault
+    ) {
+        defaults = legacyDefaults
+        self.key = key
+        self.fileManager = fileManager
+        durableDirectoryURL = resolvedDurableDirectoryURL
+        self.durabilityAnchorURL = durabilityAnchorURL
+        durableLogURL = resolvedDurableDirectoryURL?.appendingPathComponent(
+            Self.logFileName(for: key),
+            isDirectory: false
+        )
+        usesDurableLog = true
+        self.writeFault = writeFault
+    }
+
+    func loadResult() -> PendingPaymentLoadResult {
+        guard usesDurableLog else { return legacyLoadResult() }
+        if let durableLogURL,
+           fileManager.fileExists(atPath: durableLogURL.path) {
+            guard let pending = readDurableRecord(at: durableLogURL) else {
+                return .corrupt
+            }
+            removeLegacyValues()
+            return .value(pending)
+        }
+
+        let legacyResult = legacyLoadResult()
+        guard case let .value(pending) = legacyResult else {
+            return legacyResult
+        }
+        guard persistDurably(pending) else { return .corrupt }
+        removeLegacyValues()
+        return .value(pending)
     }
 
     func load() -> PendingPayment? {
-        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(PendingPayment.self, from: $0) }
+        guard case let .value(pending) = loadResult() else { return nil }
+        return pending
     }
 
     @discardableResult
     func save(_ pending: PendingPayment) -> Bool {
+        guard pending.isValid else { return false }
+        if usesDurableLog {
+            guard persistDurably(pending) else { return false }
+            removeLegacyValues()
+            return true
+        }
         guard let data = try? JSONEncoder().encode(pending) else { return false }
         defaults.set(data, forKey: key)
-        return load() == pending
+        guard legacyLoadResult() == .value(pending) else { return false }
+        defaults.removeObject(forKey: legacySubmissionKey)
+        return true
     }
 
     func clear() {
-        defaults.removeObject(forKey: key)
-    }
-
-    func loadSubmission() -> PendingPaymentSubmission? {
-        defaults.data(forKey: submissionKey).flatMap {
-            try? JSONDecoder().decode(PendingPaymentSubmission.self, from: $0)
+        guard usesDurableLog else {
+            removeLegacyValues()
+            return
+        }
+        guard let durableDirectoryURL,
+              let durableLogURL else { return }
+        do {
+            try prepareDurableDirectory(durableDirectoryURL)
+            if fileManager.fileExists(atPath: durableLogURL.path) {
+                try fileManager.removeItem(at: durableLogURL)
+            }
+            try synchronizeDirectory(at: durableDirectoryURL)
+            guard !fileManager.fileExists(atPath: durableLogURL.path) else {
+                return
+            }
+            removeLegacyValues()
+        } catch {
+            // Leaving a stale pending record is safer than losing a terminal
+            // transition that was not durably committed.
         }
     }
 
-    @discardableResult
-    func saveSubmission(_ submission: PendingPaymentSubmission) -> Bool {
-        guard let data = try? JSONEncoder().encode(submission) else {
+    private func legacyLoadResult() -> PendingPaymentLoadResult {
+        if let data = defaults.data(forKey: key) {
+            guard let pending = try? JSONDecoder().decode(PendingPayment.self, from: data),
+                  pending.isValid else {
+                return .corrupt
+            }
+            return .value(pending)
+        }
+        // The previous implementation persisted a pre-create submission in a
+        // second key. Its presence means a create request may have reached the
+        // server; never silently discard it or recreate the order.
+        if defaults.object(forKey: legacySubmissionKey) != nil {
+            return .corrupt
+        }
+        return .empty
+    }
+
+    private func removeLegacyValues() {
+        defaults.removeObject(forKey: key)
+        defaults.removeObject(forKey: legacySubmissionKey)
+    }
+
+    private func persistDurably(_ pending: PendingPayment) -> Bool {
+        guard pending.isValid,
+              let durableDirectoryURL,
+              let durableLogURL,
+              let data = try? JSONEncoder().encode(pending) else {
             return false
         }
-        defaults.set(data, forKey: submissionKey)
-        return loadSubmission() == submission
+        do {
+            try prepareDurableDirectory(durableDirectoryURL)
+            try atomicWrite(
+                data,
+                to: durableLogURL,
+                in: durableDirectoryURL
+            )
+            return readDurableRecord(at: durableLogURL) == pending
+        } catch {
+            return false
+        }
     }
 
-    func clearSubmission() {
-        defaults.removeObject(forKey: submissionKey)
+    private func readDurableRecord(at url: URL) -> PendingPayment? {
+        guard let data = try? Data(contentsOf: url, options: .uncached),
+              let pending = try? JSONDecoder().decode(PendingPayment.self, from: data),
+              pending.isValid else {
+            return nil
+        }
+        return pending
+    }
+
+    private func prepareDurableDirectory(_ directoryURL: URL) throws {
+        guard let durabilityAnchorURL else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let directoryChain = try directoryChain(
+            from: durabilityAnchorURL,
+            through: directoryURL
+        )
+        for candidateURL in directoryChain {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(
+                atPath: candidateURL.path,
+                isDirectory: &isDirectory
+            ) {
+                guard isDirectory.boolValue else {
+                    throw CocoaError(.fileWriteFileExists)
+                }
+                continue
+            }
+            try fileManager.createDirectory(
+                at: candidateURL,
+                withIntermediateDirectories: false,
+                attributes: protectionAttributes
+            )
+            try applyDurabilityMetadata(to: candidateURL)
+            // Persist both the new directory inode and its entry in the
+            // already-durable parent before creating the next level.
+            try synchronizeDirectory(at: candidateURL)
+            try synchronizeDirectory(
+                at: candidateURL.deletingLastPathComponent()
+            )
+        }
+        try applyDurabilityMetadata(to: directoryURL)
+        // Repeat the complete chain on every attempt. If a previous attempt
+        // returned after a failed fsync, retrying repairs that parent entry
+        // before any transaction request can be sent.
+        for candidateURL in directoryChain.reversed() {
+            try synchronizeDirectory(at: candidateURL)
+        }
+        try synchronizeDirectory(at: durabilityAnchorURL)
+    }
+
+    private func applyDurabilityMetadata(to directoryURL: URL) throws {
+        if !protectionAttributes.isEmpty {
+            try fileManager.setAttributes(
+                protectionAttributes,
+                ofItemAtPath: directoryURL.path
+            )
+        }
+        try excludeFromBackup(directoryURL)
+    }
+
+    private func directoryChain(
+        from anchorURL: URL,
+        through directoryURL: URL
+    ) throws -> [URL] {
+        let anchorURL = anchorURL.standardizedFileURL
+        var cursor = directoryURL.standardizedFileURL
+        var reversedChain: [URL] = []
+        while cursor.path != anchorURL.path {
+            let parent = cursor.deletingLastPathComponent()
+            guard parent.path != cursor.path else {
+                throw CocoaError(.fileWriteInvalidFileName)
+            }
+            reversedChain.append(cursor)
+            cursor = parent
+        }
+        return reversedChain.reversed()
+    }
+
+    private func atomicWrite(
+        _ data: Data,
+        to destinationURL: URL,
+        in directoryURL: URL
+    ) throws {
+        let temporaryURL = directoryURL.appendingPathComponent(
+            ".\(destinationURL.lastPathComponent).\(UUID().uuidString).tmp",
+            isDirectory: false
+        )
+        defer { try? fileManager.removeItem(at: temporaryURL) }
+
+#if canImport(Darwin)
+        try writeAndSynchronize(data, to: temporaryURL)
+        if !protectionAttributes.isEmpty {
+            try fileManager.setAttributes(
+                protectionAttributes,
+                ofItemAtPath: temporaryURL.path
+            )
+        }
+        try excludeFromBackup(temporaryURL)
+        try synchronizeFile(at: temporaryURL)
+        if writeFault == .beforeRename {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        guard Darwin.rename(temporaryURL.path, destinationURL.path) == 0 else {
+            throw Self.posixError()
+        }
+        try synchronizeDirectory(at: directoryURL)
+#else
+        if writeFault == .beforeRename {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try data.write(to: destinationURL, options: .atomic)
+#endif
+    }
+
+    private func excludeFromBackup(_ url: URL) throws {
+        var mutableURL = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try mutableURL.setResourceValues(values)
+    }
+
+    private var protectionAttributes: [FileAttributeKey: Any] {
+#if os(iOS)
+        [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+#else
+        [:]
+#endif
+    }
+
+#if canImport(Darwin)
+    private func writeAndSynchronize(_ data: Data, to url: URL) throws {
+        let descriptor = Darwin.open(
+            url.path,
+            O_WRONLY | O_CREAT | O_EXCL,
+            S_IRUSR | S_IWUSR
+        )
+        guard descriptor >= 0 else { throw Self.posixError() }
+        defer { Darwin.close(descriptor) }
+
+        try data.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            var offset = 0
+            while offset < buffer.count {
+                let written = Darwin.write(
+                    descriptor,
+                    baseAddress.advanced(by: offset),
+                    buffer.count - offset
+                )
+                if written < 0, errno == EINTR { continue }
+                guard written > 0 else { throw Self.posixError() }
+                offset += written
+            }
+        }
+        try synchronizeFileDescriptor(descriptor, fullSync: true)
+    }
+
+    private func synchronizeFile(at url: URL) throws {
+        let descriptor = Darwin.open(url.path, O_RDONLY)
+        guard descriptor >= 0 else { throw Self.posixError() }
+        defer { Darwin.close(descriptor) }
+        try synchronizeFileDescriptor(descriptor, fullSync: true)
+    }
+
+    private func synchronizeDirectory(at url: URL) throws {
+        try failDirectorySynchronizationIfRequested()
+        let descriptor = Darwin.open(url.path, O_RDONLY)
+        guard descriptor >= 0 else { throw Self.posixError() }
+        defer { Darwin.close(descriptor) }
+        try synchronizeFileDescriptor(descriptor, fullSync: false)
+    }
+
+    private func synchronizeFileDescriptor(
+        _ descriptor: Int32,
+        fullSync: Bool
+    ) throws {
+        if fullSync, Darwin.fcntl(descriptor, F_FULLFSYNC) == 0 {
+            return
+        }
+        guard Darwin.fsync(descriptor) == 0 else {
+            throw Self.posixError()
+        }
+    }
+
+    private static func posixError() -> Error {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+#else
+    private func synchronizeDirectory(at url: URL) throws {
+        try failDirectorySynchronizationIfRequested()
+    }
+#endif
+
+    private func failDirectorySynchronizationIfRequested() throws {
+        directorySynchronizationAttempt += 1
+        guard case let .directorySynchronization(failingAttempt) = writeFault,
+              directorySynchronizationAttempt == failingAttempt else {
+            return
+        }
+        throw CocoaError(.fileWriteUnknown)
+    }
+
+    private static func nearestExistingParent(
+        of directoryURL: URL,
+        fileManager: FileManager
+    ) -> URL? {
+        var cursor = directoryURL.standardizedFileURL.deletingLastPathComponent()
+        while true {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(
+                atPath: cursor.path,
+                isDirectory: &isDirectory
+            ) {
+                return isDirectory.boolValue ? cursor : nil
+            }
+            let parent = cursor.deletingLastPathComponent()
+            guard parent.path != cursor.path else { return nil }
+            cursor = parent
+        }
+    }
+
+    private static func logFileName(for key: String) -> String {
+        let digest = SHA256.hash(data: Data(key.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "pending-\(digest).json"
     }
 }
 
@@ -243,6 +795,7 @@ final class PaymentCoordinator: ObservableObject {
     private let feature: PaymentFeature
     private let gateway: any PaymentGateway
     private let pendingStore: PendingPaymentStore
+    private var operationRevision = 0
 
     init(
         feature: PaymentFeature,
@@ -259,134 +812,396 @@ final class PaymentCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func submit(_ request: PaymentRequest, idempotencyKey: String = UUID().uuidString) async -> URL? {
-        guard !phase.isBusy else { return nil }
+    func submit(
+        _ request: PaymentRequest,
+        authorization: TransientPaymentAuthorization? = nil,
+        idempotencyKey: String = UUID().uuidString
+    ) async -> URL? {
+        guard !phase.isBusy else {
+            authorization?.clear()
+            return nil
+        }
+        defer { authorization?.clear() }
         guard request.feature == feature else {
             phase = .failed(PaymentGatewayError.featureMismatch.localizedDescription)
             return nil
         }
-        if let pending = pendingStore.load(), pending.feature == feature {
-            await reconcile(orderID: pending.orderID)
+        operationRevision += 1
+        let revision = operationRevision
+        switch pendingStore.loadResult() {
+        case .empty:
+            break
+        case .corrupt:
+            authorization?.clear()
+            lockForCorruptState()
+            return nil
+        case let .value(pending):
+            authorization?.clear()
+            guard pending.feature == feature else {
+                lockForCorruptState()
+                return nil
+            }
+            await restore(
+                pending,
+                queryUnknownResult: true,
+                revision: revision
+            )
             return nil
         }
-        let requestFingerprint = Self.fingerprint(for: request)
-        let persistedSubmission = pendingStore.loadSubmission()
-        let resolvedIdempotencyKey: String
-        if let persistedSubmission {
-            guard persistedSubmission.feature == feature,
-                  persistedSubmission.requestFingerprint == requestFingerprint else {
-                phase = .failed(
-                    "上一次建单结果尚未确认，请使用相同的账户、金额和支付方式重试"
-                )
-                return nil
-            }
-            resolvedIdempotencyKey = persistedSubmission.idempotencyKey
-        } else {
-            let submission = PendingPaymentSubmission(
-                feature: feature,
-                idempotencyKey: idempotencyKey,
-                requestFingerprint: requestFingerprint
-            )
-            guard pendingStore.saveSubmission(submission) else {
-                phase = .failed("无法安全保存支付请求状态，未发起建单请求")
-                return nil
-            }
-            resolvedIdempotencyKey = idempotencyKey
+
+        if request.method == .campusAccount, authorization == nil {
+            phase = .failed(PaymentValidationError.invalidPassword.localizedDescription)
+            return nil
         }
-        var recoverableOrderID: String?
+
+        let creating = PendingPayment(
+            feature: feature,
+            orderID: nil,
+            method: request.method,
+            stage: .creating
+        )
+        guard pendingStore.save(creating) else {
+            phase = .failed("无法安全保存支付请求状态，未发起建单请求")
+            return nil
+        }
+
         phase = .creating
         do {
             let order = try await gateway.createOrder(
                 request: request,
-                idempotencyKey: resolvedIdempotencyKey
+                idempotencyKey: idempotencyKey
             )
-            recoverableOrderID = order.id
-            guard pendingStore.save(PendingPayment(
+            let orderID = order.id
+            guard PendingPayment.isValidOrderID(orderID) else {
+                throw PaymentGatewayError.invalidResponse
+            }
+            let pending = PendingPayment(
                 feature: feature,
-                orderID: order.id
-            )) else {
+                orderID: orderID,
+                method: request.method,
+                stage: .orderCreated
+            )
+            let didSavePending = pendingStore.save(pending)
+            guard didSavePending else {
+                guard revision == operationRevision else { return nil }
                 phase = .unknown(
-                    order.id,
+                    orderID,
                     "订单已创建但本机状态未能安全保存，请勿重复提交"
                 )
                 return nil
             }
-            pendingStore.clearSubmission()
+            guard revision == operationRevision else {
+                phase = phaseForCreatedOrder(pending)
+                return nil
+            }
             if let externalURL = order.externalURL {
-                phase = .awaitingExternal(order.id)
+                phase = .awaitingExternal(orderID)
                 return externalURL
             }
-            phase = .confirming(order.id)
-            let confirmation = try await gateway.confirm(orderID: order.id, authorization: request.authorization)
-            await apply(confirmation, orderID: order.id, reconcilePending: true)
-            return nil
-        } catch is CancellationError {
-            if let recoverableOrderID {
-                phase = .unknown(
-                    recoverableOrderID,
-                    "操作已中断，订单结果待核验，请勿重复提交"
-                )
-            } else {
-                phase = .cancelled
-            }
+            await prepareAndSubmit(
+                pending,
+                authorization: authorization,
+                revision: revision
+            )
             return nil
         } catch {
-            if let recoverableOrderID {
-                phase = .unknown(
-                    recoverableOrderID,
-                    "订单已创建但结果未确认，请稍后核验，勿重复提交"
-                )
+            guard revision == operationRevision else { return nil }
+            if Self.isDefiniteCreateFailure(error) {
+                pendingStore.clear()
+                phase = .failed(Self.safeDefiniteFailureMessage(error))
             } else {
-                if Self.isDefinitePreflightFailure(error) {
-                    pendingStore.clearSubmission()
-                }
-                phase = .failed(Self.safeInitialFailureMessage(error))
+                let unknown = PendingPayment(
+                    feature: feature,
+                    orderID: nil,
+                    method: request.method,
+                    stage: .creationUnknown
+                )
+                _ = pendingStore.save(unknown)
+                phase = .creationUnknown(
+                    "建单结果无法确认，已禁止再次建单；请先人工核验"
+                )
             }
             return nil
         }
     }
 
     func resumePendingOrder() async {
-        guard let pending = pendingStore.load(), pending.feature == feature else { return }
-        await reconcile(orderID: pending.orderID)
+        guard !phase.isBusy else { return }
+        operationRevision += 1
+        let revision = operationRevision
+        switch pendingStore.loadResult() {
+        case .empty:
+            return
+        case .corrupt:
+            lockForCorruptState()
+        case let .value(pending):
+            guard pending.feature == feature else {
+                lockForCorruptState()
+                return
+            }
+            await restore(
+                pending,
+                queryUnknownResult: true,
+                revision: revision
+            )
+        }
     }
 
     func resumeExternalReturn() async {
-        guard case let .awaitingExternal(orderID) = phase else {
-            await resumePendingOrder()
+        guard !phase.isBusy else { return }
+        operationRevision += 1
+        let revision = operationRevision
+        let loadResult = pendingStore.loadResult()
+        guard case let .value(pending) = loadResult else {
+            if case .corrupt = loadResult {
+                lockForCorruptState()
+            }
             return
         }
-        await reconcile(orderID: orderID)
+        guard pending.feature == feature else {
+            lockForCorruptState()
+            return
+        }
+        switch pending.stage {
+        case .orderCreated:
+            guard pending.method == .alipay else {
+                await restore(
+                    pending,
+                    queryUnknownResult: false,
+                    revision: revision
+                )
+                return
+            }
+            guard let orderID = pending.orderID else {
+                lockForCorruptState()
+                return
+            }
+            await reconcile(
+                orderID: orderID,
+                method: pending.method,
+                revision: revision
+            )
+        case .finalSubmissionStarted, .resultUnknown:
+            guard let orderID = pending.orderID else {
+                lockForCorruptState()
+                return
+            }
+            await reconcile(
+                orderID: orderID,
+                method: pending.method,
+                revision: revision
+            )
+        case .creating, .creationUnknown:
+            await restore(
+                pending,
+                queryUnknownResult: false,
+                revision: revision
+            )
+        }
+    }
+
+    func continuePendingOrder(
+        authorization: TransientPaymentAuthorization? = nil
+    ) async {
+        guard !phase.isBusy else {
+            authorization?.clear()
+            return
+        }
+        defer { authorization?.clear() }
+        operationRevision += 1
+        let revision = operationRevision
+        switch pendingStore.loadResult() {
+        case .empty:
+            phase = .idle
+        case .corrupt:
+            lockForCorruptState()
+        case let .value(pending):
+            guard pending.feature == feature else {
+                lockForCorruptState()
+                return
+            }
+            switch pending.stage {
+            case .orderCreated:
+                guard let orderID = pending.orderID else {
+                    lockForCorruptState()
+                    return
+                }
+                if pending.method == .alipay {
+                    authorization?.clear()
+                    await reconcile(
+                        orderID: orderID,
+                        method: pending.method,
+                        revision: revision
+                    )
+                    return
+                }
+                if pending.method == .campusAccount, authorization == nil {
+                    phase = .awaitingConfirmation(orderID)
+                    return
+                }
+                await prepareAndSubmit(
+                    pending,
+                    authorization: authorization,
+                    revision: revision
+                )
+            case .finalSubmissionStarted, .resultUnknown:
+                authorization?.clear()
+                guard let orderID = pending.orderID else {
+                    lockForCorruptState()
+                    return
+                }
+                await reconcile(
+                    orderID: orderID,
+                    method: pending.method,
+                    revision: revision
+                )
+            case .creating, .creationUnknown:
+                authorization?.clear()
+                await restore(
+                    pending,
+                    queryUnknownResult: false,
+                    revision: revision
+                )
+            }
+        }
     }
 
     func cancel() async {
-        let orderID: String?
-        switch phase {
-        case let .confirming(id),
-             let .awaitingExternal(id),
-             let .reconciling(id),
-             let .unknown(id, _):
-            orderID = id
-        default: orderID = pendingStore.load()?.orderID
+        operationRevision += 1
+        let revision = operationRevision
+        switch pendingStore.loadResult() {
+        case .empty:
+            phase = .cancelled
+        case .corrupt:
+            lockForCorruptState()
+        case let .value(pending):
+            await restore(
+                pending,
+                queryUnknownResult: false,
+                revision: revision
+            )
         }
-        if let orderID {
-            await gateway.cancel(orderID: orderID)
-            pendingStore.clearSubmission()
-        }
-        pendingStore.clear()
-        phase = .cancelled
     }
 
     func reset() {
         guard !phase.isBusy else { return }
-        phase = .idle
+        operationRevision += 1
+        switch pendingStore.loadResult() {
+        case .empty:
+            phase = .idle
+        case .corrupt:
+            lockForCorruptState()
+        case let .value(pending):
+            restoreWithoutNetwork(pending)
+        }
     }
 
-    private func reconcile(orderID: String) async {
+    private func prepareAndSubmit(
+        _ pending: PendingPayment,
+        authorization: TransientPaymentAuthorization?,
+        revision: Int
+    ) async {
+        guard revision == operationRevision else {
+            authorization?.clear()
+            return
+        }
+        guard pending.feature == feature,
+              pending.stage == .orderCreated,
+              let orderID = pending.orderID else {
+            lockForCorruptState()
+            return
+        }
+
+        phase = .confirming(orderID)
+        let prepared: any PreparedPaymentConfirmation
+        do {
+            prepared = try await gateway.prepareConfirmation(
+                orderID: orderID,
+                feature: pending.feature,
+                method: pending.method,
+                authorization: authorization
+            )
+        } catch {
+            authorization?.clear()
+            guard revision == operationRevision else { return }
+            phase = .failed(Self.safePreparationFailureMessage(error))
+            return
+        }
+        authorization?.clear()
+
+        guard revision == operationRevision else {
+            prepared.clear()
+            return
+        }
+
+        let finalStarted = PendingPayment(
+            feature: pending.feature,
+            orderID: orderID,
+            method: pending.method,
+            stage: .finalSubmissionStarted
+        )
+        guard pendingStore.save(finalStarted) else {
+            prepared.clear()
+            phase = .unknown(
+                orderID,
+                "订单已准备但无法保存最终提交状态，未继续发送；请勿新建订单"
+            )
+            return
+        }
+
+        do {
+            defer { prepared.clear() }
+            let status = try await gateway.submitPreparedConfirmation(prepared)
+            guard revision == operationRevision else { return }
+            await apply(
+                status,
+                orderID: orderID,
+                method: pending.method,
+                reconcilePending: true,
+                revision: revision
+            )
+        } catch {
+            prepared.clear()
+            guard revision == operationRevision else { return }
+            persistResultUnknown(
+                orderID: orderID,
+                method: pending.method
+            )
+            phase = .unknown(
+                orderID,
+                "最终支付结果无法确认，请先核验，禁止重复提交"
+            )
+        }
+    }
+
+    private func reconcile(
+        orderID: String,
+        method: PaymentMethod,
+        revision: Int
+    ) async {
+        guard revision == operationRevision else { return }
+        if phase.isBusy {
+            guard case let .confirming(activeOrderID) = phase,
+                  activeOrderID == orderID else { return }
+        }
         phase = .reconciling(orderID)
         do {
-            await apply(try await gateway.status(orderID: orderID), orderID: orderID, reconcilePending: false)
+            let status = try await gateway.status(
+                orderID: orderID,
+                feature: feature,
+                method: method
+            )
+            guard revision == operationRevision else { return }
+            await apply(
+                status,
+                orderID: orderID,
+                method: method,
+                reconcilePending: false,
+                revision: revision
+            )
         } catch {
+            guard revision == operationRevision else { return }
+            persistResultUnknown(orderID: orderID, method: method)
             phase = .unknown(
                 orderID,
                 "订单状态暂时无法核验，请稍后重试，勿重复提交"
@@ -394,68 +1209,162 @@ final class PaymentCoordinator: ObservableObject {
         }
     }
 
-    private static func safeInitialFailureMessage(_ error: Error) -> String {
+    private static func safeDefiniteFailureMessage(_ error: Error) -> String {
         guard let gatewayError = error as? PaymentGatewayError else {
             return "支付服务暂不可用，未发起扣款"
         }
         switch gatewayError {
-        case .safetyServiceUnavailable,
-             .timedOut,
-             .invalidResponse,
-             .featureMismatch:
+        case .automatedDebitDisabled,
+             .featureMismatch,
+             .definitelyRejected:
             return gatewayError.localizedDescription
-        case .server:
+        case .timedOut, .invalidResponse, .server:
             return "支付服务暂不可用，未发起扣款"
         }
     }
 
-    private static func isDefinitePreflightFailure(_ error: Error) -> Bool {
+    private static func safePreparationFailureMessage(_ error: Error) -> String {
+        let reason: String
+        if let validationError = error as? PaymentValidationError,
+           validationError == .invalidPassword {
+            reason = PaymentValidationError.invalidPassword.localizedDescription
+        } else if let gatewayError = error as? PaymentGatewayError,
+                  gatewayError == .timedOut {
+            reason = "支付确认信息获取超时"
+        } else if let gatewayError = error as? PaymentGatewayError,
+                  gatewayError == .automatedDebitDisabled {
+            reason = PaymentGatewayError.automatedDebitDisabled.localizedDescription
+        } else {
+            reason = "支付确认信息暂时无法获取"
+        }
+        return "\(reason)，原订单已保留；点击恢复后可继续同一订单"
+    }
+
+    private static func isDefiniteCreateFailure(_ error: Error) -> Bool {
         guard let gatewayError = error as? PaymentGatewayError else {
             return false
         }
         switch gatewayError {
-        case .safetyServiceUnavailable, .featureMismatch:
+        case .automatedDebitDisabled, .featureMismatch, .definitelyRejected:
             return true
         case .timedOut, .invalidResponse, .server:
             return false
         }
     }
 
-    private static func fingerprint(for request: PaymentRequest) -> String {
-        // Authorization is intentionally excluded: it is transient confirmation
-        // material and must never be persisted, even as part of an attempt record.
-        let fields = [
-            "v1",
-            request.feature.rawValue,
-            request.method.rawValue,
-            request.amount.text,
-            request.accountID,
-            request.accountLabel
-        ]
-        let canonical = fields.map { field in
-            "\(field.utf8.count):\(field)"
-        }.joined(separator: "|")
-        return SHA256.hash(data: Data(canonical.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
+    private func restore(
+        _ pending: PendingPayment,
+        queryUnknownResult: Bool,
+        revision: Int
+    ) async {
+        guard revision == operationRevision else { return }
+        switch pending.stage {
+        case .creating:
+            let unknown = PendingPayment(
+                feature: pending.feature,
+                orderID: nil,
+                method: pending.method,
+                stage: .creationUnknown
+            )
+            _ = pendingStore.save(unknown)
+            phase = .creationUnknown(
+                "上次建单在完成前中断，结果无法确认；已禁止再次建单"
+            )
+        case .creationUnknown:
+            phase = .creationUnknown(
+                "建单结果尚未确认；已禁止再次建单"
+            )
+        case .orderCreated:
+            phase = phaseForCreatedOrder(pending)
+        case .finalSubmissionStarted, .resultUnknown:
+            guard let orderID = pending.orderID else {
+                lockForCorruptState()
+                return
+            }
+            persistResultUnknown(orderID: orderID, method: pending.method)
+            if queryUnknownResult {
+                await reconcile(
+                    orderID: orderID,
+                    method: pending.method,
+                    revision: revision
+                )
+            } else {
+                phase = .unknown(orderID, "支付结果待确认，禁止重复提交")
+            }
+        }
     }
 
-    private func apply(_ status: PaymentOrderStatus, orderID: String, reconcilePending: Bool) async {
+    private func restoreWithoutNetwork(_ pending: PendingPayment) {
+        switch pending.stage {
+        case .creating, .creationUnknown:
+            phase = .creationUnknown("建单结果尚未确认；已禁止再次建单")
+        case .orderCreated:
+            phase = phaseForCreatedOrder(pending)
+        case .finalSubmissionStarted, .resultUnknown:
+            if let orderID = pending.orderID {
+                phase = .unknown(orderID, "支付结果待确认，禁止重复提交")
+            } else {
+                lockForCorruptState()
+            }
+        }
+    }
+
+    private func phaseForCreatedOrder(_ pending: PendingPayment) -> PaymentPhase {
+        guard let orderID = pending.orderID else {
+            return .creationUnknown("订单恢复记录不完整；已禁止再次建单")
+        }
+        return pending.method == .alipay
+            ? .awaitingExternal(orderID)
+            : .awaitingConfirmation(orderID)
+    }
+
+    private func persistResultUnknown(
+        orderID: String,
+        method: PaymentMethod
+    ) {
+        _ = pendingStore.save(PendingPayment(
+            feature: feature,
+            orderID: orderID,
+            method: method,
+            stage: .resultUnknown
+        ))
+    }
+
+    private func lockForCorruptState() {
+        phase = .creationUnknown(
+            "本机支付恢复记录损坏或不匹配；为避免重复扣款，已禁止新建订单"
+        )
+    }
+
+    private func apply(
+        _ status: PaymentOrderStatus,
+        orderID: String,
+        method: PaymentMethod,
+        reconcilePending: Bool,
+        revision: Int
+    ) async {
+        guard revision == operationRevision else { return }
         switch status {
         case let .confirmed(message):
             pendingStore.clear()
-            pendingStore.clearSubmission()
             phase = .succeeded(orderID, message)
         case let .rejected(message):
             pendingStore.clear()
-            pendingStore.clearSubmission()
             phase = .failed(message)
-        case let .pending(message), let .unknown(message):
+        case let .pending(message):
+            persistResultUnknown(orderID: orderID, method: method)
             if reconcilePending {
-                await reconcile(orderID: orderID)
+                await reconcile(
+                    orderID: orderID,
+                    method: method,
+                    revision: revision
+                )
             } else {
                 phase = .unknown(orderID, message)
             }
+        case let .unknown(message):
+            persistResultUnknown(orderID: orderID, method: method)
+            phase = .unknown(orderID, message)
         }
     }
 }
@@ -468,8 +1377,31 @@ actor DemoPaymentGateway: PaymentGateway {
         case timeout
     }
 
+    private struct OrderRecord: Sendable {
+        let feature: PaymentFeature
+        let method: PaymentMethod
+    }
+
+    private final class Prepared: PreparedPaymentConfirmation, @unchecked Sendable {
+        let orderID: String
+        private let lock = NSLock()
+        private var cleared = false
+
+        init(orderID: String) {
+            self.orderID = orderID
+        }
+
+        func clear() {
+            lock.withLock { cleared = true }
+        }
+
+        var isAvailable: Bool {
+            lock.withLock { !cleared }
+        }
+    }
+
     private let mode: Mode
-    private var orders: [String: PaymentRequest] = [:]
+    private var orders: [String: OrderRecord] = [:]
     private var orderByIdempotencyKey: [String: String] = [:]
     private var sequence = 0
 
@@ -487,24 +1419,65 @@ actor DemoPaymentGateway: PaymentGateway {
         case .cardRecharge: "MOCK-CARD"
         case .bathroom: "MOCK-BATH"
         case .electricity: "MOCK-ELEC"
+        case .networkRecharge: "MOCK-NET"
         }
         let orderID = "\(prefix)-\(String(format: "%04d", sequence))"
-        orders[orderID] = request
+        orders[orderID] = OrderRecord(
+            feature: request.feature,
+            method: request.method
+        )
         orderByIdempotencyKey[idempotencyKey] = orderID
         return PaymentOrder(id: orderID, externalURL: externalURL(for: request, orderID: orderID))
     }
 
-    func confirm(orderID: String, authorization: String?) async throws -> PaymentOrderStatus {
-        guard let request = orders[orderID] else { throw PaymentGatewayError.invalidResponse }
-        if request.method == .campusAccount,
-           (authorization?.count != 6 || authorization?.allSatisfy({ $0.isNumber }) != true) {
-            return .rejected("支付密码格式错误")
+    func prepareConfirmation(
+        orderID: String,
+        feature: PaymentFeature,
+        method: PaymentMethod,
+        authorization: TransientPaymentAuthorization?
+    ) async throws -> any PreparedPaymentConfirmation {
+        guard let order = orders[orderID],
+              order.feature == feature,
+              order.method == method else {
+            throw PaymentGatewayError.invalidResponse
+        }
+        if method == .campusAccount {
+            guard let authorization else {
+                throw PaymentValidationError.invalidPassword
+            }
+            var bytes = try authorization.consumeASCIIBytes()
+            defer {
+                for index in bytes.indices { bytes[index] = 0 }
+            }
+            guard bytes.count == 6,
+                  bytes.allSatisfy({ (48...57).contains($0) }) else {
+                throw PaymentValidationError.invalidPassword
+            }
+        }
+        return Prepared(orderID: orderID)
+    }
+
+    func submitPreparedConfirmation(
+        _ prepared: any PreparedPaymentConfirmation
+    ) async throws -> PaymentOrderStatus {
+        guard let prepared = prepared as? Prepared,
+              prepared.isAvailable,
+              orders[prepared.orderID] != nil else {
+            throw PaymentGatewayError.invalidResponse
         }
         return .pending("订单已提交，正在核验服务端结果")
     }
 
-    func status(orderID: String) async throws -> PaymentOrderStatus {
-        guard orders[orderID] != nil else { throw PaymentGatewayError.invalidResponse }
+    func status(
+        orderID: String,
+        feature: PaymentFeature,
+        method: PaymentMethod
+    ) async throws -> PaymentOrderStatus {
+        guard let order = orders[orderID],
+              order.feature == feature,
+              order.method == method else {
+            throw PaymentGatewayError.invalidResponse
+        }
         switch mode {
         case .success: return .confirmed("服务端已确认支付成功")
         case .rejected: return .rejected("服务端拒绝了本次支付")
@@ -513,34 +1486,17 @@ actor DemoPaymentGateway: PaymentGateway {
         }
     }
 
-    func cancel(orderID: String) async {
-        orders.removeValue(forKey: orderID)
-    }
-
     private func externalURL(for request: PaymentRequest, orderID: String) -> URL? {
         guard request.method == .alipay else { return nil }
         return URL(string: "alipays://platformapi/startapp?appId=2019090967125695&order=\(orderID)")
     }
 }
 
-struct SafetyBlockedPaymentGateway: PaymentGateway {
-    func createOrder(request: PaymentRequest, idempotencyKey: String) async throws -> PaymentOrder {
-        throw PaymentGatewayError.safetyServiceUnavailable
-    }
-
-    func confirm(orderID: String, authorization: String?) async throws -> PaymentOrderStatus {
-        throw PaymentGatewayError.safetyServiceUnavailable
-    }
-
-    func status(orderID: String) async throws -> PaymentOrderStatus {
-        throw PaymentGatewayError.safetyServiceUnavailable
-    }
-
-    func cancel(orderID: String) async { }
-}
-
 enum PaymentGatewayFactory {
-    static func make(demo: Bool) -> any PaymentGateway {
+    static func make(
+        demo: Bool,
+        production: @autoclosure () -> any PaymentGateway
+    ) -> any PaymentGateway {
         if demo {
             let arguments = ProcessInfo.processInfo.arguments
             let mode: DemoPaymentGateway.Mode
@@ -550,7 +1506,7 @@ enum PaymentGatewayFactory {
             else { mode = .success }
             return DemoPaymentGateway(mode: mode)
         }
-        return SafetyBlockedPaymentGateway()
+        return production()
     }
 }
 

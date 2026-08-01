@@ -180,9 +180,9 @@ final class RedactingLoggerTests: XCTestCase {
 }
 
 final class ReleaseDiagnosticsTests: XCTestCase {
-    func testProductionPaymentAndCrashCollectionRemainSafetyOff() {
+    func testProductionPaymentIsConfiguredWithoutCrashCollection() {
         let diagnostics = ReleaseDiagnostics.current()
-        XCTAssertFalse(diagnostics.productionPaymentGatewayConfigured)
+        XCTAssertTrue(diagnostics.productionPaymentGatewayConfigured)
         XCTAssertFalse(diagnostics.thirdPartyCrashReportingEnabled)
     }
 

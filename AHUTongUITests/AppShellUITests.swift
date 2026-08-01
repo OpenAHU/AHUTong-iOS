@@ -519,6 +519,10 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(continueButton.waitForExistence(timeout: 4))
         scrollUpUntilHittable(continueButton, app: app)
         continueButton.tap()
+        let networkPassword = app.secureTextFields["payment.network.password"]
+        XCTAssertTrue(networkPassword.waitForExistence(timeout: 3))
+        enter("123456", into: networkPassword, app: app)
+        app.buttons["payment.network.confirm"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["payment.network.demo-success"].waitForExistence(timeout: 4))
         waitForRendering()
         capture("35-network-recharge", app: app)

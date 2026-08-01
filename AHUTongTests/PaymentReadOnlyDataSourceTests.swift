@@ -141,25 +141,18 @@ final class PaymentReadOnlyRequestPolicyTests: XCTestCase {
             accessToken: "temporary-token",
             cookies: []
         )
-        let body = String(
-            decoding: try XCTUnwrap(request.httpBody),
-            as: UTF8.self
-        )
-        var formComponents = URLComponents()
-        formComponents.percentEncodedQuery = body
-        let form = formComponents.queryItems ?? []
-        let values = Dictionary(uniqueKeysWithValues:
-            form.map { ($0.name, $0.value) }
-        )
+        let bodyData = try XCTUnwrap(request.httpBody)
+        let body = String(decoding: bodyData, as: UTF8.self)
+        let values = try StrictServerFormTestDecoder.values(bodyData)
 
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(
             request.url?.path,
             "/charge/feeitem/getThirdData"
         )
-        XCTAssertEqual(values["feeitemid"]!, "488")
-        XCTAssertEqual(values["type"]!, "select")
-        XCTAssertEqual(values["level"]!, "0")
+        XCTAssertEqual(values["feeitemid"], "488")
+        XCTAssertEqual(values["type"], "select")
+        XCTAssertEqual(values["level"], "0")
         XCTAssertEqual(
             request.value(forHTTPHeaderField: "Referer"),
             "https://ycard.ahu.edu.cn/charge-app/"
@@ -172,6 +165,32 @@ final class PaymentReadOnlyRequestPolicyTests: XCTestCase {
         XCTAssertFalse(body.contains("SECRET_KEY"))
         XCTAssertFalse(body.contains("password"))
         XCTAssertFalse(body.contains("uuid"))
+    }
+
+    func testFeeItemPostUsesOkHttpCompatibleFormBytes() throws {
+        let campus = "A+B C%D&E=F~中文"
+        let request = try YCardReadOnlyClient.makeRequest(
+            .feeItemData,
+            formItems: [
+                URLQueryItem(name: "feeitemid", value: "488"),
+                URLQueryItem(name: "type", value: "IEC"),
+                URLQueryItem(name: "level", value: "4"),
+                URLQueryItem(name: "campus", value: campus),
+                URLQueryItem(name: "building", value: "B"),
+                URLQueryItem(name: "floor", value: "F"),
+                URLQueryItem(name: "room", value: "R")
+            ],
+            accessToken: "temporary-token",
+            cookies: []
+        )
+        let body = try XCTUnwrap(request.httpBody)
+        let transport = String(decoding: body, as: UTF8.self)
+
+        XCTAssertTrue(transport.contains(
+            "campus=A%2BB+C%25D%26E%3DF%7E%E4%B8%AD%E6%96%87"
+        ))
+        let decoded = try StrictServerFormTestDecoder.values(body)
+        XCTAssertEqual(decoded["campus"], campus)
     }
 
     func testReadEndpointsRejectPaymentFieldsAndUnexpectedQueries() throws {
@@ -195,6 +214,15 @@ final class PaymentReadOnlyRequestPolicyTests: XCTestCase {
             accessToken: "temporary-token",
             cookies: []
         )
+        for suffix in ["&extra=%", "&extra=%FF", "&%66eeitemid=488"] {
+            var request = validFeeRequest
+            var body = try XCTUnwrap(validFeeRequest.httpBody)
+            body.append(contentsOf: suffix.utf8)
+            request.httpBody = body
+            XCTAssertThrowsError(
+                try YCardReadOnlyRequestPolicy.authorize(request)
+            )
+        }
         for rawURL in [
             "https://ycard.ahu.edu.cn/charge/feeitem/getThirdData?tranamt=1",
             "https://ycard.ahu.edu.cn:444/charge/feeitem/getThirdData",
@@ -500,7 +528,7 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
         )
     }
 
-    func testDecodesBathroomPhoneAndBalancesWithoutPaymentMaterial() throws {
+    func testDecodesBathroomBalancesAndNormalizesAndroidPaymentContext() throws {
         let data = Data(#"""
         {
           "code": 0,
@@ -512,9 +540,13 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
               "赠送金额（单位：元）": "2.00"
             },
             "data": {
+              "projectId": 12,
+              "projectName": "浴室项目",
               "accountId": 456,
               "telPhone": "13800000000",
-              "identifier": "read-only-account"
+              "identifier": "read-only-account",
+              "statusId": 1,
+              "nested": { "preserved": true }
             }
           }
         }
@@ -539,6 +571,14 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
             try XCTUnwrap(Decimal(string: "2.00"))
         )
         XCTAssertNil(result.message)
+        let contextData = try XCTUnwrap(result.thirdPartyJSON)
+        let context = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: contextData) as? [String: Any]
+        )
+        XCTAssertEqual(context["projectId"] as? Int, 12)
+        XCTAssertEqual(context["accountId"] as? Int, 456)
+        XCTAssertEqual(context["myCustomInfo"] as? String, "手机号：13800000000")
+        XCTAssertNil(context["nested"])
     }
 
     func testBathroomMissingAccountUsesFiniteSafeEmptyState() throws {
@@ -559,8 +599,35 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
 
         XCTAssertNil(result.account)
         XCTAssertEqual(result.message, "未查询到浴室账户")
+        XCTAssertNil(result.thirdPartyJSON)
         XCTAssertFalse(try XCTUnwrap(result.message).contains("13800000000"))
         XCTAssertFalse(try XCTUnwrap(result.message).contains("temporary-secret"))
+    }
+
+    func testBathroomDecoderRejectsNonObjectPaymentData() {
+        let payload = Data(#"""
+        {
+          "code": 200,
+          "map": {
+            "showData": {
+              "手机号": "fixture",
+              "现金金额（单位：元）": "1",
+              "赠送金额（单位：元）": "0"
+            },
+            "data": ["unexpected"]
+          }
+        }
+        """#.utf8)
+
+        XCTAssertThrowsError(
+            try YCardPaymentDecoder.decodeBathroomAccount(
+                payload,
+                bathroomName: "fixture",
+                requestedPhone: "fixture"
+            )
+        ) { error in
+            XCTAssertEqual(error as? YCardReadOnlyError, .invalidResponse)
+        }
     }
 
     func testServerFailureNeverExposesPhoneOrTokenMessage() throws {
@@ -622,7 +689,8 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
               "buildingName": "竹园",
               "floorName": "3层",
               "account": "electric-account-305",
-              "roomName": "305"
+              "roomName": "305",
+              "nested": { "preserved": false }
             }
           }
         }
@@ -698,6 +766,29 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
             room.information,
             "房间当前剩余电量1.95，电量单价0.56"
         )
+
+        let paymentResult = try YCardPaymentDecoder.decodeElectricityRoomLookup(
+            roomData,
+            campus: options[0],
+            building: YCardSelectionOption(
+                name: "竹园",
+                value: "building-zhu"
+            ),
+            floor: YCardSelectionOption(name: "3层", value: "floor-3"),
+            room: YCardSelectionOption(name: "305", value: "room-305")
+        )
+        let contextData = try XCTUnwrap(paymentResult.thirdPartyJSON)
+        let context = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: contextData) as? [String: Any]
+        )
+        XCTAssertEqual(context["account"] as? String, "electric-account-305")
+        XCTAssertEqual(context["roomName"] as? String, "305")
+        XCTAssertEqual(context["extdata"] as? String, "")
+        XCTAssertEqual(
+            context["myCustomInfo"] as? String,
+            "房间：磬苑校区 竹园 3层 305"
+        )
+        XCTAssertNil(context["nested"])
     }
 
     func testAlipayHandoffRejectsIdentityAndCredentialParameters() throws {
@@ -706,6 +797,16 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
                 AlipayCampusCardHandoff.appURL
             )
         )
+        XCTAssertTrue(
+            AlipayCampusCardHandoff.isAllowed(
+                AlipayCampusCardHandoff.fallbackURL
+            )
+        )
+        XCTAssertFalse(AlipayCampusCardHandoff.isAllowed(
+            try XCTUnwrap(URL(
+                string: "https://www.wmslz.com/s/M6KARh485j3?studentID=secret"
+            ))
+        ))
         XCTAssertFalse(AlipayCampusCardHandoff.isAllowed(
             try XCTUnwrap(URL(
                 string: "alipays://platformapi/startapp?appId=2019090967125695&studentID=secret"
@@ -879,6 +980,10 @@ final class PaymentReadOnlyViewModelStateTests: XCTestCase {
         }
         XCTAssertEqual(account.phone, "13900000000")
         XCTAssertEqual(account.cashBalance, 20)
+        XCTAssertEqual(
+            model.thirdPartyJSON,
+            Data(#"{"revision":"new"}"#.utf8)
+        )
     }
 
     func testBathroomEmptyAndErrorStatesRemainDistinct() async {
@@ -890,6 +995,7 @@ final class PaymentReadOnlyViewModelStateTests: XCTestCase {
             phone: "13800000000"
         )
         XCTAssertEqual(empty.state, .empty("未查询到浴室账户"))
+        XCTAssertNil(empty.thirdPartyJSON)
 
         let failed = BathroomAccountViewModel(
             dataSource: FailingBathroomAccountDataSource()
@@ -902,6 +1008,24 @@ final class PaymentReadOnlyViewModelStateTests: XCTestCase {
             failed.state,
             .failed(YCardReadOnlyError.unavailable.localizedDescription)
         )
+        XCTAssertNil(failed.thirdPartyJSON)
+    }
+
+    func testBathroomResetImmediatelyDropsPaymentContext() async {
+        let model = BathroomAccountViewModel(
+            dataSource: ContextBathroomAccountDataSource()
+        )
+
+        await model.lookup(
+            bathroomName: "竹园/龙河",
+            phone: "13800000000"
+        )
+        XCTAssertNotNil(model.thirdPartyJSON)
+
+        model.reset()
+
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertNil(model.thirdPartyJSON)
     }
 }
 
@@ -929,6 +1053,40 @@ final class ElectricityAccountViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedCampus?.name, "校区 B")
         XCTAssertEqual(model.buildings.map(\.name), ["B 楼"])
         XCTAssertFalse(model.isLoading)
+    }
+
+    func testRoomPaymentContextFollowsSelectionAndClearsOnAncestorChange() async throws {
+        let model = ElectricityAccountViewModel(
+            dataSource: ContextElectricityAccountDataSource()
+        )
+        await model.load()
+
+        await model.selectCampus(named: "校区 A")?.value
+        model.selectBuilding(named: "A 楼")
+        try await waitUntil { !model.floors.isEmpty }
+        model.selectFloor(named: "3 层")
+        try await waitUntil { !model.rooms.isEmpty }
+        model.selectRoom(named: "305")
+        try await waitUntil { model.selectedRoom != nil }
+
+        XCTAssertEqual(
+            model.selectedRoomThirdPartyJSON,
+            Data(#"{"revision":"room-305"}"#.utf8)
+        )
+
+        await model.selectCampus(named: "校区 A")?.value
+        XCTAssertNil(model.selectedRoom)
+        XCTAssertNil(model.selectedRoomThirdPartyJSON)
+    }
+
+    private func waitUntil(
+        _ condition: @escaping @MainActor () -> Bool
+    ) async throws {
+        for _ in 0..<100 {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting for electricity selection state")
     }
 }
 
@@ -1038,7 +1196,8 @@ private actor ControllableBathroomAccountDataSource:
                     cashBalance: 20,
                     giftBalance: 2
                 ),
-                message: nil
+                message: nil,
+                thirdPartyJSON: Data(#"{"revision":"new"}"#.utf8)
             )
         }
         firstRequestStarted = true
@@ -1066,7 +1225,8 @@ private actor ControllableBathroomAccountDataSource:
                 cashBalance: 10,
                 giftBalance: 1
             ),
-            message: nil
+            message: nil,
+            thirdPartyJSON: Data(#"{"revision":"old"}"#.utf8)
         ))
         firstRequestContinuation = nil
     }
@@ -1088,6 +1248,74 @@ private struct FailingBathroomAccountDataSource: BathroomAccountDataSource {
     ) async throws -> BathroomLookupResult {
         throw YCardReadOnlyError.unavailable
     }
+}
+
+private struct ContextBathroomAccountDataSource: BathroomAccountDataSource {
+    func lookup(
+        bathroomName: String,
+        phone: String
+    ) async throws -> BathroomLookupResult {
+        BathroomLookupResult(
+            account: BathroomPaymentAccount(
+                id: "bathroom-account",
+                name: bathroomName,
+                phone: phone,
+                cashBalance: 20,
+                giftBalance: 2
+            ),
+            message: nil,
+            thirdPartyJSON: Data(#"{"revision":"current"}"#.utf8)
+        )
+    }
+}
+
+private struct ContextElectricityAccountDataSource: ElectricityAccountDataSource {
+    func campuses() async throws -> [YCardSelectionOption] {
+        [YCardSelectionOption(name: "校区 A", value: "campus-a")]
+    }
+
+    func buildings(
+        campus: YCardSelectionOption
+    ) async throws -> [YCardSelectionOption] {
+        [YCardSelectionOption(name: "A 楼", value: "building-a")]
+    }
+
+    func floors(
+        campus: YCardSelectionOption,
+        building: YCardSelectionOption
+    ) async throws -> [YCardSelectionOption] {
+        [YCardSelectionOption(name: "3 层", value: "floor-3")]
+    }
+
+    func rooms(
+        campus: YCardSelectionOption,
+        building: YCardSelectionOption,
+        floor: YCardSelectionOption
+    ) async throws -> [YCardSelectionOption] {
+        [YCardSelectionOption(name: "305", value: "room-305")]
+    }
+
+    func room(
+        campus: YCardSelectionOption,
+        building: YCardSelectionOption,
+        floor: YCardSelectionOption,
+        room: YCardSelectionOption
+    ) async throws -> ElectricityRoomLookupResult {
+        ElectricityRoomLookupResult(
+            room: ElectricityRoom(
+                id: "electricity-account",
+                campus: campus.name,
+                building: building.name,
+                floor: floor.name,
+                room: room.name,
+                balance: 12.34,
+                information: "房间状态正常"
+            ),
+            thirdPartyJSON: Data(#"{"revision":"room-305"}"#.utf8)
+        )
+    }
+
+    func clearCredentials() async { }
 }
 
 private actor ControllableElectricityAccountDataSource:
@@ -1141,7 +1369,7 @@ private actor ControllableElectricityAccountDataSource:
         building: YCardSelectionOption,
         floor: YCardSelectionOption,
         room: YCardSelectionOption
-    ) async throws -> ElectricityRoom {
+    ) async throws -> ElectricityRoomLookupResult {
         throw YCardReadOnlyError.unavailable
     }
 

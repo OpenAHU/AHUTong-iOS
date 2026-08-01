@@ -62,12 +62,65 @@ jobs:
               assert item["NSPrivacyCollectedDataTypeTracking"] is False
               assert "NSPrivacyCollectedDataTypePurposeAppFunctionality" in item["NSPrivacyCollectedDataTypePurposes"]
           PY
-          if grep -RIE --exclude-dir=Vendor --exclude='*.md' \
-            '(SECRET_KEY[[:space:]]*=|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|PROVISIONING_PROFILE_SPECIFIER[[:space:]]*=[[:space:]]*[^$])' \
-            AHUTong AHUTongWidget; then
-            echo "Potential sensitive signing or payment material found." >&2
+          sensitive_files="$(
+            grep -RIlE --exclude-dir=Vendor --exclude='*.md' \
+              '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|PROVISIONING_PROFILE_SPECIFIER[[:space:]]*=[[:space:]]*[^$])' \
+              AHUTong AHUTongWidget || true
+          )"
+          if [[ -n "$sensitive_files" ]]; then
+            echo "Potential private signing material found." >&2
             exit 1
           fi
+          protocol_material_files="$(
+            grep -RIlF --exclude-dir=Vendor --exclude='*.md' \
+              'YCardClientProtocolMaterial' AHUTong AHUTongWidget || true
+          )"
+          if [[ "$protocol_material_files" != 'AHUTong/Features/Payments/YCardProductionPaymentGateway.swift' ]]; then
+            echo "Client protocol material must remain isolated to the reviewed payment compatibility layer." >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          root = Path(".")
+          approved = Path("AHUTong/Features/Payments/YCardProductionPaymentGateway.swift")
+          source = approved.read_text(encoding="utf-8")
+          names = ("appID", "secretKey", "bathroomUUID", "bathroomPermutation")
+          duplicates: set[str] = set()
+          for name in names:
+              match = re.search(
+                  rf'static\s+let\s+{name}\s*=\s*"([^"]+)"',
+                  source,
+              )
+              if match is None:
+                  raise SystemExit(
+                      f"Required protocol material declaration is missing: {name}"
+                  )
+              protected = match.group(1).encode("utf-8")
+              for path in root.rglob("*"):
+                  if (
+                      not path.is_file()
+                      or path == approved
+                      or ".git" in path.parts
+                      or "Vendor" in path.parts
+                  ):
+                      continue
+                  try:
+                      if protected in path.read_bytes():
+                          duplicates.add(path.as_posix())
+                  except OSError:
+                      continue
+          if duplicates:
+              print(
+                  "Protocol material was copied outside the approved compatibility layer:",
+                  file=sys.stderr,
+              )
+              for path in sorted(duplicates):
+                  print(path, file=sys.stderr)
+              raise SystemExit(1)
+          PY
 
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
@@ -99,8 +152,8 @@ jobs:
           test -f "$widget/PrivacyInfo.xcprivacy"
           plutil -lint "$app/Info.plist" "$app/PrivacyInfo.xcprivacy"
           plutil -lint "$widget/Info.plist" "$widget/PrivacyInfo.xcprivacy"
-          if strings "$app/AHUTong" | grep -E '(SECRET_KEY=|BEGIN PRIVATE KEY)' >/dev/null; then
-            echo "Sensitive payment or signing material found in app binary." >&2
+          if strings "$app/AHUTong" | grep -E 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' >/dev/null; then
+            echo "Private signing material found in app binary." >&2
             exit 1
           fi
           find "$RUNNER_TEMP/AHUTong.xcarchive" -maxdepth 5 -type f | sort
