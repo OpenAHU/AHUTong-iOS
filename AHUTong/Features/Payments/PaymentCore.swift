@@ -183,10 +183,18 @@ struct PendingPayment: Codable, Equatable {
     let orderID: String
 }
 
+struct PendingPaymentSubmission: Codable, Equatable {
+    let feature: PaymentFeature
+    let idempotencyKey: String
+    let requestFingerprint: String
+}
+
 @MainActor
 final class PendingPaymentStore {
     private let defaults: UserDefaults
     private let key: String
+
+    private var submissionKey: String { "\(key).submission" }
 
     init(defaults: UserDefaults = .standard, key: String = "payments.pending-order") {
         self.defaults = defaults
@@ -197,13 +205,34 @@ final class PendingPaymentStore {
         defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(PendingPayment.self, from: $0) }
     }
 
-    func save(_ pending: PendingPayment) {
-        guard let data = try? JSONEncoder().encode(pending) else { return }
+    @discardableResult
+    func save(_ pending: PendingPayment) -> Bool {
+        guard let data = try? JSONEncoder().encode(pending) else { return false }
         defaults.set(data, forKey: key)
+        return load() == pending
     }
 
     func clear() {
         defaults.removeObject(forKey: key)
+    }
+
+    func loadSubmission() -> PendingPaymentSubmission? {
+        defaults.data(forKey: submissionKey).flatMap {
+            try? JSONDecoder().decode(PendingPaymentSubmission.self, from: $0)
+        }
+    }
+
+    @discardableResult
+    func saveSubmission(_ submission: PendingPaymentSubmission) -> Bool {
+        guard let data = try? JSONEncoder().encode(submission) else {
+            return false
+        }
+        defaults.set(data, forKey: submissionKey)
+        return loadSubmission() == submission
+    }
+
+    func clearSubmission() {
+        defaults.removeObject(forKey: submissionKey)
     }
 }
 
@@ -236,10 +265,53 @@ final class PaymentCoordinator: ObservableObject {
             phase = .failed(PaymentGatewayError.featureMismatch.localizedDescription)
             return nil
         }
+        if let pending = pendingStore.load(), pending.feature == feature {
+            await reconcile(orderID: pending.orderID)
+            return nil
+        }
+        let requestFingerprint = Self.fingerprint(for: request)
+        let persistedSubmission = pendingStore.loadSubmission()
+        let resolvedIdempotencyKey: String
+        if let persistedSubmission {
+            guard persistedSubmission.feature == feature,
+                  persistedSubmission.requestFingerprint == requestFingerprint else {
+                phase = .failed(
+                    "上一次建单结果尚未确认，请使用相同的账户、金额和支付方式重试"
+                )
+                return nil
+            }
+            resolvedIdempotencyKey = persistedSubmission.idempotencyKey
+        } else {
+            let submission = PendingPaymentSubmission(
+                feature: feature,
+                idempotencyKey: idempotencyKey,
+                requestFingerprint: requestFingerprint
+            )
+            guard pendingStore.saveSubmission(submission) else {
+                phase = .failed("无法安全保存支付请求状态，未发起建单请求")
+                return nil
+            }
+            resolvedIdempotencyKey = idempotencyKey
+        }
+        var recoverableOrderID: String?
         phase = .creating
         do {
-            let order = try await gateway.createOrder(request: request, idempotencyKey: idempotencyKey)
-            pendingStore.save(PendingPayment(feature: feature, orderID: order.id))
+            let order = try await gateway.createOrder(
+                request: request,
+                idempotencyKey: resolvedIdempotencyKey
+            )
+            recoverableOrderID = order.id
+            guard pendingStore.save(PendingPayment(
+                feature: feature,
+                orderID: order.id
+            )) else {
+                phase = .unknown(
+                    order.id,
+                    "订单已创建但本机状态未能安全保存，请勿重复提交"
+                )
+                return nil
+            }
+            pendingStore.clearSubmission()
             if let externalURL = order.externalURL {
                 phase = .awaitingExternal(order.id)
                 return externalURL
@@ -249,11 +321,27 @@ final class PaymentCoordinator: ObservableObject {
             await apply(confirmation, orderID: order.id, reconcilePending: true)
             return nil
         } catch is CancellationError {
-            phase = .cancelled
-            pendingStore.clear()
+            if let recoverableOrderID {
+                phase = .unknown(
+                    recoverableOrderID,
+                    "操作已中断，订单结果待核验，请勿重复提交"
+                )
+            } else {
+                phase = .cancelled
+            }
             return nil
         } catch {
-            phase = .failed(error.localizedDescription)
+            if let recoverableOrderID {
+                phase = .unknown(
+                    recoverableOrderID,
+                    "订单已创建但结果未确认，请稍后核验，勿重复提交"
+                )
+            } else {
+                if Self.isDefinitePreflightFailure(error) {
+                    pendingStore.clearSubmission()
+                }
+                phase = .failed(Self.safeInitialFailureMessage(error))
+            }
             return nil
         }
     }
@@ -274,10 +362,17 @@ final class PaymentCoordinator: ObservableObject {
     func cancel() async {
         let orderID: String?
         switch phase {
-        case let .confirming(id), let .awaitingExternal(id), let .reconciling(id): orderID = id
+        case let .confirming(id),
+             let .awaitingExternal(id),
+             let .reconciling(id),
+             let .unknown(id, _):
+            orderID = id
         default: orderID = pendingStore.load()?.orderID
         }
-        if let orderID { await gateway.cancel(orderID: orderID) }
+        if let orderID {
+            await gateway.cancel(orderID: orderID)
+            pendingStore.clearSubmission()
+        }
         pendingStore.clear()
         phase = .cancelled
     }
@@ -292,17 +387,68 @@ final class PaymentCoordinator: ObservableObject {
         do {
             await apply(try await gateway.status(orderID: orderID), orderID: orderID, reconcilePending: false)
         } catch {
-            phase = .unknown(orderID, error.localizedDescription)
+            phase = .unknown(
+                orderID,
+                "订单状态暂时无法核验，请稍后重试，勿重复提交"
+            )
         }
+    }
+
+    private static func safeInitialFailureMessage(_ error: Error) -> String {
+        guard let gatewayError = error as? PaymentGatewayError else {
+            return "支付服务暂不可用，未发起扣款"
+        }
+        switch gatewayError {
+        case .safetyServiceUnavailable,
+             .timedOut,
+             .invalidResponse,
+             .featureMismatch:
+            return gatewayError.localizedDescription
+        case .server:
+            return "支付服务暂不可用，未发起扣款"
+        }
+    }
+
+    private static func isDefinitePreflightFailure(_ error: Error) -> Bool {
+        guard let gatewayError = error as? PaymentGatewayError else {
+            return false
+        }
+        switch gatewayError {
+        case .safetyServiceUnavailable, .featureMismatch:
+            return true
+        case .timedOut, .invalidResponse, .server:
+            return false
+        }
+    }
+
+    private static func fingerprint(for request: PaymentRequest) -> String {
+        // Authorization is intentionally excluded: it is transient confirmation
+        // material and must never be persisted, even as part of an attempt record.
+        let fields = [
+            "v1",
+            request.feature.rawValue,
+            request.method.rawValue,
+            request.amount.text,
+            request.accountID,
+            request.accountLabel
+        ]
+        let canonical = fields.map { field in
+            "\(field.utf8.count):\(field)"
+        }.joined(separator: "|")
+        return SHA256.hash(data: Data(canonical.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 
     private func apply(_ status: PaymentOrderStatus, orderID: String, reconcilePending: Bool) async {
         switch status {
         case let .confirmed(message):
             pendingStore.clear()
+            pendingStore.clearSubmission()
             phase = .succeeded(orderID, message)
         case let .rejected(message):
             pendingStore.clear()
+            pendingStore.clearSubmission()
             phase = .failed(message)
         case let .pending(message), let .unknown(message):
             if reconcilePending {
@@ -422,9 +568,28 @@ struct ElectricityRoom: Identifiable, Equatable, Sendable {
     let building: String
     let floor: String
     let room: String
-    let balance: Decimal
+    let balance: Decimal?
+    let information: String?
 
     var label: String { "\(campus) · \(building) · \(floor) · \(room)" }
+
+    init(
+        id: String,
+        campus: String,
+        building: String,
+        floor: String,
+        room: String,
+        balance: Decimal?,
+        information: String? = nil
+    ) {
+        self.id = id
+        self.campus = campus
+        self.building = building
+        self.floor = floor
+        self.room = room
+        self.balance = balance
+        self.information = information
+    }
 }
 
 enum PaymentDemoCatalog {

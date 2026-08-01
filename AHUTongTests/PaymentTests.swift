@@ -118,6 +118,34 @@ final class PaymentCoordinatorTests: XCTestCase {
         }
     }
 
+    func testTerminalReconciliationClearsSubmissionLeftByCrashWindow() async {
+        let store = makePendingStore()
+        store.save(PendingPayment(
+            feature: .cardRecharge,
+            orderID: "CRASH-WINDOW-1"
+        ))
+        store.saveSubmission(PendingPaymentSubmission(
+            feature: .cardRecharge,
+            idempotencyKey: "crash-window-key",
+            requestFingerprint: "test-fingerprint"
+        ))
+        let coordinator = PaymentCoordinator(
+            feature: .cardRecharge,
+            gateway: CountingPaymentGateway(),
+            pendingStore: store
+        )
+
+        await coordinator.resumePendingOrder()
+
+        guard case .succeeded = coordinator.phase else {
+            return XCTFail(
+                "Terminal reconciliation must recover the pending order, got \(coordinator.phase)"
+            )
+        }
+        XCTAssertNil(store.load())
+        XCTAssertNil(store.loadSubmission())
+    }
+
     func testDuplicateSubmissionIsIgnoredWhileRequestIsInFlight() async throws {
         let gateway = CountingPaymentGateway()
         let coordinator = makeCoordinator(feature: .cardRecharge, gateway: gateway)
@@ -172,6 +200,141 @@ final class PaymentCoordinatorTests: XCTestCase {
         _ = await coordinator.submit(try request(feature: .cardRecharge, method: .alipay))
         await coordinator.cancel()
         XCTAssertEqual(coordinator.phase, .cancelled)
+        XCTAssertNil(store.load())
+    }
+
+    func testCancellationAfterOrderCreationKeepsPendingOrderRecoverable() async throws {
+        let store = makePendingStore()
+        let gateway = ConfirmSuspendingPaymentGateway()
+        let coordinator = PaymentCoordinator(
+            feature: .cardRecharge,
+            gateway: gateway,
+            pendingStore: store
+        )
+        let paymentRequest = try request(
+            feature: .cardRecharge,
+            method: .bankCard
+        )
+
+        let submission = Task {
+            await coordinator.submit(paymentRequest)
+        }
+        await gateway.waitUntilConfirmEntered()
+        XCTAssertEqual(store.load()?.orderID, "CANCEL-1")
+
+        submission.cancel()
+        _ = await submission.value
+
+        guard case let .unknown(orderID, message) = coordinator.phase else {
+            return XCTFail(
+                "Cancellation after order creation must remain recoverable, got \(coordinator.phase)"
+            )
+        }
+        XCTAssertEqual(orderID, "CANCEL-1")
+        XCTAssertTrue(message.contains("待核验"))
+        XCTAssertEqual(store.load()?.orderID, orderID)
+
+        let restored = PaymentCoordinator(
+            feature: .cardRecharge,
+            gateway: gateway,
+            pendingStore: store
+        )
+        await restored.resumePendingOrder()
+        guard case .succeeded = restored.phase else {
+            return XCTFail("Expected restored order to reconcile, got \(restored.phase)")
+        }
+        XCTAssertNil(store.load())
+    }
+
+    func testFailureAfterOrderCreationCannotLeakOrCreateDuplicateOrder() async throws {
+        let store = makePendingStore()
+        let gateway = ConfirmFailingPaymentGateway()
+        let coordinator = PaymentCoordinator(
+            feature: .cardRecharge,
+            gateway: gateway,
+            pendingStore: store
+        )
+        let paymentRequest = try request(
+            feature: .cardRecharge,
+            method: .bankCard
+        )
+
+        await coordinator.submit(paymentRequest)
+
+        guard case let .unknown(orderID, message) = coordinator.phase else {
+            return XCTFail(
+                "Post-create transport failure must remain recoverable, got \(coordinator.phase)"
+            )
+        }
+        XCTAssertEqual(orderID, "RECOVERABLE-1")
+        XCTAssertFalse(message.contains("private-token"))
+        XCTAssertEqual(store.load()?.orderID, orderID)
+
+        coordinator.reset()
+        await coordinator.submit(paymentRequest)
+
+        let createCount = await gateway.createCount
+        XCTAssertEqual(createCount, 1)
+        guard case .succeeded = coordinator.phase else {
+            return XCTFail(
+                "A resubmission must reconcile the pending order, got \(coordinator.phase)"
+            )
+        }
+        XCTAssertNil(store.load())
+    }
+
+    func testLostCreateResponseReusesPersistedIdempotencyKeyAfterRecreation() async throws {
+        let store = makePendingStore()
+        let gateway = CreateResponseLostPaymentGateway()
+        let paymentRequest = try request(
+            feature: .bathroom,
+            method: .campusAccount
+        )
+        let first = PaymentCoordinator(
+            feature: .bathroom,
+            gateway: gateway,
+            pendingStore: store
+        )
+
+        await first.submit(
+            paymentRequest,
+            idempotencyKey: "persisted-attempt-key"
+        )
+
+        guard case .failed = first.phase else {
+            return XCTFail(
+                "A lost create response must not be reported as success, got \(first.phase)"
+            )
+        }
+        XCTAssertNil(store.load())
+        XCTAssertEqual(
+            store.loadSubmission()?.idempotencyKey,
+            "persisted-attempt-key"
+        )
+
+        let restored = PaymentCoordinator(
+            feature: .bathroom,
+            gateway: gateway,
+            pendingStore: store
+        )
+        await restored.submit(
+            paymentRequest,
+            idempotencyKey: "must-not-replace-persisted-key"
+        )
+
+        let receivedKeys = await gateway.receivedIdempotencyKeys
+        let createdOrderCount = await gateway.createdOrderCount
+        XCTAssertEqual(
+            receivedKeys,
+            ["persisted-attempt-key", "persisted-attempt-key"]
+        )
+        XCTAssertEqual(createdOrderCount, 1)
+        guard case .succeeded = restored.phase else {
+            return XCTFail(
+                "Retry with the persisted key must recover the existing order, got \(restored.phase)"
+            )
+        }
+        XCTAssertNil(store.loadSubmission())
         XCTAssertNil(store.load())
     }
 
@@ -262,6 +425,103 @@ private actor CountingPaymentGateway: PaymentGateway {
 
     func status(orderID: String) async throws -> PaymentOrderStatus {
         .confirmed("已确认")
+    }
+
+    func cancel(orderID: String) async { }
+}
+
+private actor ConfirmSuspendingPaymentGateway: PaymentGateway {
+    private var confirmEntered = false
+    private var confirmWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func createOrder(
+        request: PaymentRequest,
+        idempotencyKey: String
+    ) async throws -> PaymentOrder {
+        PaymentOrder(id: "CANCEL-1", externalURL: nil)
+    }
+
+    func confirm(
+        orderID: String,
+        authorization: String?
+    ) async throws -> PaymentOrderStatus {
+        confirmEntered = true
+        let waiters = confirmWaiters
+        confirmWaiters.removeAll(keepingCapacity: false)
+        waiters.forEach { $0.resume() }
+        try await Task.sleep(for: .seconds(30))
+        return .pending("等待核验")
+    }
+
+    func status(orderID: String) async throws -> PaymentOrderStatus {
+        .confirmed("已恢复确认")
+    }
+
+    func cancel(orderID: String) async { }
+
+    func waitUntilConfirmEntered() async {
+        guard !confirmEntered else { return }
+        await withCheckedContinuation { continuation in
+            confirmWaiters.append(continuation)
+        }
+    }
+}
+
+private actor ConfirmFailingPaymentGateway: PaymentGateway {
+    private(set) var createCount = 0
+
+    func createOrder(
+        request: PaymentRequest,
+        idempotencyKey: String
+    ) async throws -> PaymentOrder {
+        createCount += 1
+        return PaymentOrder(id: "RECOVERABLE-1", externalURL: nil)
+    }
+
+    func confirm(
+        orderID: String,
+        authorization: String?
+    ) async throws -> PaymentOrderStatus {
+        throw PaymentGatewayError.server("token=private-token")
+    }
+
+    func status(orderID: String) async throws -> PaymentOrderStatus {
+        .confirmed("已恢复确认")
+    }
+
+    func cancel(orderID: String) async { }
+}
+
+private actor CreateResponseLostPaymentGateway: PaymentGateway {
+    private var ordersByIdempotencyKey: [String: PaymentOrder] = [:]
+    private(set) var receivedIdempotencyKeys: [String] = []
+    private(set) var createdOrderCount = 0
+
+    func createOrder(
+        request: PaymentRequest,
+        idempotencyKey: String
+    ) async throws -> PaymentOrder {
+        receivedIdempotencyKeys.append(idempotencyKey)
+        if let existing = ordersByIdempotencyKey[idempotencyKey] {
+            return existing
+        }
+
+        createdOrderCount += 1
+        let order = PaymentOrder(id: "LOST-CREATE-1", externalURL: nil)
+        ordersByIdempotencyKey[idempotencyKey] = order
+        // The server has committed the order, but the first response is lost.
+        throw URLError(.networkConnectionLost)
+    }
+
+    func confirm(
+        orderID: String,
+        authorization: String?
+    ) async throws -> PaymentOrderStatus {
+        .confirmed("已确认且未重复建单")
+    }
+
+    func status(orderID: String) async throws -> PaymentOrderStatus {
+        .confirmed("已恢复确认")
     }
 
     func cancel(orderID: String) async { }

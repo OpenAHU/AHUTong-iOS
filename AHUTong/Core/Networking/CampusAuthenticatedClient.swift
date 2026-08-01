@@ -35,9 +35,23 @@ struct CampusCookie: Codable, Equatable, Sendable {
         let host = url.host?.lowercased() ?? ""
         let normalizedDomain = domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
         let matchesDomain = host == normalizedDomain || host.hasSuffix(".\(normalizedDomain)")
-        let matchesPath = url.path.hasPrefix(path ?? "/")
+        let requestPath = url.path.isEmpty ? "/" : url.path
+        let cookiePath = Self.normalizedPath(path)
+        let matchesPath = requestPath == cookiePath
+            || (requestPath.hasPrefix(cookiePath)
+                && (cookiePath.hasSuffix("/")
+                    || requestPath.dropFirst(cookiePath.count).first == "/"))
         let matchesSecurity = secure != true || url.scheme?.lowercased() == "https"
         return matchesDomain && matchesPath && matchesSecurity
+    }
+
+    static func normalizedPath(_ path: String?) -> String {
+        guard let path,
+              !path.isEmpty,
+              path.hasPrefix("/") else {
+            return "/"
+        }
+        return path
     }
 
     func isScoped(to serviceURL: URL) -> Bool {
@@ -57,6 +71,76 @@ struct CampusCookie: Codable, Equatable, Sendable {
         return normalizedServicePath == normalizedCookiePath
             || normalizedServicePath.hasPrefix("\(normalizedCookiePath)/")
     }
+}
+
+enum CampusCookieResponsePolicy {
+    static func merge(
+        _ received: [HTTPCookie],
+        into cookies: inout [CampusCookie],
+        now: Date = Date(),
+        identityIsAllowed: (CampusCookie) -> Bool = { _ in true },
+        storedCookieIsAllowed: (CampusCookie) -> Bool = { _ in true }
+    ) {
+        for receivedCookie in received {
+            let cookie = CampusCookie(
+                name: receivedCookie.name,
+                value: receivedCookie.value,
+                domain: receivedCookie.domain,
+                path: receivedCookie.path,
+                secure: receivedCookie.isSecure,
+                httpOnly: receivedCookie.properties?[
+                    HTTPCookiePropertyKey(rawValue: "HttpOnly")
+                ] != nil
+            )
+            guard identityIsAllowed(cookie) else { continue }
+            cookies.removeAll { hasSameIdentity($0, cookie) }
+            guard !shouldDelete(receivedCookie, now: now),
+                  storedCookieIsAllowed(cookie) else {
+                continue
+            }
+            cookies.append(cookie)
+        }
+    }
+
+    static func shouldDelete(
+        _ cookie: HTTPCookie,
+        now: Date = Date()
+    ) -> Bool {
+        if cookie.value.isEmpty { return true }
+        if let expiresDate = cookie.expiresDate, expiresDate <= now {
+            return true
+        }
+        guard let maximumAge = cookie.properties?[.maximumAge] else {
+            return false
+        }
+        if let value = maximumAge as? NSNumber {
+            return value.doubleValue <= 0
+        }
+        if let value = maximumAge as? String,
+           let seconds = Double(value.trimmingCharacters(
+               in: .whitespacesAndNewlines
+           )) {
+            return seconds <= 0
+        }
+        return false
+    }
+
+    private static func hasSameIdentity(
+        _ lhs: CampusCookie,
+        _ rhs: CampusCookie
+    ) -> Bool {
+        lhs.name == rhs.name
+            && normalizedDomain(lhs.domain) == normalizedDomain(rhs.domain)
+            && CampusCookie.normalizedPath(lhs.path)
+                == CampusCookie.normalizedPath(rhs.path)
+    }
+
+    private static func normalizedDomain(_ value: String) -> String {
+        value.lowercased().trimmingCharacters(
+            in: CharacterSet(charactersIn: ".")
+        )
+    }
+
 }
 
 struct CampusHTTPResponse: Sendable {
@@ -255,22 +339,7 @@ actor CampusAuthenticatedClient {
         guard !received.isEmpty else { return }
 
         var merged = existing
-        for cookie in received {
-            let updated = CampusCookie(
-                name: cookie.name,
-                value: cookie.value,
-                domain: cookie.domain,
-                path: cookie.path,
-                secure: cookie.isSecure,
-                httpOnly: cookie.properties?[HTTPCookiePropertyKey(rawValue: "HttpOnly")] != nil
-            )
-            merged.removeAll {
-                $0.name == updated.name
-                    && $0.domain.caseInsensitiveCompare(updated.domain) == .orderedSame
-                    && ($0.path ?? "/") == (updated.path ?? "/")
-            }
-            merged.append(updated)
-        }
+        CampusCookieResponsePolicy.merge(received, into: &merged)
         let json = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
         try await campusAPI.initialize(cookiesJSON: json)
         try await campusAPI.persistSessionCookies()

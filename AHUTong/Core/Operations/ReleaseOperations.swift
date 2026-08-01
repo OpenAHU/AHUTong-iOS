@@ -271,9 +271,27 @@ struct RedactingLogger: Sendable {
     }
 
     static func sanitize(_ message: String) -> String {
-        var value = message.replacingOccurrences(
-            of: #"(?i)(password|token|cookie|authorization|secret|student(?:id)?|phone)=([^&\s]+)"#,
-            with: "$1=<redacted>",
+        var value = message
+        for _ in 0..<3 {
+            guard let decoded = value.removingPercentEncoding,
+                  decoded != value else {
+                break
+            }
+            value = decoded
+        }
+        value = value.replacingOccurrences(
+            of: #"(?im)(\b(?:authorization|proxy-authorization|cookie|set-cookie|synjones-auth|x-ahutong-token)\s*[:=]\s*)[^\r\n]+"#,
+            with: "$1<redacted>",
+            options: .regularExpression
+        )
+        value = value.replacingOccurrences(
+            of: #"(?i)([\"']?(?:password|token|cookie|authorization|secret|student(?:id)?|phone|synjones-auth|ticket|x-ahutong-token)[\"']?\s*:\s*)(?:[\"'][^\"'\r\n]*[\"']|[^,}\]\s]+)"#,
+            with: "$1\"<redacted>\"",
+            options: .regularExpression
+        )
+        value = value.replacingOccurrences(
+            of: #"(?i)((?:password|token|cookie|authorization|secret|student(?:id)?|phone|synjones-auth|ticket|x-ahutong-token)\s*=)[^&\s]+"#,
+            with: "$1<redacted>",
             options: .regularExpression
         )
         value = value.replacingOccurrences(

@@ -29,7 +29,10 @@ final class CMBRechargeSecurityTests: XCTestCase {
             try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn/charge-app/"))
         ))
         XCTAssertTrue(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
-            try XCTUnwrap(URL(string: "https://ahu.edu.cn/"))
+            try XCTUnwrap(URL(string: "https://epay92.ahu.edu.cn/"))
+        ))
+        XCTAssertFalse(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
+            try XCTUnwrap(URL(string: "https://pay.ahu.edu.cn/"))
         ))
         XCTAssertFalse(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
             try XCTUnwrap(URL(string: "https://ahu.edu.cn.attacker.example/"))
@@ -159,7 +162,10 @@ final class CMBRechargeSecurityTests: XCTestCase {
             for: try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn/cashier-mobile/charge"))
         ))
         XCTAssertTrue(CMBRechargeWebStyle.shouldInject(
-            for: try XCTUnwrap(URL(string: "https://pay.ahu.edu.cn/charge-app/index"))
+            for: try XCTUnwrap(URL(string: "https://epay92.ahu.edu.cn/charge-app/index"))
+        ))
+        XCTAssertFalse(CMBRechargeWebStyle.shouldInject(
+            for: try XCTUnwrap(URL(string: "https://epay92.ahu.edu.cn/fake/charge-app-result"))
         ))
         XCTAssertFalse(CMBRechargeWebStyle.shouldInject(
             for: try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn/berserker-base/redirect"))

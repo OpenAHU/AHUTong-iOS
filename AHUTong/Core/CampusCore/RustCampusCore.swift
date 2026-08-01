@@ -4,7 +4,6 @@ private struct RustServerDescriptor: Decodable {
     let ok: Bool
     let port: UInt16?
     let token: String?
-    let error: String?
 }
 
 private struct CookieDump: Decodable {
@@ -16,6 +15,24 @@ private struct CampusCardTokenResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
+    }
+}
+
+enum RustCampusServiceErrorMapper {
+    static func message(from data: Data) -> String? {
+        guard let value = try? JSONSerialization.jsonObject(with: data)
+                as? [String: Any],
+              let code = value["error"] as? String else {
+            return nil
+        }
+        return switch code {
+        case "campus_service_error":
+            "校园服务暂不可用，请稍后重试"
+        case "campus_service_unavailable":
+            "学校服务当前不可用，请稍后重试"
+        default:
+            nil
+        }
     }
 }
 
@@ -43,7 +60,7 @@ actor RustLocalServer {
               let port = decoded.port,
               let token = decoded.token,
               let url = URL(string: "http://127.0.0.1:\(port)") else {
-            throw CampusCoreError.serverStartup(decoded.error ?? "未知错误")
+            throw CampusCoreError.serverStartup("本地校园服务未能安全启动")
         }
         descriptor = decoded
         return (url, token)
@@ -236,15 +253,11 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         }
         if response.statusCode == 401 { throw CampusCoreError.unauthorized }
         guard (200..<300).contains(response.statusCode) else {
-            let message = Self.errorMessage(from: data) ?? "校园服务请求失败（\(response.statusCode)）"
+            let message = RustCampusServiceErrorMapper.message(from: data)
+                ?? "校园服务请求失败（\(response.statusCode)）"
             throw CampusCoreError.campus(message)
         }
         return data
-    }
-
-    private static func errorMessage(from data: Data) -> String? {
-        guard let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return value["error"] as? String
     }
 
     private static func findWeek(in value: Any) -> Int? {

@@ -61,7 +61,37 @@ jobs:
             --output /dev/null \
             'https://ycard.ahu.edu.cn/berserker-auth/cas/redirect/neusoftCas?targetUrl=https%3A%2F%2Fycard.ahu.edu.cn%2Fplat%2F%3Fname%3DloginTransit'
           grep -Eq '^HTTP/[^ ]+ 302' "$headers"
-          grep -Eiq '^location: https://ycard\.ahu\.edu\.cn/berserker-auth/cas/login/neusoftCas' "$headers"
+          python3 - "$headers" <<'PY'
+          import sys
+          from pathlib import Path
+          from urllib.parse import parse_qsl, urlsplit
+
+          lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+          locations = [
+              line.split(":", 1)[1].strip()
+              for line in lines
+              if line.lower().startswith("location:")
+          ]
+          assert len(locations) == 1
+          redirect = urlsplit(locations[0])
+          assert redirect.scheme == "https"
+          assert redirect.hostname == "ycard.ahu.edu.cn"
+          assert redirect.port in (None, 443)
+          assert redirect.username is None and redirect.password is None
+          assert redirect.path == "/berserker-auth/cas/login/neusoftCas"
+          assert redirect.fragment == ""
+          outer = parse_qsl(redirect.query, keep_blank_values=True)
+          assert len(outer) == 1 and outer[0][0] == "redirectUrl"
+          target = urlsplit(outer[0][1])
+          assert target.scheme == "https"
+          assert target.hostname == "ycard.ahu.edu.cn"
+          assert target.port in (None, 443)
+          assert target.username is None and target.password is None
+          assert target.path == "/plat/" and target.fragment == ""
+          assert parse_qsl(target.query, keep_blank_values=True) == [
+              ("name", "loginTransit")
+          ]
+          PY
 
       - name: Generate Xcode project
         run: |

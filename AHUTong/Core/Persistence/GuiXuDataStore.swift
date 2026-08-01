@@ -4,14 +4,14 @@ import Foundation
 enum GuiXuPersistenceError: Error, LocalizedError, Equatable {
     case ffiDidNotReturn
     case invalidResponse
-    case operationFailed(String)
+    case operationFailed
     case corruptValue
 
     var errorDescription: String? {
         switch self {
         case .ffiDidNotReturn: "GuiXu FFI 未返回结果"
         case .invalidResponse: "GuiXu FFI 返回了无效数据"
-        case let .operationFailed(message): "GuiXu 持久化失败：\(message)"
+        case .operationFailed: "GuiXu 持久化操作失败"
         case .corruptValue: "GuiXu 中的缓存数据已损坏"
         }
     }
@@ -20,7 +20,6 @@ enum GuiXuPersistenceError: Error, LocalizedError, Equatable {
 private struct GuiXuFFIResponse<Value: Decodable>: Decodable {
     let ok: Bool
     let value: Value?
-    let error: String?
 }
 
 actor RustPersistenceCoordinator {
@@ -103,7 +102,7 @@ actor RustPersistenceCoordinator {
             throw GuiXuPersistenceError.invalidResponse
         }
         guard response.ok else {
-            throw GuiXuPersistenceError.operationFailed(response.error ?? "未知错误")
+            throw GuiXuPersistenceError.operationFailed
         }
         return response.value
     }

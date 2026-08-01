@@ -35,7 +35,46 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         )
 
         XCTAssertTrue(cookie.matches(try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student/home"))))
+        XCTAssertTrue(cookie.matches(try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student"))))
+        XCTAssertFalse(cookie.matches(try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student-records"))))
         XCTAssertFalse(cookie.matches(try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/teacher/home"))))
+    }
+
+    func testEmptyAndRelativePathsUseRootIdentityWhenDeletingCookies() throws {
+        var cookies = [
+            CampusCookie(
+                name: "EMPTY_PATH",
+                value: "old",
+                domain: "jw.ahu.edu.cn",
+                path: "",
+                secure: true,
+                httpOnly: true
+            ),
+            CampusCookie(
+                name: "RELATIVE_PATH",
+                value: "old",
+                domain: "jw.ahu.edu.cn",
+                path: "student",
+                secure: true,
+                httpOnly: true
+            )
+        ]
+        let deletions = try ["EMPTY_PATH", "RELATIVE_PATH"].map { name in
+            try XCTUnwrap(HTTPCookie(properties: [
+                .name: name,
+                .value: "",
+                .domain: "jw.ahu.edu.cn",
+                .path: "/",
+                .secure: "TRUE"
+            ]))
+        }
+
+        CampusCookieResponsePolicy.merge(deletions, into: &cookies)
+
+        XCTAssertTrue(cookies.isEmpty)
+        XCTAssertEqual(CampusCookie.normalizedPath(""), "/")
+        XCTAssertEqual(CampusCookie.normalizedPath("student"), "/")
+        XCTAssertEqual(CampusCookie.normalizedPath("/student"), "/student")
     }
 
     func testBlockingRedirectReturnsResponseAndSendsMatchingCookieAndHeaders() async throws {
@@ -130,6 +169,56 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         XCTAssertEqual(Set(cookies.map(\.name)), Set(["OLD", "NEW"]))
         XCTAssertEqual(cookies.first(where: { $0.name == "NEW" })?.value, "fresh")
         XCTAssertEqual(persistCount, 1)
+    }
+
+    func testExpiredAndEmptySetCookieDeleteMatchingCookieWithoutAppending() async throws {
+        let api = CampusAuthenticatedClientAPIStub(
+            cookies: """
+            [
+              {"name":"EMPTY","value":"old","domain":"jw.ahu.edu.cn","path":"/","secure":true},
+              {"name":"EXPIRED","value":"old","domain":"jw.ahu.edu.cn","path":"/","secure":true}
+            ]
+            """
+        )
+        let client = CampusAuthenticatedClient(
+            campusAPI: api,
+            session: Self.makeSession()
+        )
+        let requestCount = CampusTestLockedBox(0)
+        CampusTestURLProtocol.handler = { request in
+            let count = requestCount.withValue {
+                $0 += 1
+                return $0
+            }
+            let setCookie = count == 1
+                ? "EMPTY=; Path=/; Max-Age=0; Secure"
+                : "EXPIRED=ignored; Path=/; "
+                    + "Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure"
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Set-Cookie": setCookie]
+                )!,
+                Data("ok".utf8)
+            )
+        }
+
+        let url = try XCTUnwrap(URL(
+            string: "https://jw.ahu.edu.cn/student/home"
+        ))
+        _ = try await client.data(url: url)
+        _ = try await client.data(url: url)
+
+        let initializedValue = await api.lastInitializedCookies()
+        let initialized = try XCTUnwrap(initializedValue)
+        let cookies = try JSONDecoder().decode(
+            [CampusCookie].self,
+            from: Data(initialized.utf8)
+        )
+        XCTAssertTrue(cookies.isEmpty)
+        XCTAssertFalse(cookies.contains(where: { $0.value.isEmpty }))
     }
 
     func testLoginRedirectIsUnauthorizedWhenRefreshIsDisabled() async throws {

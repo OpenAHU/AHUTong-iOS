@@ -3,6 +3,14 @@ import XCTest
 @testable import AHUTong
 
 final class GuiXuDataStoreTests: XCTestCase {
+    func testPersistenceFailureMessageNeverIncludesFFIDetails() {
+        let message = GuiXuPersistenceError.operationFailed.localizedDescription
+
+        XCTAssertEqual(message, "GuiXu 持久化操作失败")
+        XCTAssertFalse(message.contains("/private/"))
+        XCTAssertFalse(message.contains("database"))
+    }
+
     @MainActor
     func testGuiXuRoundTripReopenAccountIsolationAndClear() async throws {
         let root = FileManager.default.temporaryDirectory

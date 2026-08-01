@@ -6,15 +6,15 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| 总体状态 | 已按 Android `2c33b0b` 重新全量审计；26 / 26 个切片均有 iOS 客户端实现或安全平台替代，原生四类扣款与对账仍受 D-005、R-003、R-004 外部阻塞 |
-| 当前里程碑 | Android 3.2.0 新增教学评价、招商银行充值、网费充值及既有切片扩展已完成代码、测试、macOS CI、IPA、Archive 与文档闭环 |
-| 当前焦点 | 用户在 iPhone 13 Pro 用授权校园账号验证招商银行网页链路；推动四类原生扣款所需的服务端安全网关与受控沙箱 |
-| 下一步 | 完成 PAY-04 授权账号/物理 iPhone 验收；取得 D-005、R-003、R-004 后分别验收 PAY-01、PAY-02、PAY-03、PAY-05 |
+| 总体状态 | 已按 Android `2c33b0b` 完成 26 / 26 个切片的客户端实现或安全平台替代；本轮补齐 PAY-01～03 真实只读数据链、PAY-04 原生 HEAD 扣款前验收与支付诊断隐私边界；PAY-01、PAY-02、PAY-03、PAY-05 最终原生扣款仍受 D-005、R-003、R-004 外部阻塞，PAY-04 仍待物理 iPhone 授权账号验收 |
+| 当前里程碑 | 支付只读查询、扣款前安全验收、取消后订单恢复及 Swift/Rust/GuiXu 诊断脱敏已完成实现和本地测试，macOS CI、IPA 与 Archive 证据正在本分支收口 |
+| 当前焦点 | 用户在 iPhone 13 Pro 使用获授权校园账号验证 PAY-01～05 的只读/HEAD 链路；推动 PAY-01、PAY-02、PAY-03、PAY-05 所需的安全网关、材料轮换与受控沙箱 |
+| 下一步 | 完成本分支 macOS 最终验证，并按 `payment-device-acceptance.md` 形成脱敏真机记录；PAY-04 只有取得真实账号到扣款前路由的物理机证据后才能转为已完成 |
 | 客户端实现覆盖 | 26 / 26（100%）；表示功能代码或安全平台替代已经落地，不等于真实扣款已验收 |
 | Android 生产行为对齐 | 22 / 26（84.6%）；PAY-01、PAY-02、PAY-03、PAY-05 的原生扣款无法在缺少安全网关与授权沙箱时等价实现 |
 | 严格完成定义 | 21 / 26（80.8%）；仅 PAY-04 仍缺授权账号/物理 iPhone 证据，PAY-01、PAY-02、PAY-03、PAY-05 因外部安全网关与沙箱阻塞 |
 | 当前分支 | `codex/fix/final-migration-gaps` |
-| 最近更新 | 2026-07-26 |
+| 最近更新 | 2026-08-01 |
 
 ## 1. 目标与边界
 
@@ -141,7 +141,7 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
   → App Shell、课表和首页
   → 学业工具与低风险校园服务
   → ycard 鉴权与支付安全门槛
-  → 三类支付与写操作
+  → 五个支付切片与写操作
   → WidgetKit、课程提醒和 Live Activity
   → 发布、隐私与质量验收
 ```
@@ -196,7 +196,7 @@ iOS/
 | D-002 | iOS 子仓许可证是否与 AIO 的 GPL-3.0 一致 | 待确认 | 发布前必须有明确许可证与第三方声明 |
 | D-003 | Rust crate 是否支持 Apple target、staticlib/XCFramework 及 C ABI/UniFFI | 已完成 spike 与持久化适配 | SDK `e826156` 在原 Simulator/device `staticlib` 基础上补齐 GuiXu 初始化、KV 增删查清、结构化错误和 panic 边界；本阶段不额外封装 XCFramework，构建脚本按 Apple target 选择静态库 |
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 已确定开发期方案 | C ABI 负责生命周期及 GuiXu 持久化/KV；业务请求继续使用带随机 token 的 localhost Rust server + Swift `URLSession`，只开放 loopback，保留未来逐接口直连 FFI 的替换边界 |
-| D-005 | 支付签名与客户端凭据的服务端化、轮换方案 | 阻塞原生支付 | 2026-07-16 再次检索 OpenAHU 组织的服务端/API 仓库与代码，只找到 Android/Rust SDK 的校卡上游调用，未找到可接入的签名/对账网关；现以学校官方 HTTPS 页面提供真实生产入口，但原生三类支付仍须负责人轮换已暴露材料并提供网关 URL、鉴权契约及授权测试环境 |
+| D-005 | 支付签名、客户端凭据与原生 OAuth 引导的服务端化、轮换方案 | 阻塞原生支付 | PAY-01、PAY-03、PAY-05 的最终原生扣款仍依赖不应下放到客户端的签名或密码映射能力；PAY-02 的旧直连密码协议也缺少服务端持有的幂等、恢复、对账和受控沙箱。原生包内嵌的 OAuth confidential-client 材料无法通过 Plist、Keychain、混淆或日志清理变成秘密。解除条件是负责人轮换已有材料，学校提供 public native client + PKCE 或受控 broker，并提供签名/对账网关、最小权限鉴权契约及授权测试环境 |
 | D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `29537917170` 在 Xcode 26.5、iPhone 13 Pro / iOS 26.5 Simulator 上通过 142 个单元测试与 6 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-78`。设备 run `29537917146` 与 Archive run `29537917347` 成功；物理 iPhone 13 Pro 的真实校园账号数据由用户验证 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 已确定当前方案 | 当前不集成第三方崩溃、统计或广告 SDK；灰度只向自有端点发送不可逆账号摘要并提供本地兜底；未来新增数据收集必须先更新隐私清单和用途评估 |
@@ -211,7 +211,7 @@ iOS/
 | P2 | 核心闭环 | 登录/退出/恢复会话、课表、首页今日课程、离线缓存、多账号隔离完整 | 已完成 |
 | P3 | 教务域 | 成绩/GPA、考试、空闲教室契约与 UI 完整 | 已完成（3 / 3） |
 | P4 | 低风险校园服务 | 余额/二维码、失物只读、校历、天气、电话本、学习资料完整 | 已完成 |
-| P5 | 写操作与支付 | 失物发布/删除和三类支付通过安全、幂等、失败恢复及真机验证 | 外部阻塞（失物写操作与支付客户端完成；3 个真实支付验收受 D-005 阻断） |
+| P5 | 写操作与支付 | 失物发布/删除和五个支付切片满足各自的安全、失败恢复与真机验收条件 | 外部阻塞（失物写操作与五个支付客户端实现/安全替代已落地；PAY-04 待授权账号物理机证据，PAY-01、PAY-02、PAY-03、PAY-05 最终原生扣款受 D-005、R-003、R-004 阻塞） |
 | P6 | 平台增强 | WidgetKit、课程提醒、可选 Live Activity、后台刷新与辅助功能完整 | 已完成（WidgetKit、跨周提醒、ActivityKit、前台/时区维护与 Dynamic Type） |
 | P7 | 发布 | Release Archive、签名、权限文案、隐私清单、TestFlight/App Store 清单完整 | 工程收口（OPS-01 完成；正式许可证、付费签名/TestFlight 不属于当前 Personal Team 方案） |
 
@@ -258,11 +258,11 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 已完成 | 真实楼栋 GET 与空闲列表 POST 契约、校区/楼栋多选、节次、日期范围、查询结果和加载/空/错状态完整；页面标题、紫色查询按钮、12 间确定性结果和卡片密度与 Android 对齐 | `FreeClassroomTests` 4 项及双端正常/加载/空/错误截图在 `E-20260715-01` 通过；Commits `d8516f2`、`1c0f950` | 2026-07-15 |
 | ACA-04 | 教学评价 | `main/Evaluation.kt`、`EvaluationViewModel.kt`、`EvaluationRepository.kt` | `Features/Evaluation/` | P3 / ACA-01、AUTH-02 | 已完成 | 从受限成绩或工具页进入；真实 Token/Cookie 引导、学年/菜单初始化、任务/问卷加载、单项与预设批量提交、检查结果、会话失效重试、账号隔离预设及全状态 UI 完整 | `EvaluationTests` 覆盖路由、契约、问卷、预设、提交和非零业务码重试，Demo/UI 路径见 `E-20260726-01` | 2026-07-26 |
 | CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 已完成 | 余额刷新、动态二维码、凭据过期和刷新/关闭工具栏完整；按用户要求录屏保持可见；余额区按 Android 3.2.0 左列纵向居中，并提供招商银行充值偏好入口 | 既有解析/付款码证据见 `E-20260715-02`；余额与入口 UI 最终复验见 `E-20260726-01` | 2026-07-26 |
-| PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 金额校验、幂等订单、银行卡/支付宝选择、第三方返回与对账状态机已实现；生产新增学校官方 HTTPS 支付入口，当前表单不随跳转提交，打开页面不记成功；原生直连继续安全阻断 | `PaymentTests` 新增官方 CAS/同域 HTTPS URL 契约；CI 增加不创建订单的 HEAD/302 探测并通过，见 `E-20260717-01`；原生解除条件仍是服务端签名网关、凭据轮换和受控支付验收 | 2026-07-17 |
-| PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 浴室选择、手机号、金额、仅内存密码与恢复状态机保留；六位密码错误在弹窗内红字反馈且输入即清除；生产确认进入官方页，不复制客户端签名材料 | 本地密码状态和 UI 专项见 `E-20260726-01`；原生解除条件同 PAY-01，并需授权浴室账户 | 2026-07-26 |
-| PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 校区→楼栋→楼层→房间级联、金额、仅内存密码与结果状态机完整；仅确认成功后按账号累计充值，信息行五击查看、长按确认清零；生产官方页不在本地记成功 | `PaymentLocalParityTests` 与 UI 专项见 `E-20260726-01`；原生解除条件同 PAY-01，并需授权房间/电表 | 2026-07-26 |
-| PAY-04 | 招商银行校园卡充值 | `main/CmbCardRecharge.kt`、`YcardApi.kt`、`PreferencesManager.kt` | `Features/Payments/CMBRechargeView.swift` | P5 / CARD-01、AUTH-02 | 待验证 | 获取校园卡 access token，以内存 Cookie 打开校方充值 WebView；只允许校方充值域和招商银行必要跳转，阻止认证材料外泄；支持“仅本次/以后默认”账号隔离偏好并注入 Android 同款可信页面样式 | `NewPaymentFeatureTests`、macOS 构建、IPA 与 Archive 见 `E-20260726-01`；仅授权账号与物理 iPhone 仍待验证 | 2026-07-26 |
-| PAY-05 | 网费充值 | `main/NetworkRecharge.kt`、`NetworkRechargeViewModel.kt`、`YcardApi.kt` | `Features/Payments/NetworkRechargeView.swift` | P5 / AUTH-02、D-005 | 阻塞 | 已实现真实账户/套餐/金额查询、入口预热、Bearer/Cookie/Referer 契约、内存响应 Cookie 和官方入口；仓库不复制 Android 客户端签名材料，原生最终扣款安全阻断 | `NewPaymentFeatureTests` 覆盖请求头、可信 Cookie、内存持久化和安全边界；原生解除条件同 PAY-01，并需授权网费账户/沙箱 | 2026-07-26 |
+| PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 真实调用 `GET /berserker-app/ykt/tsm/queryCard`，按 Android 的 `scene=cardRecharge`、`synAccessSource=h5` 契约加载账户名称、卡类型和分值余额；具备加载、就绪、空、错误、重试及过期响应隔离，账户未就绪时不能进入支付方式选择。支付宝只打开固定白名单小程序 URL，不复制姓名、学号、金额或凭据；银行卡最终扣款进入学校官方页，原生直连继续安全阻断 | `PaymentReadOnlyDataSourceTests`、`PaymentTests` 的取消/失败后恢复与去重测试；本轮 macOS 证据收口后写入 `E-20260801-01`。原生解除条件仍是服务端签名/对账网关、凭据轮换和受控支付验收 | 2026-08-01 |
+| PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 按浴室选择真实 POST `feeitemid=409/430` 查询，仅接受 11 位 ASCII 手机号；现金余额、赠送余额缺失或格式异常时不得回退为 0，并提供加载、就绪、空、错误、重试和旧请求隔离。生产模式不收集本地支付密码，最终确认进入学校官方页；旧直连密码扣款因缺少安全 broker、幂等/对账契约和沙箱继续阻断 | `PaymentReadOnlyDataSourceTests` 覆盖请求契约、解析、异常金额和竞态；本轮 macOS 证据收口后写入 `E-20260801-01`。原生解除还需授权浴室账户 | 2026-08-01 |
+| PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 阻塞 | 真实接入 `feeitemid=488` 的 level 0→4 校区、楼栋、楼层、房间和房间信息链路；切换上级会取消旧请求、清空下级并防止过期结果覆盖。余额缺失保持“未获取”，不得伪造为 0；加载、空、错误和重试状态完整。生产最终扣款进入学校官方页，原生签名/密码扣款继续安全阻断 | `PaymentReadOnlyDataSourceTests` 覆盖四级契约、剩余电量解析、缺失余额和竞态；本轮 macOS 证据收口后写入 `E-20260801-01`。原生解除还需授权房间/电表 | 2026-08-01 |
+| PAY-04 | 招商银行校园卡充值 | `main/CmbCardRecharge.kt`、`YcardApi.kt`、`PreferencesManager.kt` | `Features/Payments/CMBRechargeView.swift` | P5 / CARD-01、AUTH-02 | 待验证 | 生产功能继续以 non-persistent WebView 承载真实校方页面，内存 Cookie 和内部导航严格限制到 `ycard.ahu.edu.cn`、`epay92.ahu.edu.cn`，招商银行外跳仅允许固定目标且不得携带校园凭据。隐藏验收模式改为原生 HEAD 链：不创建 WebView、不执行 JavaScript、不加载资源、不发送请求体、不自动跟随跳转；逐跳验证精确 HTTPS 主机、入口契约及扣款前路径，失败保持粘性并安全关闭 | `PaymentAcceptanceTests`、`NewPaymentFeatureTests`、隐藏 Debug UI 专项；本轮 macOS 证据收口后写入 `E-20260801-01`。Simulator/Demo 只证明状态机，仍须授权账号和物理 iPhone 证据 | 2026-08-01 |
+| PAY-05 | 网费充值 | `main/NetworkRecharge.kt`、`NetworkRechargeViewModel.kt`、`YcardApi.kt` | `Features/Payments/NetworkRechargeView.swift` | P5 / AUTH-02、D-005 | 阻塞 | 真实账户、套餐统计、快捷金额、服务端限额、入口预热、Bearer/Cookie/Referer 与内存响应 Cookie 链路保持完成；本轮日志与错误边界复验不改变最终扣款状态。Android 的原生密码映射/扣款材料不复制到 iOS，最终扣款继续进入学校官方页或安全阻断 | `NewPaymentFeatureTests` 覆盖请求头、可信 Cookie、内存持久化和安全边界；原生解除条件仍为 D-005、R-003、R-004，并需授权网费账户/沙箱 | 2026-08-01 |
 | INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、PhotoKit 保存照片及权限降级完整；黑色全屏、校历居中、右下保存/退出与加载/错误态按 Android 重做 | `SchoolCalendarRepositoryTests` 5 项覆盖缓存、回退、损坏恢复与照片保存 adapter；校历 UI 见 `E-20260714-01`，最终 device/权限文案编译见 `E-20260715-04` | 2026-07-15 |
 | INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 9 类 57 个本地条目、搜索、校区号码与拨号确认完整；重新对照 Android 3.2.0 更新后的电话条目、注释和列表顺序，不申请通讯录权限 | 既有 `PhoneBookTests` 与双端证据见 `E-20260714-01`；最新 Android 基线复验见 `E-20260726-01` | 2026-07-26 |
 | INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 已完成 | 首入 GPS、拒绝后 IP 降级、城市搜索、实况/预报/小时/AQI/生活指数、账号隔离缓存及首页详细/紧凑卡完整；详情页始终显示 Android 3.2.0 全量信息，升级时删除已下线的旧六项隐藏偏好 | `WeatherRepositoryTests` 的旧偏好恢复、首页卡模式及确定性 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
@@ -302,10 +302,11 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | Rust 复用 | Android 使用 `.so`、JNI 和本地 HTTP 服务 | Apple Simulator/device staticlib 已验证；C ABI 管生命周期、GuiXu 初始化及 KV 增删查清，随机 token 保护的 loopback 服务承载现有 SDK 路由，Swift 使用可注入 `URLSession`，ATS 例外仅限 localhost |
 | 会话续期 | 302 检测、全局状态、同步锁及本地密码重登 | 使用 `AuthSession` actor 统一刷新、并发去重、过期通知与显式重新认证 |
 | 网络安全 | 存在全局明文流量配置 | 默认严格 ATS；仅对经论证的本地通信做最小例外 |
-| 客户端凭据 | Android 支付链存在硬编码客户端凭据/签名材料及敏感日志 | 不记录具体值；先轮换并迁到服务端签名/安全配置，清理敏感日志，否则支付阻塞 |
-| 支付生产边界 | Android 客户端直接生成/提交签名请求，并在电控链路输出可能包含业务参数的调试日志 | iOS 仓库不包含签名材料，原生 `SafetyBlockedPaymentGateway` 继续拒绝直连；生产可在 `SFSafariViewController` 打开学校同域 CAS/校园卡官方页面，所有真实输入和确认均留在校方页面。只在 `--demo-session` 使用不可支付 Mock；网关和受控环境到位前 PAY-01～03 仍为“阻塞” |
-| 校园卡支付宝引导 | Android 将本地姓名/学号复制到剪贴板后跳转支付宝校园卡小程序 | iOS 保持同信息与支付方式弹窗，但不把身份信息写入系统剪贴板；只尝试白名单 URL Scheme，未安装时保留页面并明确提示，回到 App 后必须向服务端对账 |
-| 支付密码与待处理订单 | Android 三类支付分别实现，失败/日志/恢复语义不完全一致 | iOS 使用统一状态机；六位密码仅存于提交调用栈并立即清空，持久化只保存不含个人信息的功能类型与订单号；重复提交、取消、超时、未知状态和外部 App 返回均有测试 |
+| 客户端凭据 | Android 支付链存在硬编码客户端凭据/签名材料及敏感日志 | 不记录具体值；原生 OAuth confidential-client 材料不能在客户端保密，必须轮换并采用 public native client + PKCE 或受控 broker；支付签名迁到服务端，Swift/Rust/GuiXu 日志只允许有限脱敏状态 |
+| 支付生产边界 | Android 客户端直接生成/提交签名请求，并在电控链路输出可能包含业务参数的调试日志 | iOS 仓库不包含签名材料，原生 `SafetyBlockedPaymentGateway` 继续拒绝直连；PAY-01～03 的真实只读账户链和 PAY-05 既有只读链已经接入，但学校官方页不提供 App 原生签名、幂等、恢复和对账能力。只在 `--demo-session` 使用不可支付 Mock；网关和受控环境到位前 PAY-01、PAY-02、PAY-03、PAY-05 仍为“阻塞” |
+| 校园卡支付宝引导 | Android 将本地姓名/学号复制到剪贴板后跳转支付宝校园卡小程序 | iOS 保持同信息与支付方式弹窗，但只打开无账号、金额和凭据参数的固定白名单 URL，不把身份信息写入系统剪贴板；未安装时保留页面并明确提示，回到 App 后必须向服务端对账 |
+| 支付密码与待处理订单 | Android 三类支付分别实现，失败/日志/恢复语义不完全一致 | iOS 使用统一状态机；六位密码仅存于提交调用栈并立即清空，持久化只保存不含个人信息的功能类型与订单号；订单创建后任务取消、超时、网络或解析失败都进入可恢复 `unknown`，再次提交会先对账而不会创建第二单；重复提交、第三方返回和恢复均有测试 |
+| PAY-04 扣款前验收 | Android 直接在 WebView 中执行真实页面与外跳，没有独立的零扣款证明边界 | iOS 生产 WebView 与隐藏验收分离；验收仅用临时原生 HEAD 会话手动检查每一跳的精确主机、Cookie 和扣款前路径，不创建 WebView、不执行脚本、不加载资源、不发送请求体。通过只证明到达扣款前路由，不能替代物理 iPhone 网页交互、银行授权或真实扣款证据 |
 | 灰度身份 | Android 支持服务端灰度、本地 SHA-256 分桶和 Debug 覆盖 | iOS 保持相同 SHA-256 分桶向量、开关和 Debug 页面；请求前先哈希账号，游客不生成可跨启动跟踪的设备标识，远端失败回退本地结果 |
 | 课表 | 主要功能成熟；当前时间指示线有显式 TODO | 先完成行为对齐；时间线作为独立增强项，不阻塞首个课表切片 |
 | 课程数据格式 | 旧 `Course` 缓存把 weekday/周次/节次保存为字符串，新教务 Activity 使用整数和 `weekIndexes`；空 weekIndexes 的 Activity 会被丢弃 | iOS `Course` 解码同时接受字符串和整数；存在 `weekIndexes` 时以去重排序后的精确周为准，否则兼容旧起止周范围；畸形数据不触发强制转换崩溃 |
@@ -342,7 +343,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 - [ ] 确认并轮换 Android 中已暴露的客户端凭据和支付签名材料；iOS 仓库不得复制其值。
 - [ ] 将签名或不可公开的业务能力迁到受控服务端，客户端只持有最小权限配置。
 - [x] 密码、Token、Cookie 全部进入 Keychain；缓存清理、退出登录和账号切换行为有测试。
-- [x] 建立脱敏日志策略，禁止输出 Cookie、Token、密码、完整请求体和可识别账号信息。
+- [x] 建立 Swift/Rust/GuiXu 脱敏日志和有限错误映射，禁止输出 Cookie、Token、密码、完整请求/响应体、本地路径和可识别账号信息，并有回归测试。
 - [x] `AuthSession` 统一处理 Cookie、Token、刷新、并发去重和过期事件。
 - [x] 默认启用 ATS，仅为必要域名或经论证的本地通信配置最小例外。
 - [x] 支付状态机覆盖重复提交、超时、取消、第三方 App 返回、服务端未知状态和结果对账。
@@ -374,12 +375,12 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | --- | --- | --- | --- | --- |
 | R-001 | Rust crate 的 Apple target、FFI 和依赖兼容性未知 | 高 | 固定子模块已完成 Simulator/device staticlib、C ABI 生命周期和 Swift 请求链路验证；持续由两条 macOS workflow 防回归 | 已解除 |
 | R-002 | 登录依赖多个校园系统、Cookie 同步、验证码/OCR 与页面解析 | 高 | 已固化脱敏 fixture/契约，统一 AuthSession、Rust Cookie 同步、过期重登和可观测错误均通过 CI；继续用授权账号监测外部页面变化 | 已缓解 |
-| R-003 | 客户端存在凭据、支付签名与敏感日志风险 | 严重 | 轮换、服务端化、日志审计完成前阻塞支付 | 阻塞支付 |
-| R-004 | 支付缺少稳定沙箱，真实验证可能涉及资金 | 严重 | 授权测试账号、小额边界、幂等和结果对账方案齐备 | 阻塞支付 |
+| R-003 | 客户端存在凭据、支付签名与敏感日志风险 | 严重 | iOS/SDK/GuiXu 日志和用户可见错误已完成脱敏与测试；仍须轮换历史材料，将支付签名迁至服务端，并把原生 OAuth 改为 public client + PKCE 或受控 broker | 部分缓解，仍阻塞支付 |
+| R-004 | 支付缺少稳定沙箱，真实验证可能涉及资金 | 严重 | PAY-04 可先使用无请求体 HEAD 做扣款前验证；PAY-01、PAY-02、PAY-03、PAY-05 仍须授权测试账号/房间、最小金额、幂等、拒绝/超时/重复提交与账单对账方案 | 阻塞支付 |
 | R-005 | 当前 Windows 环境无法运行 Xcode | 高 | macOS 26/Xcode 26.5 Simulator 全测和未签名 iphoneos 构建持续通过；仅 Personal Team 物理机回归仍由用户执行 | 已缓解 |
 | R-006 | 历史 Android 截图与固定 SHA 不一致，且原环境无 Android Emulator 基线 | 高 | 已建立固定 SHA 的 Android CI/UI pipeline，并与 iPhone 13 Pro Simulator 按 1170×2532、43 个同状态画面完成逐屏终验 | 已解除 |
 | R-007 | 核心 Android 业务缺少自动化测试 | 高 | iOS 迁移先补 fixture、解析、周次、会话和支付状态机测试 | 开放 |
-| R-008 | 外部校园页面、第三方 API 与 App Store 政策可能变化 | 高 | 域隔离、契约监控、失败降级、隐私/审核复查 | 开放 |
+| R-008 | 外部校园页面、第三方 API 与 App Store 政策可能变化 | 高 | 域隔离、契约监控、失败降级、隐私/审核复查；HEAD 不受支持或页面路由变化时必须安全失败，不允许退回 WebView 脚本守卫冒充无扣款证据 | 开放 |
 
 ## 13. 下一工作包
 
@@ -408,14 +409,17 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 
 ### P5-P7-W2：100% 收口与外部解除条件
 
-- [x] PAY-01～03 完成统一金额/密码校验、幂等订单、超时/取消/未知状态、第三方返回和服务端对账客户端状态机。
-- [x] 三类支付完成 Android 对齐入口、表单、确认弹窗、Mock 成功态与专项单元/UI 测试；生产原生网关默认安全拒绝直连。
-- [x] 三类生产页接入学校官方 HTTPS/CAS 支付入口；CI 只做无扣款 HEAD/302 连通性探测，App 不提交本地表单、不保存官方支付密码、不把跳转记为成功。
+- [x] PAY-01～03 完成统一金额校验、幂等订单、超时/取消/未知状态、第三方返回和服务端对账客户端状态机；订单创建后的异常保留待处理记录，再次提交先对账而不建第二单。
+- [x] PAY-01～03 的真实只读账户链已接入 Android 对应契约，具备加载、空、错误、重试和过期请求隔离；缺失余额不伪造为 0。
+- [x] PAY-01～03 的生产最终确认不采集本地支付密码，只进入学校官方页或安全阻断；Demo 状态不得进入生产。
+- [x] PAY-04 隐藏验收已改为原生 HEAD、手动重定向、精确主机/路径、无请求体/无 WebView/无脚本/无资源加载。
+- [x] 隐藏 Debug 提供学校官方入口无凭据 HEAD 探测，报告只记录状态码、主机、路径、耗时和有限错误。
 - [x] OPS-01 完成 Android 同算法灰度、Debug 诊断、账号摘要、脱敏日志、隐私清单、数据地图、敏感信息扫描、Release Archive 和 Personal Team 发布手册。
 - [x] GitHub Actions 生成含 Widget 与双隐私清单的未签名 IPA/Archive；仓库和产物不含签名证书、描述文件或 Apple ID。
-- [ ] 支付负责人轮换 Android 已暴露材料，并提供受控的服务端签名网关 URL 与最小权限客户端鉴权方式。
-- [ ] 为校园卡、浴室和电控分别提供可审计的测试账号/房间或明确授权的小额真实环境，并完成成功、拒绝、超时、重复提交、第三方返回和对账验收。
-- [x] 原生 Tab Bar 的 APP-01 已由 `E-20260716-01` 恢复“已完成”；支付解除条件完成后再将 PAY-01～03 逐项推进，不以 Mock 或未扣款 UI 伪造 100%。
+- [ ] 按 `payment-device-acceptance.md` 在物理 iPhone 13 Pro 使用授权账号完成 PAY-01～05 的脱敏只读/HEAD 验收。
+- [ ] 支付负责人轮换已暴露材料，并提供 public native OAuth + PKCE 或 broker、服务端签名/对账网关与最小权限客户端鉴权。
+- [ ] 为 PAY-01、PAY-02、PAY-03、PAY-05 提供可审计的受控环境，完成成功、拒绝、超时、重复提交、第三方返回和账单对账。
+- [x] 原生 Tab Bar 的 APP-01 已由 `E-20260716-01` 恢复“已完成”；支付解除条件完成后再将 PAY-01、PAY-02、PAY-03、PAY-05 逐项推进，不以 Mock、HEAD 或未扣款 UI 伪造 100%。
 - [x] 液态玻璃偏好入口删除已通过 `E-20260716-02` 最终 CI，PREF-01 恢复“已完成”；设置中不得重新加入可关闭系统 Tab Bar 材质的开关。
 - [x] 设置首页 `Debug` 可见行已按 `E-20260717-02` 删除；完整诊断页只允许由 App 信息卡 8 连点隐藏入口进入。
 - [x] 设置域可点击项已按 `E-20260717-03` 统一提供即时按压和触觉反馈，并覆盖减弱动态效果语义。

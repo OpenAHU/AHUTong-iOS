@@ -7,8 +7,8 @@ struct CardRechargeView: View {
     @Environment(\.openURL) private var openURL
     @AppStorage private var prefersCMB: Bool
     @StateObject private var coordinator: PaymentCoordinator
+    @StateObject private var accountModel: CardRechargeAccountViewModel
     @State private var amount = ""
-    @State private var balance: Decimal?
     @State private var showsMethodDialog = false
     @State private var showsCMBPreferenceDialog = false
     @State private var showsCMBRecharge = false
@@ -17,11 +17,25 @@ struct CardRechargeView: View {
     private let appModel: AppModel
     private let demo: Bool
 
-    init(appModel: AppModel, gateway: (any PaymentGateway)? = nil) {
+    init(
+        appModel: AppModel,
+        gateway: (any PaymentGateway)? = nil,
+        accountDataSource: (any CardRechargeAccountDataSource)? = nil
+    ) {
         self.appModel = appModel
         let isDemo = AppRuntime.isDemoSession
         demo = isDemo
         let resolved = gateway ?? PaymentGatewayFactory.make(demo: isDemo)
+        let resolvedAccountDataSource: any CardRechargeAccountDataSource
+        if let accountDataSource {
+            resolvedAccountDataSource = accountDataSource
+        } else if isDemo {
+            resolvedAccountDataSource = DemoCardRechargeAccountDataSource()
+        } else {
+            resolvedAccountDataSource = OfficialCardRechargeAccountDataSource(
+                campusAPI: appModel.campusAPI
+            )
+        }
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
         let preferenceUserID = if case let .authenticated(user) = appModel.sessionState {
             user.studentID
@@ -36,6 +50,11 @@ struct CardRechargeView: View {
             )
         )
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(feature: .cardRecharge, gateway: resolved, userID: userID))
+        _accountModel = StateObject(
+            wrappedValue: CardRechargeAccountViewModel(
+                dataSource: resolvedAccountDataSource
+            )
+        )
     }
 
     var body: some View {
@@ -73,7 +92,7 @@ struct CardRechargeView: View {
             if showsMethodDialog {
                 AndroidPaymentDialog(title: "确认支付", identifier: "payment.card.method-dialog") {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("请选择支付方式。银行卡支付将从绑定的银行卡扣除￥\(amount)元；支付宝支付会跳转校园卡小程序。")
+                        Text(methodDescription)
                             .foregroundStyle(.secondary)
                         Text("姓名：\(user.name)\n学号：\(user.studentID)")
                         Text("iOS 不把姓名、学号或支付凭据复制到剪贴板。")
@@ -116,7 +135,7 @@ struct CardRechargeView: View {
             }
         }
         .task {
-            await loadBalance()
+            await accountModel.load()
             await coordinator.resumePendingOrder()
         }
         .sheet(isPresented: $showsOfficialPortal) {
@@ -125,7 +144,7 @@ struct CardRechargeView: View {
         }
         .onChange(of: showsOfficialPortal) { _, isPresented in
             guard !isPresented, !demo else { return }
-            Task { await loadBalance() }
+            Task { await accountModel.load() }
         }
         .onOpenURL { url in
             guard url.scheme == "ahutong", url.host == "payment-return" else { return }
@@ -145,14 +164,44 @@ struct CardRechargeView: View {
     private var accountCard: some View {
         AndroidCard(radius: 16) {
             VStack(spacing: 0) {
-                PaymentValueRow(
-                    title: "校园卡账户",
-                    value: demo ? PaymentDemoCatalog.cardAccountLabel : "\(user.name) 校园卡"
-                )
-                PaymentValueRow(title: "账户余额", value: balance.map { "￥\($0.currencyText)" } ?? "￥--")
+                switch accountModel.state {
+                case .loading:
+                    HStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在查询校园卡账户…")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(16)
+                    .accessibilityIdentifier("payment.card.account-loading")
+                case let .ready(account):
+                    PaymentValueRow(
+                        title: "校园卡账户",
+                        value: account.displayName.ifEmpty("--")
+                    )
+                    PaymentValueRow(
+                        title: "账户余额",
+                        value: "￥\(account.balance.currencyText)"
+                    )
+                case .empty:
+                    PaymentReadOnlyStateRow(
+                        title: "未查询到校园卡账户",
+                        retryIdentifier: "payment.card.account-retry"
+                    ) {
+                        Task { await accountModel.load() }
+                    }
+                case let .failed(message):
+                    PaymentReadOnlyStateRow(
+                        title: message,
+                        retryIdentifier: "payment.card.account-retry"
+                    ) {
+                        Task { await accountModel.load() }
+                    }
+                }
             }
         }
         .padding(.horizontal, 16)
+        .accessibilityIdentifier("payment.card.account")
     }
 
     private var user: User {
@@ -161,11 +210,8 @@ struct CardRechargeView: View {
     }
 
     private func validateAndShowMethods() {
-        guard demo else {
-            showsOfficialPortal = true
-            return
-        }
         do {
+            _ = try accountModel.requireReadyAccount()
             _ = try PaymentAmount(amount)
             showsMethodDialog = true
         } catch {
@@ -173,16 +219,17 @@ struct CardRechargeView: View {
         }
     }
 
-    private func loadBalance() async {
-        if demo {
-            balance = PaymentDemoCatalog.cardBalance
-        } else if let value = try? await appModel.campusAPI.cardBalance() {
-            balance = Decimal(value)
-        }
-    }
-
     private func submit(method: PaymentMethod) {
         showsMethodDialog = false
+        guard demo else {
+            switch method {
+            case .alipay:
+                openAlipayCampusCard()
+            case .bankCard, .campusAccount:
+                showsOfficialPortal = true
+            }
+            return
+        }
         Task {
             do {
                 let request = try PaymentRequest(
@@ -210,13 +257,34 @@ struct CardRechargeView: View {
             }
         }
     }
+
+    private var methodDescription: String {
+        if demo {
+            return "请选择支付方式。银行卡支付将从绑定的银行卡扣除￥\(amount)元；支付宝支付会跳转校园卡小程序。"
+        }
+        return "请选择支付方式。银行卡支付将在学校官方页面重新确认￥\(amount)元；支付宝支付只打开校园卡小程序，App 不传递姓名、学号、金额或支付凭据。"
+    }
+
+    private func openAlipayCampusCard() {
+        guard AlipayCampusCardHandoff.isAllowed(
+            AlipayCampusCardHandoff.appURL
+        ) else {
+            validationMessage = "支付宝校园卡入口校验失败"
+            return
+        }
+        if UIApplication.shared.canOpenURL(AlipayCampusCardHandoff.appURL) {
+            openURL(AlipayCampusCardHandoff.appURL)
+        } else {
+            validationMessage = "未检测到支付宝，请使用学校官方支付页完成充值"
+        }
+    }
 }
 
 struct BathroomPaymentView: View {
     @StateObject private var coordinator: PaymentCoordinator
+    @StateObject private var accountModel: BathroomAccountViewModel
     @State private var selectedName = "竹园/龙河"
     @State private var phone = ""
-    @State private var account: BathroomPaymentAccount?
     @State private var amount = ""
     @State private var passwordEntry = CampusPaymentPasswordEntry()
     @State private var showsPasswordDialog = false
@@ -224,15 +292,34 @@ struct BathroomPaymentView: View {
     @State private var validationMessage: String?
     private let demo: Bool
 
-    init(appModel: AppModel, gateway: (any PaymentGateway)? = nil) {
+    init(
+        appModel: AppModel,
+        gateway: (any PaymentGateway)? = nil,
+        accountDataSource: (any BathroomAccountDataSource)? = nil
+    ) {
         let isDemo = AppRuntime.isDemoSession
         demo = isDemo
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
+        let resolvedAccountDataSource: any BathroomAccountDataSource
+        if let accountDataSource {
+            resolvedAccountDataSource = accountDataSource
+        } else if isDemo {
+            resolvedAccountDataSource = DemoBathroomAccountDataSource()
+        } else {
+            resolvedAccountDataSource = OfficialBathroomAccountDataSource(
+                campusAPI: appModel.campusAPI
+            )
+        }
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(
             feature: .bathroom,
             gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo),
             userID: userID
         ))
+        _accountModel = StateObject(
+            wrappedValue: BathroomAccountViewModel(
+                dataSource: resolvedAccountDataSource
+            )
+        )
     }
 
     var body: some View {
@@ -281,8 +368,14 @@ struct BathroomPaymentView: View {
                     Text("选择浴室").font(.headline)
                     Spacer()
                     Menu {
-                        Button("竹园/龙河") { selectedName = "竹园/龙河"; lookup() }
-                        Button("桔园/蕙园") { selectedName = "桔园/蕙园"; lookup() }
+                        Button("竹园/龙河") {
+                            selectedName = "竹园/龙河"
+                            lookup()
+                        }
+                        Button("桔园/蕙园") {
+                            selectedName = "桔园/蕙园"
+                            lookup()
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Text(selectedName)
@@ -302,45 +395,101 @@ struct BathroomPaymentView: View {
                         .frame(width: 168)
                         .onSubmit { lookup() }
                         .onChange(of: phone) { _, value in
-                            phone = String(value.filter { $0.isNumber }.prefix(11))
-                            if phone.count == 11 { lookup() }
+                            let normalized = String(
+                                YCardReadOnlyContract.normalizedPhone(value)
+                                    .prefix(11)
+                            )
+                            if normalized != value {
+                                phone = normalized
+                                return
+                            }
+                            if normalized.count == 11 {
+                                lookup()
+                            } else {
+                                accountModel.reset()
+                            }
                         }
                         .accessibilityIdentifier("payment.bathroom.phone")
                 }
                 .padding(16)
                 PaymentValueRow(title: "信息", value: bathroomInformation)
+                if case .loading = accountModel.state {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("正在查询浴室账户…")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    .accessibilityIdentifier(
+                        "payment.bathroom.account-loading"
+                    )
+                } else if shouldOfferBathroomRetry {
+                    Button("重新查询") {
+                        lookup()
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    .accessibilityIdentifier(
+                        "payment.bathroom.account-retry"
+                    )
+                }
             }
         }
         .padding(.horizontal, 16)
     }
 
     private var bathroomInformation: String {
-        guard let account else { return "" }
-        return "\(phone)\n现金金额：\(account.cashBalance.compactText)元\n赠送金额：\(account.giftBalance.compactText)元"
+        switch accountModel.state {
+        case .idle, .loading:
+            return ""
+        case let .ready(account):
+            return "\(account.phone)\n现金金额：\(account.cashBalance.compactText)元\n赠送金额：\(account.giftBalance.compactText)元"
+        case let .empty(message), let .failed(message):
+            return message
+        }
+    }
+
+    private var shouldOfferBathroomRetry: Bool {
+        switch accountModel.state {
+        case .empty, .failed:
+            phone.count == 11
+        default:
+            false
+        }
     }
 
     private func lookup() {
-        guard demo else {
-            account = nil
+        guard phone.count == 11 else {
+            accountModel.reset()
             return
         }
-        account = PaymentDemoCatalog.bathrooms.first { $0.name.hasPrefix(selectedName.components(separatedBy: "/").first ?? selectedName) }
+        Task {
+            await accountModel.lookup(
+                bathroomName: selectedName,
+                phone: phone
+            )
+        }
     }
 
     private func validateAndShowPassword() {
-        guard demo else {
-            showsOfficialPortal = true
-            return
-        }
         do {
-            guard account != nil else { throw PaymentValidationError.missingAccount }
+            guard accountModel.account != nil else {
+                throw PaymentValidationError.missingAccount
+            }
             _ = try PaymentAmount(amount)
-            showsPasswordDialog = true
+            if demo {
+                showsPasswordDialog = true
+            } else {
+                showsOfficialPortal = true
+            }
         } catch { validationMessage = error.localizedDescription }
     }
 
     private func submit() {
-        guard let account else { return }
+        guard let account = accountModel.account else { return }
         guard passwordEntry.validate() else { return }
         do {
             let request = try PaymentRequest(
@@ -384,15 +533,13 @@ struct BathroomPaymentView: View {
             }
         }
     }
+
 }
 
 struct ElectricityPaymentView: View {
     @StateObject private var coordinator: PaymentCoordinator
     @StateObject private var chargeHistory: ElectricityChargeHistoryModel
-    @State private var campus = ""
-    @State private var building = ""
-    @State private var floor = ""
-    @State private var room = ""
+    @StateObject private var accountModel: ElectricityAccountViewModel
     @State private var amount = ""
     @State private var passwordEntry = CampusPaymentPasswordEntry()
     @State private var showsPasswordDialog = false
@@ -401,10 +548,25 @@ struct ElectricityPaymentView: View {
     @State private var validationMessage: String?
     private let demo: Bool
 
-    init(appModel: AppModel, gateway: (any PaymentGateway)? = nil) {
+    init(
+        appModel: AppModel,
+        gateway: (any PaymentGateway)? = nil,
+        accountDataSource: (any ElectricityAccountDataSource)? = nil
+    ) {
         let isDemo = AppRuntime.isDemoSession
         demo = isDemo
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
+        let resolvedAccountDataSource: any ElectricityAccountDataSource
+        if let accountDataSource {
+            resolvedAccountDataSource = accountDataSource
+        } else if isDemo {
+            resolvedAccountDataSource = DemoElectricityAccountDataSource()
+        } else {
+            resolvedAccountDataSource =
+                OfficialElectricityAccountDataSource(
+                    campusAPI: appModel.campusAPI
+                )
+        }
         _coordinator = StateObject(wrappedValue: PaymentCoordinator(
             feature: .electricity,
             gateway: gateway ?? PaymentGatewayFactory.make(demo: isDemo),
@@ -412,6 +574,11 @@ struct ElectricityPaymentView: View {
         ))
         _chargeHistory = StateObject(
             wrappedValue: ElectricityChargeHistoryModel(userID: userID)
+        )
+        _accountModel = StateObject(
+            wrappedValue: ElectricityAccountViewModel(
+                dataSource: resolvedAccountDataSource
+            )
         )
     }
 
@@ -484,7 +651,11 @@ struct ElectricityPaymentView: View {
             }
         }
         .task {
+            await accountModel.load()
             await coordinator.resumePendingOrder()
+        }
+        .onDisappear {
+            Task { await accountModel.clearCredentials() }
         }
         .sheet(isPresented: $showsOfficialPortal) {
             OfficialPaymentPortalView(url: OfficialSchoolPaymentPortal.loginURL)
@@ -506,16 +677,38 @@ struct ElectricityPaymentView: View {
     private var locationCard: some View {
         AndroidCard(radius: 16) {
             VStack(spacing: 0) {
-                PaymentMenuRow(title: "选择校区", value: campus.ifEmpty("请选择校区"), options: campuses, identifier: "payment.electricity.campus") { value in
-                    campus = value; building = ""; floor = ""; room = ""
+                PaymentMenuRow(
+                    title: "选择校区",
+                    value: accountModel.selectedCampus?.name ?? "请选择校区",
+                    options: accountModel.campuses.map(\.name),
+                    identifier: "payment.electricity.campus"
+                ) { value in
+                    accountModel.selectCampus(named: value)
                 }
-                PaymentMenuRow(title: "选择楼栋", value: building.ifEmpty("请选择楼栋"), options: buildings, identifier: "payment.electricity.building") { value in
-                    building = value; floor = ""; room = ""
+                PaymentMenuRow(
+                    title: "选择楼栋",
+                    value: accountModel.selectedBuilding?.name ?? "请选择楼栋",
+                    options: accountModel.buildings.map(\.name),
+                    identifier: "payment.electricity.building"
+                ) { value in
+                    accountModel.selectBuilding(named: value)
                 }
-                PaymentMenuRow(title: "选择楼层", value: floor.ifEmpty("请选择楼层"), options: floors, identifier: "payment.electricity.floor") { value in
-                    floor = value; room = ""
+                PaymentMenuRow(
+                    title: "选择楼层",
+                    value: accountModel.selectedFloor?.name ?? "请选择楼层",
+                    options: accountModel.floors.map(\.name),
+                    identifier: "payment.electricity.floor"
+                ) { value in
+                    accountModel.selectFloor(named: value)
                 }
-                PaymentMenuRow(title: "选择房间", value: room.ifEmpty("请选择房间"), options: rooms, identifier: "payment.electricity.room") { room = $0 }
+                PaymentMenuRow(
+                    title: "选择房间",
+                    value: accountModel.selectedRoomOption?.name ?? "请选择房间",
+                    options: accountModel.rooms.map(\.name),
+                    identifier: "payment.electricity.room"
+                ) { value in
+                    accountModel.selectRoom(named: value)
+                }
                 PaymentValueRow(title: "信息", value: electricityInformation)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -531,57 +724,67 @@ struct ElectricityPaymentView: View {
                     .accessibilityHint("连续点击五次查看累计充值记录，长按清空记录")
                     .accessibilityAddTraits(.isButton)
                     .accessibilityIdentifier("payment.electricity.info")
+                if accountModel.isLoading {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("正在查询电控账户…")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    .accessibilityIdentifier(
+                        "payment.electricity.account-loading"
+                    )
+                }
+                if let message = accountModel.errorMessage {
+                    PaymentReadOnlyStateRow(
+                        title: message,
+                        retryIdentifier: "payment.electricity.account-retry"
+                    ) {
+                        accountModel.retry()
+                    }
+                } else if let message = accountModel.emptyMessage {
+                    PaymentReadOnlyStateRow(
+                        title: message,
+                        retryIdentifier: "payment.electricity.account-retry"
+                    ) {
+                        accountModel.retry()
+                    }
+                }
             }
         }
         .padding(.horizontal, 16)
     }
 
     private var electricityInformation: String {
-        guard let selectedRoom else { return "" }
-        return "房间：\(selectedRoom.campus) \(selectedRoom.building) \(selectedRoom.floor) \(selectedRoom.room)\n余额：￥\(selectedRoom.balance.currencyText)"
-    }
-
-    private var campuses: [String] {
-        demo ? unique(PaymentDemoCatalog.electricityRooms.map(\.campus)) : []
-    }
-
-    private var buildings: [String] {
-        demo ? unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus }.map(\.building)) : []
-    }
-
-    private var floors: [String] {
-        demo ? unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus && $0.building == building }.map(\.floor)) : []
-    }
-
-    private var rooms: [String] {
-        demo ? unique(PaymentDemoCatalog.electricityRooms.filter { $0.campus == campus && $0.building == building && $0.floor == floor }.map(\.room)) : []
-    }
-
-    private var selectedRoom: ElectricityRoom? {
-        guard demo else { return nil }
-        return PaymentDemoCatalog.electricityRooms.first {
-            $0.campus == campus && $0.building == building && $0.floor == floor && $0.room == room
+        guard let selectedRoom = accountModel.selectedRoom else { return "" }
+        if let information = selectedRoom.information {
+            return selectedRoom.balance == nil
+                ? "\(information)\n当前余量：未获取"
+                : information
         }
-    }
-
-    private func select(_ item: ElectricityRoom) {
-        campus = item.campus; building = item.building; floor = item.floor; room = item.room
+        let amount = selectedRoom.balance.map { "￥\($0.currencyText)" }
+            ?? "未获取"
+        return "房间：\(selectedRoom.campus) \(selectedRoom.building) \(selectedRoom.floor) \(selectedRoom.room)\n当前余量：\(amount)"
     }
 
     private func validateAndShowPassword() {
-        guard demo else {
-            showsOfficialPortal = true
-            return
-        }
         do {
-            guard selectedRoom != nil else { throw PaymentValidationError.missingAccount }
+            guard accountModel.selectedRoom != nil else {
+                throw PaymentValidationError.missingAccount
+            }
             _ = try PaymentAmount(amount)
-            showsPasswordDialog = true
+            if demo {
+                showsPasswordDialog = true
+            } else {
+                showsOfficialPortal = true
+            }
         } catch { validationMessage = error.localizedDescription }
     }
 
     private func submit() {
-        guard let selectedRoom else { return }
+        guard let selectedRoom = accountModel.selectedRoom else { return }
         guard passwordEntry.validate() else { return }
         do {
             let paymentAmount = try PaymentAmount(amount)
@@ -615,9 +818,6 @@ struct ElectricityPaymentView: View {
         }
     }
 
-    private func unique(_ values: [String]) -> [String] {
-        values.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
-    }
 }
 
 private struct OfficialPaymentPortalCard: View {
@@ -643,6 +843,25 @@ private struct OfficialPaymentPortalCard: View {
             .padding(16)
         }
         .padding(.horizontal, 16)
+    }
+}
+
+private struct PaymentReadOnlyStateRow: View {
+    let title: String
+    let retryIdentifier: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: "exclamationmark.triangle")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("重试", action: retry)
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier(retryIdentifier)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
     }
 }
 
