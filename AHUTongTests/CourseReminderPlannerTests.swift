@@ -2,6 +2,40 @@ import XCTest
 @testable import AHUTong
 
 final class CourseReminderPlannerTests: XCTestCase {
+    func testForegroundMaintenanceSkipsDemoSessionEvenWhenReminderPreferencePersists() {
+        XCTAssertFalse(
+            CourseReminderMaintenancePolicy.shouldRefresh(
+                isDemoSession: true,
+                remindersEnabled: true,
+                isAuthenticated: true
+            )
+        )
+    }
+
+    func testForegroundMaintenanceRequiresPreferenceAndAuthenticatedProductionSession() {
+        XCTAssertTrue(
+            CourseReminderMaintenancePolicy.shouldRefresh(
+                isDemoSession: false,
+                remindersEnabled: true,
+                isAuthenticated: true
+            )
+        )
+        XCTAssertFalse(
+            CourseReminderMaintenancePolicy.shouldRefresh(
+                isDemoSession: false,
+                remindersEnabled: false,
+                isAuthenticated: true
+            )
+        )
+        XCTAssertFalse(
+            CourseReminderMaintenancePolicy.shouldRefresh(
+                isDemoSession: false,
+                remindersEnabled: true,
+                isAuthenticated: false
+            )
+        )
+    }
+
     func testPlansTenMinutesBeforeActiveCourseInCurrentTimeZone() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!

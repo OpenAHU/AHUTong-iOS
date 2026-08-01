@@ -71,9 +71,11 @@ struct RootView: View {
             Task { await reloadGrayGate() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .campusCredentialsRejected)) { _ in
+            guard !AppRuntime.isDemoSession else { return }
             Task { await appModel.handleCredentialsRejected() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .campusReauthenticationRequired)) { _ in
+            guard !AppRuntime.isDemoSession else { return }
             Task { await appModel.requireReauthentication() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
@@ -117,8 +119,17 @@ struct RootView: View {
     }
 
     private func rescheduleCourseRemindersIfNeeded() async {
-        guard UserDefaults.standard.bool(forKey: "notifications.course-reminders"),
-              case .authenticated = appModel.sessionState else { return }
+        let isAuthenticated: Bool
+        if case .authenticated = appModel.sessionState {
+            isAuthenticated = true
+        } else {
+            isAuthenticated = false
+        }
+        guard CourseReminderMaintenancePolicy.shouldRefresh(
+            isDemoSession: AppRuntime.isDemoSession,
+            remindersEnabled: UserDefaults.standard.bool(forKey: "notifications.course-reminders"),
+            isAuthenticated: isAuthenticated
+        ) else { return }
         do {
             async let courses = appModel.campusAPI.schedule()
             async let week = appModel.campusAPI.currentWeek()
@@ -131,6 +142,16 @@ struct RootView: View {
         } catch {
             // Foreground maintenance is best-effort; existing pending requests remain valid.
         }
+    }
+}
+
+enum CourseReminderMaintenancePolicy {
+    static func shouldRefresh(
+        isDemoSession: Bool,
+        remindersEnabled: Bool,
+        isAuthenticated: Bool
+    ) -> Bool {
+        !isDemoSession && remindersEnabled && isAuthenticated
     }
 }
 
