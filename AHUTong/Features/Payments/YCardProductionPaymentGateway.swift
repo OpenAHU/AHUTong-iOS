@@ -478,7 +478,7 @@ enum YCardSecureKeyboardMapper {
     static func verifyProductionConstantFingerprints() -> Bool {
         fingerprint(YCardClientProtocolMaterial.bathroomUUID) == "542f6a70bb5b408c335d2db3821634fe105866c4ed1ea71490d1418be5e933ce"
             && YCardClientProtocolMaterial.bathroomUUID.utf8.count == 32
-            && fingerprint(YCardClientProtocolMaterial.bathroomPermutation) == "4523a854d13c767baa1c2c3d3ce7e21bc379e9c7b284fd2068900c42fd494"
+            && fingerprint(YCardClientProtocolMaterial.bathroomPermutation) == "4523a854d13c767baa1c2c3d3ce9dc7e21bc379e9c7b284fd2068900c42fd494"
             && YCardClientProtocolMaterial.bathroomPermutation.utf8.count == 10
     }
 

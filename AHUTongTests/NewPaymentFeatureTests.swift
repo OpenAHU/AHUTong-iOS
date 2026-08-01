@@ -391,14 +391,26 @@ final class NetworkRechargeModelTests: XCTestCase {
         )
     }
 
+    func testStrictServerFormDecoderReadsURLProtocolBodyStream() throws {
+        var request = URLRequest(
+            url: try XCTUnwrap(URL(string: "https://fixture.invalid/form"))
+        )
+        request.httpMethod = "POST"
+        request.httpBodyStream = InputStream(
+            data: Data("fixture=value".utf8)
+        )
+
+        let values = try StrictServerFormTestDecoder.values(request)
+
+        XCTAssertTrue(values.count == 1 && values["fixture"] == "value")
+    }
+
     func testConcurrentOfficialLoadsShareOneCredentialScopeAndOneRequestChain() async throws {
         let capture = NetworkRechargeTestLockedBox(
             NetworkRechargeRequestCapture()
         )
         NetworkRechargeTestURLProtocol.handler = { request in
-            let decodedForm = request.httpBody.flatMap {
-                try? StrictServerFormTestDecoder.values($0)
-            }
+            let decodedForm = try? StrictServerFormTestDecoder.values(request)
             let index = capture.withValue { value in
                 value.requestCount += 1
                 value.synjonesAuthHeaders.append(
@@ -889,8 +901,7 @@ private func makePaymentCanonicalizationGateway() -> YCardProductionPaymentGatew
 }
 
 private func paymentCanonicalFormValues(_ request: URLRequest) -> [String: String] {
-    guard let body = request.httpBody else { return [:] }
-    return (try? StrictServerFormTestDecoder.values(body)) ?? [:]
+    (try? StrictServerFormTestDecoder.values(request)) ?? [:]
 }
 
 private func paymentCanonicalJSONObject(_ rawValue: String?) -> [String: Any]? {

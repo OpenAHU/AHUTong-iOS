@@ -1,6 +1,8 @@
 import Foundation
 
 enum StrictServerFormTestDecoderError: Error {
+    case missingBody
+    case unreadableBodyStream
     case nonASCIITransport
     case invalidPair
     case invalidPercentEscape
@@ -11,6 +13,10 @@ enum StrictServerFormTestDecoderError: Error {
 /// Test-only server semantics, intentionally implemented with Foundation's
 /// percent decoder rather than the production byte encoder or decoder.
 enum StrictServerFormTestDecoder {
+    static func values(_ request: URLRequest) throws -> [String: String] {
+        try values(bodyData(from: request))
+    }
+
     static func values(_ data: Data) throws -> [String: String] {
         guard let body = String(data: data, encoding: .ascii) else {
             throw StrictServerFormTestDecoderError.nonASCIITransport
@@ -28,6 +34,27 @@ enum StrictServerFormTestDecoder {
             }
         }
         return result
+    }
+
+    private static func bodyData(from request: URLRequest) throws -> Data {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else {
+            throw StrictServerFormTestDecoderError.missingBody
+        }
+        stream.open()
+        defer { stream.close() }
+        var body = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        let bufferSize = buffer.count
+        while true {
+            let count = stream.read(&buffer, maxLength: bufferSize)
+            guard count >= 0 else {
+                throw StrictServerFormTestDecoderError.unreadableBodyStream
+            }
+            guard count > 0 else { break }
+            body.append(contentsOf: buffer.prefix(count))
+        }
+        return body
     }
 
     private static func decode(_ value: String) throws -> String {

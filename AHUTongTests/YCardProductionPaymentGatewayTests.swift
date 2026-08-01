@@ -16,6 +16,21 @@ final class YCardFormURLEncodingTests: XCTestCase {
         XCTAssertTrue(decoded == [name: value])
     }
 
+    func testIndependentServerDecoderReadsURLLoadingBodyStream() throws {
+        let expected = ["field": "value with + marker"]
+        let encoded = YCardFormURLEncoder.data(
+            expected.map { (name: $0.key, value: $0.value) }
+        )
+        var request = URLRequest(
+            url: try XCTUnwrap(URL(string: "https://example.invalid/form"))
+        )
+        request.httpBodyStream = InputStream(data: encoded)
+
+        XCTAssertTrue(
+            try StrictServerFormTestDecoder.values(request) == expected
+        )
+    }
+
     func testProductionServerDecoderRejectsMalformedOrAmbiguousForms() {
         for body in [
             Data("a".utf8),
@@ -313,8 +328,7 @@ final class YCardProductionPaymentRequestPolicyTests: XCTestCase {
     }
 
     private func formFieldNames(_ request: URLRequest) -> Set<String> {
-        guard let data = request.httpBody,
-              let values = try? StrictServerFormTestDecoder.values(data) else { return [] }
+        guard let values = try? StrictServerFormTestDecoder.values(request) else { return [] }
         return Set(values.keys)
     }
 }
@@ -1291,14 +1305,12 @@ private func response(
 }
 
 private func formFieldNames(_ request: URLRequest) -> Set<String> {
-    guard let data = request.httpBody,
-          let values = try? StrictServerFormTestDecoder.values(data) else { return [] }
+    guard let values = try? StrictServerFormTestDecoder.values(request) else { return [] }
     return Set(values.keys)
 }
 
 private func formValues(_ request: URLRequest) -> [String: String] {
-    guard let data = request.httpBody else { return [:] }
-    return (try? StrictServerFormTestDecoder.values(data)) ?? [:]
+    (try? StrictServerFormTestDecoder.values(request)) ?? [:]
 }
 
 private final class YCardProductionTestURLProtocol:
