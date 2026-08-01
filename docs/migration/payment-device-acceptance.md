@@ -2,6 +2,8 @@
 
 本清单用于 iPhone 13 Pro 上的扣款前验证。所有步骤都应使用本人获授权的校园账号；不要录制、截图或分享账号、Token、Cookie、手机号、余额、订单号和支付密码。
 
+推荐验收构建为 iOS commit `1b47a34` 的 GitHub Actions Artifact `AHUTong-unsigned-ipa-87`；其中 IPA 为 6,728,951 bytes，SHA-256 `7E97FF9E612854AF536FAF538C6237F489754CD35B1D4E5F9E56DBFB651ED8CE`。该 IPA 仍须在本机使用 Personal Team、Sideloadly 或 AltStore 做 7 天签名，不能直接安装，也不等同于 TestFlight/App Store 包。
+
 ## 安全边界
 
 - “学校官方入口无扣款探测”只发送一次不带 Cookie、Token、账号、金额或请求体的 `HEAD` 请求，不登录、不创建订单、不扣款；它仍会暴露普通网络元数据，因此不称为匿名请求。
