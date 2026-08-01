@@ -347,18 +347,52 @@ final class CMBRechargeAcceptanceTests: XCTestCase {
         XCTAssertTrue(cookies.isEmpty)
     }
 
-    func testURLSessionTransportDoesNotFollowRedirect() async throws {
+    func testNoRedirectDelegateRejectsProposedRedirect() throws {
+        let sourceURL = try CMBRechargeSecurityPolicy.makeEntryURL(
+            accessToken: "temporary"
+        )
+        let destinationURL = try XCTUnwrap(URL(
+            string: "https://epay92.ahu.edu.cn/charge-app"
+        ))
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: sourceURL,
+            statusCode: 302,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Location": destinationURL.absoluteString]
+        ))
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: sourceURL)
+        let selectedRequest = CMBPaymentProbeLockedBox<URLRequest?>(
+            URLRequest(url: destinationURL)
+        )
+        let completionCount = CMBPaymentProbeLockedBox(0)
+
+        CMBRechargeNoRedirectDelegate().urlSession(
+            session,
+            task: task,
+            willPerformHTTPRedirection: response,
+            newRequest: URLRequest(url: destinationURL)
+        ) { request in
+            selectedRequest.withValue { $0 = request }
+            completionCount.withValue { $0 += 1 }
+        }
+
+        XCTAssertNil(selectedRequest.value)
+        XCTAssertEqual(completionCount.value, 1)
+    }
+
+    func testURLSessionTransportReturnsOriginal302Response() async throws {
         let requestCount = CMBPaymentProbeLockedBox(0)
         CMBPaymentProbeURLProtocol.handler = { request in
             requestCount.withValue { $0 += 1 }
-            let isFirstHop = request.url?.host == "ycard.ahu.edu.cn"
             return HTTPURLResponse(
                 url: request.url ?? URL(string: "about:blank")!,
-                statusCode: isFirstHop ? 302 : 200,
+                statusCode: 302,
                 httpVersion: "HTTP/1.1",
-                headerFields: isFirstHop
-                    ? ["Location": "https://epay92.ahu.edu.cn/charge-app"]
-                    : nil
+                headerFields: [
+                    "Location": "https://epay92.ahu.edu.cn/charge-app"
+                ]
             )!
         }
         defer { CMBPaymentProbeURLProtocol.handler = nil }
@@ -633,21 +667,6 @@ private final class CMBPaymentProbeURLProtocol:
                 throw URLError(.cannotLoadFromNetwork)
             }
             let response = try handler(request)
-            if (300..<400).contains(response.statusCode),
-               let location = response.value(
-                   forHTTPHeaderField: "Location"
-               ),
-               let redirectURL = URL(
-                   string: location,
-                   relativeTo: request.url
-               )?.absoluteURL {
-                client?.urlProtocol(
-                    self,
-                    wasRedirectedTo: URLRequest(url: redirectURL),
-                    redirectResponse: response
-                )
-                return
-            }
             client?.urlProtocol(
                 self,
                 didReceive: response,

@@ -120,6 +120,100 @@ final class OfficialPaymentPortalProbeTests: XCTestCase {
         )
     }
 
+    func testEntryContractAcceptsEquivalentEncodingAndRejectsMaliciousVariants() throws {
+        let equivalentEntryURL = try XCTUnwrap(URL(
+            string: "https://ycard.ahu.edu.cn/berserker-auth/cas/redirect/neusoftCas"
+                + "?targetUrl=https%3A%2F%2Fycard.ahu.edu.cn%2Fplat%2F"
+                + "%3Fname%3DloginTransit"
+        ))
+        let equivalentResponse = try XCTUnwrap(HTTPURLResponse(
+            url: equivalentEntryURL,
+            statusCode: 302,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Location": expectedLoginRedirect]
+        ))
+        guard case .passed = OfficialPaymentPortalProbeService.evaluate(
+            response: equivalentResponse,
+            elapsedMilliseconds: 1,
+            checkedAt: Date(timeIntervalSince1970: 1)
+        ) else {
+            return XCTFail("Equivalent percent encoding must satisfy the entry contract")
+        }
+
+        let maliciousEntries = [
+            makeOfficialPaymentEntryURL(
+                scheme: "http",
+                target: expectedPortalTarget
+            ),
+            makeOfficialPaymentEntryURL(
+                host: "ycard.ahu.edu.cn.attacker.example",
+                target: expectedPortalTarget
+            ),
+            makeOfficialPaymentEntryURL(
+                port: 444,
+                target: expectedPortalTarget
+            ),
+            makeOfficialPaymentEntryURL(
+                user: "attacker",
+                target: expectedPortalTarget
+            ),
+            makeOfficialPaymentEntryURL(
+                path: "/berserker-auth/cas/redirect/other",
+                target: expectedPortalTarget
+            ),
+            makeOfficialPaymentEntryURL(
+                queryName: "redirectUrl",
+                target: expectedPortalTarget
+            ),
+            makeOfficialPaymentEntryURL(
+                target: expectedPortalTarget,
+                extraItems: [
+                    URLQueryItem(name: "targetUrl", value: expectedPortalTarget)
+                ]
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://attacker.example/plat/?name=loginTransit"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://attacker@ycard.ahu.edu.cn/plat/?name=loginTransit"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://ycard.ahu.edu.cn:444/plat/?name=loginTransit"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://ycard.ahu.edu.cn/not-plat/?name=loginTransit"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://ycard.ahu.edu.cn/plat/?name=loginTransit&next=evil"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://ycard.ahu.edu.cn/plat/?name=loginTransit#evil"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: expectedPortalTarget,
+                fragment: "evil"
+            )
+        ]
+
+        for entryURL in maliciousEntries {
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: entryURL,
+                statusCode: 302,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": expectedLoginRedirect]
+            ))
+            XCTAssertEqual(
+                OfficialPaymentPortalProbeService.evaluate(
+                    response: response,
+                    elapsedMilliseconds: 1,
+                    checkedAt: Date(timeIntervalSince1970: 1)
+                ),
+                .failed(.unsafeRedirect),
+                "Unexpectedly accepted entry URL: \(entryURL)"
+            )
+        }
+    }
+
     func testTransportErrorsMapToFiniteSafeFailures() async {
         let timedOut = OfficialPaymentPortalProbeService(
             transport: OfficialPaymentPortalProbeTransportStub(
@@ -161,18 +255,50 @@ final class OfficialPaymentPortalProbeTests: XCTestCase {
         )
     }
 
-    func testRealURLSessionTransportDoesNotFollowRedirect() async throws {
+    func testNoRedirectDelegateRejectsProposedRedirect() throws {
+        let sourceURL = OfficialSchoolPaymentPortal.loginURL
+        let destinationURL = try XCTUnwrap(URL(
+            string: "https://ycard.ahu.edu.cn/should-not-follow"
+        ))
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: sourceURL,
+            statusCode: 302,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Location": destinationURL.absoluteString]
+        ))
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: sourceURL)
+        let selectedRequest = OfficialPaymentProbeLockedBox<URLRequest?>(
+            URLRequest(url: destinationURL)
+        )
+        let completionCount = OfficialPaymentProbeLockedBox(0)
+
+        OfficialPaymentPortalNoRedirectDelegate().urlSession(
+            session,
+            task: task,
+            willPerformHTTPRedirection: response,
+            newRequest: URLRequest(url: destinationURL)
+        ) { request in
+            selectedRequest.withValue { $0 = request }
+            completionCount.withValue { $0 += 1 }
+        }
+
+        XCTAssertNil(selectedRequest.value)
+        XCTAssertEqual(completionCount.value, 1)
+    }
+
+    func testURLSessionTransportReturnsOriginal302Response() async throws {
         let requestCount = OfficialPaymentProbeLockedBox(0)
         OfficialPaymentProbeURLProtocol.handler = { request in
             requestCount.withValue { $0 += 1 }
-            let isFirstHop = request.url == OfficialSchoolPaymentPortal.loginURL
             return HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
-                statusCode: isFirstHop ? 302 : 200,
+                statusCode: 302,
                 httpVersion: "HTTP/1.1",
-                headerFields: isFirstHop
-                    ? ["Location": "https://ycard.ahu.edu.cn/should-not-follow"]
-                    : nil
+                headerFields: [
+                    "Location": "https://ycard.ahu.edu.cn/should-not-follow"
+                ]
             )!
         }
         defer { OfficialPaymentProbeURLProtocol.handler = nil }
@@ -273,6 +399,33 @@ private let expectedLoginRedirect =
     "https://ycard.ahu.edu.cn/berserker-auth/cas/login/neusoftCas"
     + "?redirectUrl=https%3A%2F%2Fycard.ahu.edu.cn%2Fplat%2F"
     + "%3Fname%3DloginTransit"
+
+private let expectedPortalTarget =
+    "https://ycard.ahu.edu.cn/plat/?name=loginTransit"
+
+private func makeOfficialPaymentEntryURL(
+    scheme: String = "https",
+    host: String = "ycard.ahu.edu.cn",
+    port: Int? = nil,
+    user: String? = nil,
+    path: String = "/berserker-auth/cas/redirect/neusoftCas",
+    queryName: String = "targetUrl",
+    target: String,
+    extraItems: [URLQueryItem] = [],
+    fragment: String? = nil
+) -> URL {
+    var components = URLComponents()
+    components.scheme = scheme
+    components.host = host
+    components.port = port
+    components.user = user
+    components.path = path
+    components.queryItems = [
+        URLQueryItem(name: queryName, value: target)
+    ] + extraItems
+    components.fragment = fragment
+    return components.url!
+}
 
 private struct OfficialPaymentPortalProbeRequestSnapshot: Sendable {
     let method: String?
@@ -376,21 +529,6 @@ private final class OfficialPaymentProbeURLProtocol:
                 throw URLError(.cannotLoadFromNetwork)
             }
             let response = try handler(request)
-            if (300..<400).contains(response.statusCode),
-               let location = response.value(
-                   forHTTPHeaderField: "Location"
-               ),
-               let redirectURL = URL(
-                   string: location,
-                   relativeTo: request.url
-               )?.absoluteURL {
-                client?.urlProtocol(
-                    self,
-                    wasRedirectedTo: URLRequest(url: redirectURL),
-                    redirectResponse: response
-                )
-                return
-            }
             client?.urlProtocol(
                 self,
                 didReceive: response,

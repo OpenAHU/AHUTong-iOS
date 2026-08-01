@@ -72,16 +72,17 @@ final class OperationsPaymentProbeUITests: XCTestCase {
         scrollUntilHittable(openOfficial, app: app)
         openOfficial.tap()
 
-        let cancel = app.buttons[
-            "operations.payment-probe.open-cancel"
-        ]
-        if cancel.waitForExistence(timeout: 2) {
-            cancel.tap()
-        } else {
-            let fallbackCancel = app.buttons["取消"]
-            XCTAssertTrue(fallbackCancel.waitForExistence(timeout: 2))
-            fallbackCancel.tap()
-        }
+        let confirmation = app.alerts["确认打开学校官方页面？"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        // System alerts do not guarantee that SwiftUI button identifiers are
+        // bridged through UIAlertController. Scope the stable localized labels
+        // to this exact alert so similarly named buttons elsewhere cannot match.
+        let cancel = confirmation.buttons["取消"]
+        let confirm = confirmation.buttons["继续打开"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 2))
+        XCTAssertTrue(confirm.exists)
+        cancel.tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 2))
         XCTAssertTrue(result.exists)
     }
 

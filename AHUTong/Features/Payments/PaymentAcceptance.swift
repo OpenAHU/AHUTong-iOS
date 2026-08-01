@@ -441,7 +441,7 @@ protocol CMBRechargeAcceptanceTransport: Sendable {
     func response(for request: URLRequest) async throws -> HTTPURLResponse
 }
 
-private final class CMBRechargeNoRedirectDelegate:
+final class CMBRechargeNoRedirectDelegate:
     NSObject,
     URLSessionTaskDelegate,
     @unchecked Sendable

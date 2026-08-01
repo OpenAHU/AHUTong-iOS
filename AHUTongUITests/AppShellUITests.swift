@@ -640,10 +640,50 @@ final class AppShellUITests: XCTestCase {
 
     @MainActor
     private func openTool(_ identifier: String, app: XCUIApplication) {
-        tabButton("tools", app: app).tap()
+        let toolsTab = tabButton("tools", app: app)
+        XCTAssertTrue(toolsTab.waitForExistence(timeout: 2))
+        if !toolsTab.isSelected {
+            toolsTab.tap()
+        }
+
+        // In the long loading/empty/error chain, the first synthesized tap can
+        // complete without changing TabView selection. Verify the selected
+        // state and retry only that local transition instead of sleeping.
+        if !waitForSelection(of: toolsTab, timeout: 2) {
+            toolsTab.tap()
+        }
+        XCTAssertTrue(
+            waitForSelection(of: toolsTab, timeout: 2),
+            "The tools tab must be selected before looking up \(identifier)"
+        )
+
         let tool = app.buttons[identifier]
-        XCTAssertTrue(tool.waitForExistence(timeout: 4))
+        var attempts = 0
+        while !tool.waitForExistence(timeout: 1) && attempts < 3 {
+            app.swipeUp()
+            attempts += 1
+        }
+        XCTAssertTrue(
+            tool.exists,
+            "Expected \(identifier) in the selected tools screen"
+        )
+        if !tool.isHittable {
+            scrollUpUntilHittable(tool, app: app, maximumAttempts: 3)
+        }
         tool.tap()
+    }
+
+    @MainActor
+    private func waitForSelection(
+        of element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        if element.isSelected { return true }
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "selected == true"),
+            object: element
+        )
+        return XCTWaiter.wait(for: [selected], timeout: timeout) == .completed
     }
 
     @MainActor

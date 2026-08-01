@@ -23,21 +23,20 @@ struct OfficialPaymentPortalProbeView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .confirmationDialog(
+        .alert(
             "确认打开学校官方页面？",
-            isPresented: $showsOpenConfirmation,
-            titleVisibility: .visible
+            isPresented: $showsOpenConfirmation
         ) {
+            Button("取消", role: .cancel) {}
+                .accessibilityIdentifier(
+                    "operations.payment-probe.open-cancel"
+                )
             Button("继续打开") {
                 showsOfficialPortal = true
             }
             .accessibilityIdentifier(
                 "operations.payment-probe.open-confirm"
             )
-            Button("取消", role: .cancel) {}
-                .accessibilityIdentifier(
-                    "operations.payment-probe.open-cancel"
-                )
         } message: {
             Text(
                 "只检查登录页或业务列表，不要点击最终支付确认。"

@@ -81,7 +81,7 @@ private enum OfficialPaymentPortalProbeTransportError: Error, Sendable {
     case invalidResponse
 }
 
-private final class OfficialPaymentPortalNoRedirectDelegate:
+final class OfficialPaymentPortalNoRedirectDelegate:
     NSObject,
     URLSessionTaskDelegate,
     @unchecked Sendable
@@ -217,7 +217,8 @@ struct OfficialPaymentPortalProbeService: OfficialPaymentPortalProbing {
         elapsedMilliseconds: Int,
         checkedAt: Date
     ) -> OfficialPaymentPortalProbeOutcome {
-        guard response.url == OfficialSchoolPaymentPortal.loginURL else {
+        guard let responseURL = response.url,
+              isExpectedEntryURL(responseURL) else {
             return .failed(.unsafeRedirect)
         }
         guard response.statusCode == 302 else {
@@ -226,7 +227,7 @@ struct OfficialPaymentPortalProbeService: OfficialPaymentPortalProbing {
         guard let location = response.value(forHTTPHeaderField: "Location"),
               let redirectURL = URL(
                   string: location,
-                  relativeTo: response.url
+                  relativeTo: responseURL
               )?.absoluteURL else {
             return .failed(.missingRedirect)
         }
@@ -248,6 +249,50 @@ struct OfficialPaymentPortalProbeService: OfficialPaymentPortalProbing {
             elapsedMilliseconds: max(0, elapsedMilliseconds),
             checkedAt: checkedAt
         ))
+    }
+
+    private static func isExpectedEntryURL(_ url: URL) -> Bool {
+        guard let components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        ),
+              components.scheme?.lowercased() == "https",
+              components.host?.lowercased() == "ycard.ahu.edu.cn",
+              components.port == nil || components.port == 443,
+              components.user == nil,
+              components.password == nil,
+              components.percentEncodedPath
+                == "/berserker-auth/cas/redirect/neusoftCas",
+              components.fragment == nil,
+              let items = components.queryItems,
+              items.count == 1,
+              items[0].name == "targetUrl",
+              let rawTarget = items[0].value,
+              let target = URL(string: rawTarget) else {
+            return false
+        }
+        return isExpectedPortalTargetURL(target)
+    }
+
+    private static func isExpectedPortalTargetURL(_ url: URL) -> Bool {
+        guard let components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        ),
+              components.scheme?.lowercased() == "https",
+              components.host?.lowercased() == "ycard.ahu.edu.cn",
+              components.port == nil || components.port == 443,
+              components.user == nil,
+              components.password == nil,
+              components.percentEncodedPath == "/plat/",
+              components.fragment == nil,
+              let items = components.queryItems,
+              items.count == 1,
+              items[0].name == "name",
+              items[0].value == "loginTransit" else {
+            return false
+        }
+        return true
     }
 
     private static func hasExpectedRedirectQuery(_ url: URL) -> Bool {
