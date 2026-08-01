@@ -866,13 +866,18 @@ actor YCardProductionPaymentClient {
 
     private let campusAPI: any CampusCoreAPI
     private let session: URLSession
+    private let refreshCoordinator: SessionRefreshCoordinator
     private let mockTransportEnabled: Bool
     private let automatedEnvironment: Bool
     private var accessToken: String?
     private var sessionCookies: [CampusCookie] = []
 
-    init(campusAPI: any CampusCoreAPI) {
+    init(
+        campusAPI: any CampusCoreAPI,
+        refreshCoordinator: SessionRefreshCoordinator = .shared
+    ) {
         self.campusAPI = campusAPI
+        self.refreshCoordinator = refreshCoordinator
         session = URLSession(
             configuration: Self.makeConfiguration(),
             delegate: YCardProductionNoRedirectDelegate(),
@@ -885,9 +890,11 @@ actor YCardProductionPaymentClient {
     init(
         campusAPI: any CampusCoreAPI,
         configuration: URLSessionConfiguration,
-        mockTransportEnabled: Bool
+        mockTransportEnabled: Bool,
+        refreshCoordinator: SessionRefreshCoordinator = .shared
     ) {
         self.campusAPI = campusAPI
+        self.refreshCoordinator = refreshCoordinator
         let configuration = Self.harden(configuration)
         session = URLSession(
             configuration: configuration,
@@ -914,6 +921,20 @@ actor YCardProductionPaymentClient {
         _ operation: YCardProductionPaymentOperation,
         queryItems: [URLQueryItem] = [],
         formFields: [YCardPaymentFormField] = []
+    ) async throws -> YCardProductionHTTPResult {
+        try await execute(
+            operation,
+            queryItems: queryItems,
+            formFields: formFields,
+            mayRefreshSession: true
+        )
+    }
+
+    private func execute(
+        _ operation: YCardProductionPaymentOperation,
+        queryItems: [URLQueryItem],
+        formFields: [YCardPaymentFormField],
+        mayRefreshSession: Bool
     ) async throws -> YCardProductionHTTPResult {
         if operation.isDebit {
             try authorizeDebitTransport()
@@ -959,8 +980,34 @@ actor YCardProductionPaymentClient {
         Self.clearBody(&request)
         let (data, rawResponse) = result
         guard let response = rawResponse as? HTTPURLResponse,
-              let responseURL = response.url,
-              responseURL == request.url else {
+              let responseURL = response.url else {
+            throw YCardProductionPaymentError.invalidResponse
+        }
+        if CampusSessionExpiryDetector.isExpired(response: response, data: data) {
+            clearCredentials()
+            guard mayRefreshSession else {
+                throw YCardProductionPaymentError.credentialsUnavailable
+            }
+            do {
+                try await refreshCoordinator.refresh { [campusAPI] in
+                    try await campusAPI.refreshSession()
+                }
+            } catch {
+                throw YCardProductionPaymentError.credentialsUnavailable
+            }
+            // Creating an order, submitting payment, or requesting a dynamic
+            // keyboard is never repeated after an authentication response.
+            guard !operation.isDebit else {
+                throw YCardProductionPaymentError.credentialsUnavailable
+            }
+            return try await execute(
+                operation,
+                queryItems: queryItems,
+                formFields: formFields,
+                mayRefreshSession: false
+            )
+        }
+        guard responseURL == request.url else {
             throw YCardProductionPaymentError.invalidResponse
         }
         if response.statusCode == 401 || response.statusCode == 403 {

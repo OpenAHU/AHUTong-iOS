@@ -3,6 +3,7 @@ import SwiftUI
 
 enum NetworkRechargeSafetyError: LocalizedError, Equatable {
     case disallowedEndpoint
+    case credentialsUnavailable
     case invalidResponse
     case unavailable
 
@@ -10,6 +11,8 @@ enum NetworkRechargeSafetyError: LocalizedError, Equatable {
         switch self {
         case .disallowedEndpoint:
             "已阻止不在只读白名单中的校园卡请求"
+        case .credentialsUnavailable:
+            "校园卡登录状态已失效，请重新登录后重试"
         case .invalidResponse:
             "学校网费服务返回了无法识别的数据"
         case .unavailable:
@@ -394,12 +397,17 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
 
     private let campusAPI: any CampusCoreAPI
     private let session: URLSession
+    private let refreshCoordinator: SessionRefreshCoordinator
     private var accessToken: String?
     private var sessionCookies: [CampusCookie] = []
     private var inFlightLoad: InFlightLoad?
 
-    init(campusAPI: any CampusCoreAPI) {
+    init(
+        campusAPI: any CampusCoreAPI,
+        refreshCoordinator: SessionRefreshCoordinator = .shared
+    ) {
         self.campusAPI = campusAPI
+        self.refreshCoordinator = refreshCoordinator
         let configuration = Self.makeConfiguration()
         session = URLSession(
             configuration: configuration,
@@ -410,9 +418,11 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
 
     init(
         campusAPI: any CampusCoreAPI,
-        configuration: URLSessionConfiguration
+        configuration: URLSessionConfiguration,
+        refreshCoordinator: SessionRefreshCoordinator = .shared
     ) {
         self.campusAPI = campusAPI
+        self.refreshCoordinator = refreshCoordinator
         let configuration = Self.harden(configuration)
         session = URLSession(
             configuration: configuration,
@@ -453,7 +463,7 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
             return try await inFlightLoad.task.value
         }
         let id = UUID()
-        let task = Task { try await self.performLoad() }
+        let task = Task { try await self.performLoad(mayRefreshSession: true) }
         inFlightLoad = InFlightLoad(id: id, task: task)
         do {
             let snapshot = try await task.value
@@ -465,7 +475,27 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
         }
     }
 
-    private func performLoad() async throws -> NetworkRechargeSnapshot {
+    private func performLoad(
+        mayRefreshSession: Bool
+    ) async throws -> NetworkRechargeSnapshot {
+        do {
+            return try await performLoadOnce()
+        } catch NetworkRechargeSafetyError.credentialsUnavailable
+            where mayRefreshSession {
+            accessToken = nil
+            sessionCookies = []
+            do {
+                try await refreshCoordinator.refresh { [campusAPI] in
+                    try await campusAPI.refreshSession()
+                }
+            } catch {
+                throw NetworkRechargeSafetyError.credentialsUnavailable
+            }
+            return try await performLoad(mayRefreshSession: false)
+        }
+    }
+
+    private func performLoadOnce() async throws -> NetworkRechargeSnapshot {
         let token = try await campusAPI.cardAccessToken()
         accessToken = token
         let rawCookies = (try? await campusAPI.cookiesFlat()) ?? "[]"
@@ -635,6 +665,9 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else {
             throw NetworkRechargeSafetyError.invalidResponse
+        }
+        if CampusSessionExpiryDetector.isExpired(response: response, data: data) {
+            throw NetworkRechargeSafetyError.credentialsUnavailable
         }
         captureResponseCookies(response, requestURL: url)
         return (data, response)

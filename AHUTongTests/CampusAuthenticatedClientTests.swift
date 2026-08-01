@@ -140,6 +140,193 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         XCTAssertEqual(refreshCount, 1)
     }
 
+    func testConcurrentUnauthorizedRequestsShareOneRefresh() async throws {
+        let api = CampusAuthenticatedClientAPIStub(
+            cookies: "[]",
+            refreshDelay: .milliseconds(75)
+        )
+        let client = CampusAuthenticatedClient(
+            campusAPI: api,
+            session: Self.makeSession(),
+            refreshCoordinator: SessionRefreshCoordinator()
+        )
+        let requestCount = CampusTestLockedBox(0)
+        CampusTestURLProtocol.handler = { request in
+            let count = requestCount.withValue {
+                $0 += 1
+                return $0
+            }
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: count <= 2 ? 401 : 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data("ok".utf8)
+            )
+        }
+        let url = try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student/home"))
+
+        async let first = client.data(url: url)
+        async let second = client.data(url: url)
+        let results = try await [first, second]
+
+        XCTAssertEqual(results.map { String(decoding: $0, as: UTF8.self) }, ["ok", "ok"])
+        XCTAssertEqual(requestCount.value, 4)
+        let refreshCount = await api.refreshCount()
+        XCTAssertEqual(refreshCount, 1)
+    }
+
+    func testLoginHTMLAndStudentSSOFinalURLRefreshAndRetry() async throws {
+        for mode in ["html", "final-url"] {
+            let api = CampusAuthenticatedClientAPIStub(cookies: "[]")
+            let client = CampusAuthenticatedClient(
+                campusAPI: api,
+                session: Self.makeSession(),
+                refreshCoordinator: SessionRefreshCoordinator()
+            )
+            let requestCount = CampusTestLockedBox(0)
+            CampusTestURLProtocol.handler = { request in
+                let count = requestCount.withValue {
+                    $0 += 1
+                    return $0
+                }
+                if count == 1, mode == "html" {
+                    return (
+                        HTTPURLResponse(
+                            url: request.url!,
+                            statusCode: 200,
+                            httpVersion: nil,
+                            headerFields: ["Content-Type": "text/html; charset=utf-8"]
+                        )!,
+                        Data(#"<html><form id="loginForm"><input name="username"><input name="password"></form></html>"#.utf8)
+                    )
+                }
+                let responseURL = count == 1
+                    ? URL(string: "https://jw.ahu.edu.cn/student/sso/login")!
+                    : request.url!
+                return (
+                    HTTPURLResponse(
+                        url: responseURL,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"]
+                    )!,
+                    Data("ok".utf8)
+                )
+            }
+
+            let result = try await client.data(
+                url: try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student/home"))
+            )
+
+            XCTAssertEqual(String(decoding: result, as: UTF8.self), "ok")
+            XCTAssertEqual(requestCount.value, 2)
+            let refreshCount = await api.refreshCount()
+            XCTAssertEqual(refreshCount, 1)
+        }
+    }
+
+    func testRepeatedUnauthorizedRetriesGetOnlyOnceThenInvalidates() async throws {
+        let api = CampusAuthenticatedClientAPIStub(cookies: "[]")
+        let client = CampusAuthenticatedClient(
+            campusAPI: api,
+            session: Self.makeSession(),
+            refreshCoordinator: SessionRefreshCoordinator()
+        )
+        let requestCount = CampusTestLockedBox(0)
+        CampusTestURLProtocol.handler = { request in
+            requestCount.withValue { $0 += 1 }
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+
+        do {
+            _ = try await client.data(
+                url: try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student/home"))
+            )
+            XCTFail("Expected unauthorized")
+        } catch {
+            XCTAssertEqual(error as? CampusWebError, .unauthorized)
+        }
+
+        XCTAssertEqual(requestCount.value, 2)
+        let refreshCount = await api.refreshCount()
+        let invalidationCount = await api.invalidationCount()
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(invalidationCount, 1)
+    }
+
+    func testPaymentPostRefreshesFutureSessionButIsNeverRepeated() async throws {
+        let api = CampusAuthenticatedClientAPIStub(cookies: "[]")
+        let client = CampusAuthenticatedClient(
+            campusAPI: api,
+            session: Self.makeSession(),
+            refreshCoordinator: SessionRefreshCoordinator()
+        )
+        let requestCount = CampusTestLockedBox(0)
+        CampusTestURLProtocol.handler = { request in
+            requestCount.withValue { $0 += 1 }
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+
+        do {
+            _ = try await client.data(
+                url: try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn/blade-pay/pay")),
+                method: "POST",
+                body: Data("fixture-only".utf8),
+                contentType: "application/x-www-form-urlencoded"
+            )
+            XCTFail("Expected unauthorized")
+        } catch {
+            XCTAssertEqual(error as? CampusWebError, .unauthorized)
+        }
+
+        XCTAssertEqual(requestCount.value, 1)
+        let refreshCount = await api.refreshCount()
+        let invalidationCount = await api.invalidationCount()
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(invalidationCount, 0)
+    }
+
+    func testFiveHundredNeverRefreshesOrInvalidatesSession() async throws {
+        let api = CampusAuthenticatedClientAPIStub(cookies: "[]")
+        let client = CampusAuthenticatedClient(
+            campusAPI: api,
+            session: Self.makeSession(),
+            refreshCoordinator: SessionRefreshCoordinator()
+        )
+        CampusTestURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+                Data("upstream changed".utf8)
+            )
+        }
+
+        do {
+            _ = try await client.data(
+                url: try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student/home"))
+            )
+            XCTFail("Expected server error")
+        } catch {
+            guard let webError = error as? CampusWebError,
+                  case .server = webError else {
+                return XCTFail("Expected finite server error")
+            }
+        }
+
+        let refreshCount = await api.refreshCount()
+        let invalidationCount = await api.invalidationCount()
+        XCTAssertEqual(refreshCount, 0)
+        XCTAssertEqual(invalidationCount, 0)
+    }
+
     func testSetCookieIsMergedIntoRustSessionAndPersisted() async throws {
         let api = CampusAuthenticatedClientAPIStub(
             cookies: #"[{"name":"OLD","value":"keep","domain":"jw.ahu.edu.cn","path":"/","secure":true}]"#
@@ -365,9 +552,12 @@ private actor CampusAuthenticatedClientAPIStub: CampusCoreAPI {
     private var refreshes = 0
     private var persists = 0
     private var initializedCookies: String?
+    private var invalidations = 0
+    private let refreshDelay: Duration?
 
-    init(cookies: String) {
+    init(cookies: String, refreshDelay: Duration? = nil) {
         self.cookies = cookies
+        self.refreshDelay = refreshDelay
     }
 
     func initialize(cookiesJSON: String) {
@@ -388,8 +578,15 @@ private actor CampusAuthenticatedClientAPIStub: CampusCoreAPI {
     func cardBalance() throws -> Double { throw CampusCoreError.invalidResponse }
     func cardQRCode() throws -> String { throw CampusCoreError.invalidResponse }
 
-    func refreshSession() {
+    func refreshSession() async {
         refreshes += 1
+        if let refreshDelay {
+            try? await Task.sleep(for: refreshDelay)
+        }
+    }
+
+    func invalidateStoredSession() {
+        invalidations += 1
     }
 
     func persistSessionCookies() {
@@ -397,6 +594,7 @@ private actor CampusAuthenticatedClientAPIStub: CampusCoreAPI {
     }
 
     func refreshCount() -> Int { refreshes }
+    func invalidationCount() -> Int { invalidations }
     func persistCount() -> Int { persists }
     func lastInitializedCookies() -> String? { initializedCookies }
 }

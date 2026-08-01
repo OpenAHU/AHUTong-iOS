@@ -39,4 +39,25 @@ final class RustCampusServiceErrorMapperTests: XCTestCase {
             RustCampusServiceErrorMapper.message(from: Data("not-json".utf8))
         )
     }
+
+    func testTypedAuthenticationCodesRemainDistinct() {
+        XCTAssertEqual(
+            RustCampusServiceErrorMapper.code(
+                from: Data(#"{"error":"campus_session_expired"}"#.utf8)
+            ),
+            "campus_session_expired"
+        )
+        XCTAssertEqual(
+            RustCampusServiceErrorMapper.code(
+                from: Data(#"{"error":"campus_login_rejected"}"#.utf8)
+            ),
+            "campus_login_rejected"
+        )
+        XCTAssertNotEqual(
+            RustCampusServiceErrorMapper.code(
+                from: Data(#"{"error":"campus_service_error"}"#.utf8)
+            ),
+            "campus_session_expired"
+        )
+    }
 }

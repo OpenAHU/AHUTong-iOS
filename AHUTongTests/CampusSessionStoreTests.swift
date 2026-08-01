@@ -48,9 +48,12 @@ final class CampusSessionStoreTests: XCTestCase {
     @MainActor
     func testRestoreReauthenticatesExpiredCookieSessionAndPersistsReplacement() async throws {
         let secureStore = InMemorySecureStore()
-        let api = CampusCoreAPIStub()
         let sessionStore = CampusSessionStore(secureStore: secureStore)
         let credentials = CredentialStore(secureStore: secureStore)
+        let api = CampusCoreAPIStub(
+            sessionStore: sessionStore,
+            credentialStore: credentials
+        )
         try await sessionStore.save(
             CampusSessionSnapshot(
                 user: User(name: "旧会话", studentID: "AB220001"),
@@ -73,8 +76,12 @@ final class CampusSessionStoreTests: XCTestCase {
     @MainActor
     func testRestoreClearsExpiredSessionWhenCredentialsAreUnavailable() async throws {
         let secureStore = InMemorySecureStore()
-        let api = CampusCoreAPIStub()
         let sessionStore = CampusSessionStore(secureStore: secureStore)
+        let credentials = CredentialStore(secureStore: secureStore)
+        let api = CampusCoreAPIStub(
+            sessionStore: sessionStore,
+            credentialStore: credentials
+        )
         try await sessionStore.save(
             CampusSessionSnapshot(
                 user: User(name: "旧会话", studentID: "AB220001"),
@@ -85,12 +92,13 @@ final class CampusSessionStoreTests: XCTestCase {
         let model = AppModel(
             campusAPI: api,
             sessionStore: sessionStore,
-            credentialStore: CredentialStore(secureStore: secureStore)
+            credentialStore: credentials
         )
 
         await model.restore()
 
         XCTAssertEqual(model.sessionState, .signedOut)
+        XCTAssertEqual(model.reauthenticationMessage, "登录信息需要更新，请重新登录一次")
         let clearedSession = try await sessionStore.load()
         XCTAssertNil(clearedSession)
     }
@@ -122,9 +130,12 @@ final class CampusSessionStoreTests: XCTestCase {
     @MainActor
     func testRestoreSignsOutWhenCredentialReauthenticationIsRejected() async throws {
         let secureStore = InMemorySecureStore()
-        let api = CampusCoreAPIStub()
         let sessionStore = CampusSessionStore(secureStore: secureStore)
         let credentials = CredentialStore(secureStore: secureStore)
+        let api = CampusCoreAPIStub(
+            sessionStore: sessionStore,
+            credentialStore: credentials
+        )
         let snapshot = CampusSessionSnapshot(
             user: User(name: "旧会话", studentID: "AB220001"),
             cookiesJSON: "expired-cookie"
@@ -143,20 +154,65 @@ final class CampusSessionStoreTests: XCTestCase {
         XCTAssertNil(persistedSession)
         XCTAssertNil(persistedCredentials)
     }
+
+    @MainActor
+    func testRestoreKeepsIdentityAndCredentialsForSchoolFiveHundred() async throws {
+        let secureStore = InMemorySecureStore()
+        let sessionStore = CampusSessionStore(secureStore: secureStore)
+        let credentials = CredentialStore(secureStore: secureStore)
+        let snapshot = CampusSessionSnapshot(
+            user: User(name: "离线同学", studentID: "AB220001"),
+            cookiesJSON: "cached-cookie"
+        )
+        try await sessionStore.save(snapshot)
+        try await credentials.save(
+            LoginCredentials(studentID: "AB220001", password: "test-only")
+        )
+        let api = CampusCoreAPIStub(
+            sessionStore: sessionStore,
+            credentialStore: credentials
+        )
+        await api.failNextValidationWithServerError()
+        let model = AppModel(
+            campusAPI: api,
+            sessionStore: sessionStore,
+            credentialStore: credentials,
+            refreshCoordinator: SessionRefreshCoordinator()
+        )
+
+        await model.restore()
+
+        XCTAssertEqual(model.sessionState, .authenticated(snapshot.user))
+        let restoredSnapshot = try await sessionStore.load()
+        let restoredCredentials = try await credentials.credentials(for: "AB220001")
+        XCTAssertEqual(restoredSnapshot, snapshot)
+        XCTAssertNotNil(restoredCredentials)
+    }
 }
 
 private actor CampusCoreAPIStub: CampusCoreAPI {
     private var cookies = ""
     private var shouldExpireNextValidation = false
     private var shouldFailNextValidationOffline = false
+    private var shouldFailNextValidationServer = false
     private var shouldRejectNextLogin = false
     private var performedLogins = 0
+    private let sessionStore: CampusSessionStore?
+    private let credentialStore: CredentialStore?
+
+    init(
+        sessionStore: CampusSessionStore? = nil,
+        credentialStore: CredentialStore? = nil
+    ) {
+        self.sessionStore = sessionStore
+        self.credentialStore = credentialStore
+    }
     func initialize(cookiesJSON: String) { cookies = cookiesJSON }
     func login(studentID: String, password: String) throws -> User {
         performedLogins += 1
         if shouldRejectNextLogin {
             shouldRejectNextLogin = false
-            throw CampusCoreError.unauthorized
+            throw CampusCoreError.credentialsRejected
         }
         return User(name: "测试同学", studentID: studentID)
     }
@@ -168,6 +224,10 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
             shouldFailNextValidationOffline = false
             throw URLError(.notConnectedToInternet)
         }
+        if shouldFailNextValidationServer {
+            shouldFailNextValidationServer = false
+            throw CampusCoreError.campus("学校服务请求失败（500）")
+        }
         if shouldExpireNextValidation {
             shouldExpireNextValidation = false
             throw CampusCoreError.unauthorized
@@ -178,9 +238,40 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     func grades() -> CampusGradeReport { CampusGradeReport(grades: [], gradePointAverage: nil, rank: nil, studentProfiles: []) }
     func cardBalance() -> Double { 126.35 }
     func cardQRCode() -> String { "DEMO-QR" }
+    func refreshSession() async throws {
+        guard let sessionStore,
+              let credentialStore,
+              let snapshot = try await sessionStore.load(),
+              let credentials = try await credentialStore.credentials(
+                  for: snapshot.user.studentID
+              ) else {
+            throw CampusCoreError.credentialsUnavailable
+        }
+        cookies = ""
+        let user = try login(
+            studentID: credentials.studentID,
+            password: credentials.password
+        )
+        cookies = "cookie-json"
+        try await sessionStore.save(
+            CampusSessionSnapshot(user: user, cookiesJSON: cookies)
+        )
+    }
+    func invalidateStoredSession() async {
+        if let sessionStore,
+           let snapshot = try? await sessionStore.load(),
+           let credentialStore {
+            try? await credentialStore.removeCredentials(for: snapshot.user.studentID)
+        }
+        if let sessionStore {
+            try? await sessionStore.clear()
+        }
+        cookies = ""
+    }
     func lastInitializedCookies() -> String { cookies }
     func expireNextValidation() { shouldExpireNextValidation = true }
     func failNextValidationWithTransportError() { shouldFailNextValidationOffline = true }
+    func failNextValidationWithServerError() { shouldFailNextValidationServer = true }
     func rejectNextLogin() { shouldRejectNextLogin = true }
     func loginCount() -> Int { performedLogins }
 }

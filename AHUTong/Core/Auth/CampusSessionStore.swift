@@ -37,19 +37,23 @@ enum AppSessionState: Equatable {
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var sessionState: AppSessionState = .loading
+    @Published private(set) var reauthenticationMessage: String?
 
     let campusAPI: any CampusCoreAPI
     private let sessionStore: CampusSessionStore
     private let credentialStore: CredentialStore
+    private let refreshCoordinator: SessionRefreshCoordinator
 
     init(
         campusAPI: any CampusCoreAPI = RustCampusCoreAPI(),
         sessionStore: CampusSessionStore = CampusSessionStore(),
-        credentialStore: CredentialStore = CredentialStore()
+        credentialStore: CredentialStore = CredentialStore(),
+        refreshCoordinator: SessionRefreshCoordinator = .shared
     ) {
         self.campusAPI = campusAPI
         self.sessionStore = sessionStore
         self.credentialStore = credentialStore
+        self.refreshCoordinator = refreshCoordinator
     }
 
     func restore(demoSession: Bool = false) async {
@@ -64,40 +68,26 @@ final class AppModel: ObservableObject {
             }
             do {
                 try await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
-                _ = try await campusAPI.currentWeek()
-                sessionState = .authenticated(snapshot.user)
-            } catch CampusCoreError.credentialsUnavailable {
-                try? await sessionStore.clear()
-                sessionState = .signedOut
-            } catch CampusCoreError.unauthorized {
-                guard let credentials = try await credentialStore.credentials(for: snapshot.user.studentID) else {
-                    try? await sessionStore.clear()
-                    sessionState = .signedOut
-                    return
-                }
                 do {
-                    try await campusAPI.initialize(cookiesJSON: "")
-                    let user = try await campusAPI.login(
-                        studentID: credentials.studentID,
-                        password: credentials.password
-                    )
-                    let cookies = try await campusAPI.dumpCookies()
-                    try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
-                    sessionState = .authenticated(user)
+                    _ = try await campusAPI.currentWeek()
                 } catch CampusCoreError.unauthorized {
-                    try? await credentialStore.removeCredentials(for: snapshot.user.studentID)
-                    try? await sessionStore.clear()
-                    sessionState = .signedOut
-                } catch CampusCoreError.credentialsUnavailable {
-                    try? await credentialStore.removeCredentials(for: snapshot.user.studentID)
-                    try? await sessionStore.clear()
-                    sessionState = .signedOut
-                } catch {
-                    // A campus outage must not make local, user-scoped caches
-                    // inaccessible. Keep the last authenticated identity and
-                    // let individual online screens expose their error state.
-                    sessionState = .authenticated(snapshot.user)
+                    try await refreshCoordinator.refresh { [campusAPI] in
+                        try await campusAPI.refreshSession()
+                    }
+                    do {
+                        _ = try await campusAPI.currentWeek()
+                    } catch CampusCoreError.unauthorized {
+                        await campusAPI.invalidateStoredSession()
+                        throw CampusCoreError.credentialsRejected
+                    }
                 }
+                let refreshedSnapshot = try await sessionStore.load()
+                reauthenticationMessage = nil
+                sessionState = .authenticated(refreshedSnapshot?.user ?? snapshot.user)
+            } catch CampusCoreError.credentialsUnavailable {
+                await requireReauthentication()
+            } catch CampusCoreError.credentialsRejected {
+                await rejectCredentials(for: snapshot.user.studentID)
             } catch {
                 // Transport failures and 5xx responses are not proof that the
                 // Keychain session is invalid. Preserve offline access.
@@ -109,12 +99,14 @@ final class AppModel: ObservableObject {
     }
 
     func login(studentID: String, password: String) async throws {
-        let credentials = LoginCredentials(studentID: studentID, password: password)
+        let canonicalID = StudentIDCanonicalizer.canonical(studentID)
+        let credentials = LoginCredentials(studentID: canonicalID, password: password)
         try await campusAPI.initialize(cookiesJSON: "")
-        let user = try await campusAPI.login(studentID: studentID, password: password)
+        let user = try await campusAPI.login(studentID: canonicalID, password: password)
         let cookies = try await campusAPI.dumpCookies()
         try await credentialStore.save(credentials)
         try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+        reauthenticationMessage = nil
         sessionState = .authenticated(user)
     }
 
@@ -126,6 +118,34 @@ final class AppModel: ObservableObject {
         try? await campusAPI.initialize(cookiesJSON: "")
         try? await ScheduleWidgetSnapshotStore.shared.save(.unavailable(.signedOut))
         WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
+        sessionState = .signedOut
+    }
+
+    func handleCredentialsRejected() async {
+        let studentID: String?
+        if case let .authenticated(user) = sessionState {
+            studentID = user.studentID
+        } else {
+            studentID = (try? await sessionStore.load())?.user.studentID
+        }
+        if let studentID {
+            await rejectCredentials(for: studentID)
+        } else {
+            reauthenticationMessage = "保存的登录信息已失效，请重新登录"
+            sessionState = .signedOut
+        }
+    }
+
+    func requireReauthentication() async {
+        try? await sessionStore.clear()
+        reauthenticationMessage = "登录信息需要更新，请重新登录一次"
+        sessionState = .signedOut
+    }
+
+    private func rejectCredentials(for studentID: String) async {
+        try? await credentialStore.removeCredentials(for: studentID)
+        try? await sessionStore.clear()
+        reauthenticationMessage = "保存的登录信息已失效，请重新登录"
         sessionState = .signedOut
     }
 }

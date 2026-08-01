@@ -70,8 +70,11 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
             Task { await reloadGrayGate() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .campusSessionExpired)) { _ in
-            Task { await appModel.signOut() }
+        .onReceive(NotificationCenter.default.publisher(for: .campusCredentialsRejected)) { _ in
+            Task { await appModel.handleCredentialsRejected() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .campusReauthenticationRequired)) { _ in
+            Task { await appModel.requireReauthentication() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
             Task { await rescheduleCourseRemindersIfNeeded() }

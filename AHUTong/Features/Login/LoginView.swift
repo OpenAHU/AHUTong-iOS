@@ -30,6 +30,15 @@ struct LoginView: View {
                         .padding(.vertical, 32)
                         .accessibilityIdentifier("login.title")
 
+                    if let message = appModel.reauthenticationMessage {
+                        Label(message, systemImage: "person.crop.circle.badge.exclamationmark")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 24)
+                            .accessibilityIdentifier("login.reauthentication-message")
+                    }
+
                     Spacer(minLength: 0)
                     loginFace
                     Spacer(minLength: 0)

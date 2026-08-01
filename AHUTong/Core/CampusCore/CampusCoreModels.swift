@@ -135,6 +135,7 @@ enum CampusCoreError: Error, Equatable, LocalizedError, Sendable {
     case serverStartup(String)
     case invalidResponse
     case unauthorized
+    case credentialsRejected
     case credentialsUnavailable
     case campus(String)
 
@@ -143,6 +144,7 @@ enum CampusCoreError: Error, Equatable, LocalizedError, Sendable {
         case let .serverStartup(message): "校园服务启动失败：\(message)"
         case .invalidResponse: "校园服务返回了无法识别的数据"
         case .unauthorized: "登录已过期，请重新登录"
+        case .credentialsRejected: "保存的登录信息已失效，请重新登录"
         case .credentialsUnavailable: "登录已过期，请重新登录"
         case let .campus(message): message
         }

@@ -1,7 +1,8 @@
 import Foundation
 
 extension Notification.Name {
-    static let campusSessionExpired = Notification.Name("AHUTong.campusSessionExpired")
+    static let campusCredentialsRejected = Notification.Name("AHUTong.campusCredentialsRejected")
+    static let campusReauthenticationRequired = Notification.Name("AHUTong.campusReauthenticationRequired")
 }
 
 enum CampusWebError: LocalizedError, Equatable, Sendable {
@@ -154,6 +155,77 @@ struct CampusHTTPResponse: Sendable {
     }
 }
 
+enum CampusSessionExpiryDetector {
+    static func isExpired(response: HTTPURLResponse, data: Data) -> Bool {
+        if response.statusCode == 401 || response.statusCode == 403 {
+            return true
+        }
+
+        if isLoginURL(response.url) {
+            return true
+        }
+
+        let redirect = response.value(forHTTPHeaderField: "Location")
+        if isLoginLocation(redirect) {
+            return true
+        }
+
+        return isLoginHTML(
+            data,
+            contentType: response.value(forHTTPHeaderField: "Content-Type")
+        )
+    }
+
+    private static func isLoginURL(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let schoolHost = url.host?.lowercased().hasSuffix(".ahu.edu.cn") == true
+            || url.host?.lowercased() == "ahu.edu.cn"
+        return path.hasSuffix("cas/login")
+            || path.hasSuffix("student/sso/login")
+            || (schoolHost && path == "login")
+            || path.contains("tologin")
+            || path.hasSuffix("refer")
+    }
+
+    private static func isLoginLocation(_ location: String?) -> Bool {
+        guard let location else { return false }
+        let value = location.lowercased()
+        if value == "/login" || value.hasPrefix("/login?") {
+            return true
+        }
+        if let url = URL(string: value),
+           url.host?.hasSuffix(".ahu.edu.cn") == true,
+           url.path == "/login" {
+            return true
+        }
+        return value.contains("/cas/login")
+            || value.contains("/student/sso/login")
+            || value.contains("tologin")
+            || value.contains("/refer")
+    }
+
+    private static func isLoginHTML(_ data: Data, contentType: String?) -> Bool {
+        guard !data.isEmpty else { return false }
+        let prefix = String(decoding: data.prefix(128 * 1024), as: UTF8.self)
+        let trimmed = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        let looksLikeHTML = contentType?.localizedCaseInsensitiveContains("text/html") == true
+            || trimmed.hasPrefix("<!DOCTYPE html")
+            || trimmed.hasPrefix("<!doctype html")
+            || trimmed.hasPrefix("<html")
+        guard looksLikeHTML else { return false }
+        let lowercase = prefix.lowercased()
+        return lowercase.contains("id=\"loginform\"")
+            || lowercase.contains("id='loginform'")
+            || prefix.contains("<title>登入页面</title>")
+            || ((lowercase.contains("name=\"username\"")
+                || lowercase.contains("name='username'"))
+                && (lowercase.contains("name=\"password\"")
+                    || lowercase.contains("name='password'"))
+                && (lowercase.contains("/cas/") || lowercase.contains("login")))
+    }
+}
+
 private final class CampusRedirectBlockingDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     func urlSession(
         _ session: URLSession,
@@ -169,11 +241,17 @@ private final class CampusRedirectBlockingDelegate: NSObject, URLSessionTaskDele
 actor CampusAuthenticatedClient {
     private let campusAPI: any CampusCoreAPI
     private let session: URLSession
+    private let refreshCoordinator: SessionRefreshCoordinator
     private let logger = RedactingLogger(category: "campus-web")
 
-    init(campusAPI: any CampusCoreAPI, session: URLSession = .shared) {
+    init(
+        campusAPI: any CampusCoreAPI,
+        session: URLSession = .shared,
+        refreshCoordinator: SessionRefreshCoordinator = .shared
+    ) {
         self.campusAPI = campusAPI
         self.session = session
+        self.refreshCoordinator = refreshCoordinator
     }
 
     func data(
@@ -190,7 +268,7 @@ actor CampusAuthenticatedClient {
             headers: [:],
             followsRedirects: true,
             mayRefreshSession: true,
-            notifiesSessionExpiry: true
+            retryPolicy: .automatic(forHTTPMethod: method)
         ).data
     }
 
@@ -201,7 +279,8 @@ actor CampusAuthenticatedClient {
         contentType: String? = nil,
         headers: [String: String] = [:],
         followsRedirects: Bool = true,
-        refreshesSessionOnUnauthorized: Bool = true
+        refreshesSessionOnUnauthorized: Bool = true,
+        retryPolicy: CampusRequestRetryPolicy? = nil
     ) async throws -> CampusHTTPResponse {
         try await response(
             url: url,
@@ -211,7 +290,7 @@ actor CampusAuthenticatedClient {
             headers: headers,
             followsRedirects: followsRedirects,
             mayRefreshSession: refreshesSessionOnUnauthorized,
-            notifiesSessionExpiry: refreshesSessionOnUnauthorized
+            retryPolicy: retryPolicy ?? .automatic(forHTTPMethod: method)
         )
     }
 
@@ -252,7 +331,7 @@ actor CampusAuthenticatedClient {
         headers: [String: String],
         followsRedirects: Bool,
         mayRefreshSession: Bool,
-        notifiesSessionExpiry: Bool
+        retryPolicy: CampusRequestRetryPolicy
     ) async throws -> CampusHTTPResponse {
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -274,30 +353,18 @@ actor CampusAuthenticatedClient {
         let (data, response) = try await session.data(for: request, delegate: redirectDelegate)
         guard let response = response as? HTTPURLResponse else { throw CampusWebError.invalidResponse }
         try await persistResponseCookies(response, for: response.url ?? url, existing: cookies)
-        let finalPath = response.url?.path.lowercased() ?? ""
         let responseHeaders = response.allHeaderFields.reduce(into: [String: String]()) { result, item in
             guard let key = item.key as? String else { return }
             result[key] = String(describing: item.value)
         }
-        let redirectPath = responseHeaders.first {
-            $0.key.caseInsensitiveCompare("Location") == .orderedSame
-        }?.value.lowercased() ?? ""
-        if response.statusCode == 401
-            || response.statusCode == 403
-            || finalPath.contains("tologin")
-            || finalPath.contains("/cas/login")
-            || redirectPath.contains("tologin")
-            || redirectPath.contains("/cas/login") {
+        if CampusSessionExpiryDetector.isExpired(response: response, data: data) {
             if mayRefreshSession {
                 logger.notice("Campus web session expired; refreshing path=\(url.path)")
-                do {
+                try await refreshCoordinator.refresh { [campusAPI] in
                     try await campusAPI.refreshSession()
-                } catch {
-                    if let coreError = error as? CampusCoreError,
-                       coreError == .credentialsUnavailable || coreError == .unauthorized {
-                        await notifySessionExpired()
-                    }
-                    throw error
+                }
+                guard retryPolicy.allowsAutomaticRetry else {
+                    throw CampusWebError.unauthorized
                 }
                 return try await self.response(
                     url: url,
@@ -307,10 +374,12 @@ actor CampusAuthenticatedClient {
                     headers: headers,
                     followsRedirects: followsRedirects,
                     mayRefreshSession: false,
-                    notifiesSessionExpiry: notifiesSessionExpiry
+                    retryPolicy: retryPolicy
                 )
             }
-            if notifiesSessionExpiry { await notifySessionExpired() }
+            if retryPolicy.allowsAutomaticRetry {
+                await campusAPI.invalidateStoredSession()
+            }
             throw CampusWebError.unauthorized
         }
         let acceptedRedirect = !followsRedirects && (300..<400).contains(response.statusCode)
@@ -345,11 +414,6 @@ actor CampusAuthenticatedClient {
         try await campusAPI.persistSessionCookies()
     }
 
-    private func notifySessionExpired() async {
-        await MainActor.run {
-            NotificationCenter.default.post(name: .campusSessionExpired, object: nil)
-        }
-    }
 }
 
 extension URL {

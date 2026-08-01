@@ -7,14 +7,14 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 总体状态 | 已按 Android `2c33b0b` 完成 26 / 26 个切片的客户端实现；PAY-01、PAY-02、PAY-03、PAY-05 已补齐原生生产协议、签名、安全键盘映射、订单恢复和余额刷新并删除学校官方页兜底，五个支付切片均只待物理 iPhone 授权账号验收 |
-| 当前里程碑 | 四条原生支付生产链路、URLProtocol/Mock 测试、macOS CI、未签名 IPA、Release Archive 和迁移证据均已收口；客户端实现与 Android 生产行为对齐均为 26 / 26 |
-| 当前焦点 | 仅剩 PAY-01～05 的授权账号与物理 iPhone 人工验收；自动化不连接真实扣款接口，也不以 Mock 结果冒充资金链路证据 |
+| 当前里程碑 | 四条原生支付生产链路已收口；AUTH-02 正按 Android `2c33b0b` 重审 Rust → 本地 HTTP → Swift 的 typed Session 过期与 App 级 single-flight，代码和本地 Rust 全测已完成，等待同 commit 的 macOS CI/IPA/Archive |
+| 当前焦点 | 完成 AUTH-02 的 macOS/Simulator 构建验证；之后仍只剩 PAY-01～05 的授权账号与物理 iPhone 人工验收，自动化不连接真实登录/扣款接口 |
 | 下一步 | 从 `E-20260801-02` 的未签名 IPA 在本机完成 Personal Team/Sideloadly/AltStore 7 天签名，按 `payment-device-acceptance.md` 在 iPhone 13 Pro 手动执行最小金额验收；任何未知结果只核验原订单，不重复建单或重提 |
 | 客户端实现覆盖 | 26 / 26（100%）；全部功能代码已经落地，不等于真实资金链路已验收 |
 | Android 生产行为对齐 | 26 / 26（100%）；PAY-01、PAY-02、PAY-03、PAY-05 已按固定 Android commit 的生产协议实现 |
 | 严格完成定义 | 21 / 26（80.8%）；PAY-01～05 均待授权账号/物理 iPhone 证据，自动化不执行真实扣款 |
-| 当前分支 | `codex/feat/payment-production-parity` |
-| 最近更新 | 2026-08-01 |
+| 当前分支 | `codex/fix/session-expiry-refresh` |
+| 最近更新 | 2026-08-02 |
 
 ## 1. 目标与边界
 
@@ -63,6 +63,8 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 | AIO 本轮支付 worktree | `af388304f325ebe0f77286192e08633027072e91` | `ios-payment-production-parity` detached worktree；本轮实际使用 |
 | iOS 本轮支付基线 | `458ed7f392963f6b7943e71655cbe1609854b363` | 从已推送 iOS 主线状态创建 `codex/feat/payment-production-parity` |
 | Android 本轮支付参考 | `2c33b0bb923f197f1d209cb58589a6b5d052cd9f` | PAY-01、PAY-02、PAY-03、PAY-05 的唯一生产协议参考；未使用旧 worktree 的 Android `2a30a54` |
+| Android 本轮 Session 参考 | `2c33b0bb923f197f1d209cb58589a6b5d052cd9f` | `AutoLoginInterceptor` 登录重定向语义、`TokenAuthenticator` 全局 mutex 与一次重试的唯一参考 |
+| iOS 本轮 Session 基线 | `d8be7da` | 从支付生产证据收口后的远端分支创建 `codex/fix/session-expiry-refresh` |
 | AIO | `031ed3c2c599240a62184d928c3bcfbb22866607` | 迁移 worktree 的 detached HEAD |
 | AIO 3.2.0 历史复审 worktree | `205a19916dcba5d30da5925ed46d8bf453689113` | 历史 `ios-final-completion-audit` 根仓基线；本轮未使用其中旧 Android 子模块 |
 | Android 原始固定基线 | `2a30a54e74127ce1b4f75763596b470bd0b9d01b` | 2026-07-14～17 已完成切片及旧 UI 证据的产品参考 |
@@ -258,7 +260,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AHURepository.kt`、`crawler/manager/*`、`sdk/*` | `Core/Auth/`、`Features/Login/` | P2 / D-003、D-004 | 已完成 | 固定 Rust SDK 的验证码/CAS/Cookie 链路以 Apple staticlib 接入；初始化 GuiXu 前先清空 Rust 内存 Cookie，iOS 以 `persist_session=0` 禁止 Cookie 写入 GuiXu，冷启动只从按学号隔离的 ThisDeviceOnly Keychain 恢复，过期时凭据重登，无凭据时安全清理，退出同时清理会话与 Widget 快照 | `CampusSessionStoreTests` 4 项、`CredentialStoreTests` 4 项及登录正常/工作中/错误状态在 `E-20260715-01` 全通过；SDK Keychain-only 持久化及最终 macOS 验证见 `E-20260715-02`；授权校园账号与物理机属于部署回归；Commits `d8516f2`、`77a5ae5`、`edfd219`，SDK `e826156` | 2026-07-15 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待验证 | Rust 在统一认证边界以 typed `campus_session_expired` 覆盖最终登录 URL、登录跳转、登录表单及 401/403，本地服务稳定返回 401；App 级 actor 共享一次重登录，成功后 GET/HEAD 和显式只读 Token/查询最多重试一次，写 POST 不重放。仅明确密码拒绝清 Keychain；网络/5xx/解析错误保留离线身份。canonical 学号统一 Keychain 查询，旧 Snapshot 缺凭据时显示一次性重新登录提示 | SDK `cargo test --all-features` 25 项本地通过，SDK commit `64b3564` 已推送；Swift URLProtocol/Mock、iPhone 13 Pro Simulator、IPA/Archive 等待本轮 macOS run 回填。设计见 `docs/session-refresh.md` | 2026-08-02 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 已完成 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入 cache-first/refresh/stale-cache Repository；业务缓存通过 Apple C ABI 写入 GuiXu，物理键为 SHA-256 摘要且逻辑键强制账号命名空间；升级时一次性读取旧 UserDefaults/文件缓存、写入 GuiXu 后删除旧副本；Widget 快照与提醒刷新仍由同一课表结果驱动 | 原课表 Repository/文件缓存/周次/模型 12 项及新增 GuiXu FFI/迁移 2 项测试；全状态 UI 见 `E-20260715-01`，最终 macOS 复验见 `E-20260715-02`；Commits `d8516f2`、`edfd219`，SDK `e826156` | 2026-07-15 |
 | SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周左右分页、真实日期、单双周、重叠课程、总览、下学期、课程详情和全状态完整；新增 Android 3.2.0 同款地点缩写、周次范围及总览可读文本 | 原功能证据见 `E-20260714-01`、`E-20260717-04`、`E-20260717-06`；`ScheduleTextFormatter` 与全量回归见 `E-20260726-01` | 2026-07-26 |
 | HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、编辑工具库、已放工具过滤和账号隔离持久化完整；紧凑天气点击只进入天气，不与课程入口冲突 | `HomeWidgetLayoutTests`、确定性紧凑天气 UI 专项及既有双端证据全部通过，见 `E-20260726-01` | 2026-07-26 |
@@ -309,7 +311,7 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 首启转场残影 | Android 自动截图中活动弹窗后方可见上一层非活动弹窗的淡化残影 | 只对齐活动弹窗的内容、几何与遮罩；不复制非活动层未及时移除的转场缺陷 |
 | 密码与会话 | 密码、Rust Cookie、业务数据会进入 MMKV/Rust KV；Cookie 另有持久化副本 | `CredentialStore` / `CampusSessionStore` 将密码与 Cookie 限定到 ThisDeviceOnly Keychain 并按学号隔离；Rust `persist_session=0` 明确禁止 Cookie 写入 GuiXu，初始化时先清空旧内存 Cookie 再加载 Keychain seed；GuiXu 只保存非敏感业务缓存 |
 | Rust 复用 | Android 使用 `.so`、JNI 和本地 HTTP 服务 | Apple Simulator/device staticlib 已验证；C ABI 管生命周期、GuiXu 初始化及 KV 增删查清，随机 token 保护的 loopback 服务承载现有 SDK 路由，Swift 使用可注入 `URLSession`，ATS 例外仅限 localhost |
-| 会话续期 | 302 检测、全局状态、同步锁及本地密码重登 | 使用 `AuthSession` actor 统一刷新、并发去重、过期通知与显式重新认证 |
+| 会话续期 | `AutoLoginInterceptor` 将登录跳转转成 401，`TokenAuthenticator` 用全局 mutex 单次重登并重试原请求 | Rust typed `campus_session_expired` 经本地 HTTP 401 进入 App 级 `SessionRefreshCoordinator`；共享 Task 只登录一次，GET/HEAD/显式只读 POST 最多重试一次，支付写 POST 不重放。细节见 `docs/session-refresh.md` |
 | 网络安全 | 存在全局明文流量配置 | 默认严格 ATS；仅对经论证的本地通信做最小例外 |
 | 客户端协议常量 | Android 支付链在 App 内执行签名并存在可能输出业务材料的调试日志 | 按产品确认，iOS 包含 Android 已有的客户端协议签名常量以保持生产兼容；值只位于私有支付兼容层，不在回复、日志、文档、诊断或验收记录中输出。它们不被描述为可在客户端保密的用户凭据；未来服务端化可独立演进，不阻塞当前迁移 |
 | 支付生产边界 | Android 客户端直接生成/提交签名请求，浴室使用当前协议的安全键盘材料，电控/网费按订单获取动态材料；`third_party` 经 Gson 模型序列化，POST 使用 OkHttp `FormBody` | iOS 对 PAY-01、PAY-02、PAY-03、PAY-05 实现同等客户端协议；PAY-02/03/05 分业务重建 Android 字段顺序、空值与转义语义，POST 采用 OkHttp 5.1.0 兼容表单编码，并增加严格主机/路径/字段策略、临时网络会话、密码立即清理和持久化订单阶段。学校官方页兜底已删除；`--demo-session` 与 URLProtocol 只走不可支付 Mock，CI 传输层拒绝真实写请求 |
@@ -545,3 +547,4 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 2026-08-01 | PAY-005 | PAY-01～03 接入 Android 同契约的真实只读数据链；PAY-04 增加纯原生 HEAD 扣款前验收；官方入口提供无凭据 HEAD 诊断；支付状态机在创建前持久化幂等键和不可逆请求指纹，丢失响应/重启不重复建单 | 最终 CI `30697541236`：277 单测 + 10 UI、实时 302 契约探测全绿；IPA `30697541215`、Archive `30697541230` 成功，见 `E-20260801-01` | `1e01069`、`c87c10a`、`9721ed8`、`1b47a34` |
 | 2026-08-01 | SEC-001 | 完成 Swift/Rust/GuiXu 诊断隐私收口，覆盖认证头、Cookie、Token、URL 参数、嵌套编码、畸形 `%` 及 Basic/Bearer/Digest；禁止自动重定向的 URLSession delegate、官方目录 URL 规范化和 iOS 26 Alert/Tab UI 路径均以确定性测试锁定 | SDK 16 / 18 项、Swift 277 单测与 10 UI 全绿；失败候选 `30695338471`、`30696548830` 均记录真实根因后修复，最终证据见 `E-20260801-01` | SDK `18ab4b0`；iOS `9721ed8`、`1b47a34` |
 | 2026-08-01 | PAY-006 | 以 Android `2c33b0b` 重审并恢复 PAY-01、PAY-02、PAY-03、PAY-05 原生生产支付：删除安全阻断与通用官方页，补齐客户端签名、409/430、入口预热、每订单安全键盘材料、最终提交、余额刷新、持久化未知状态和禁止重复建单；批准的 Android 客户端协议常量仅隔离在私有兼容层且不记录其值 | 最终 CI `30706286051`：333 单测 + 9 UI 全绿；IPA `30706286050`、Archive `30706286068` 成功，代码/产物敏感材料扫描及自动化禁真实扣款通过，见 `E-20260801-02` | `4e7d58e`、`20e4757`、`c15123b` |
+| 2026-08-02 | AUTH-009 | 按 Android `2c33b0b` 修复真实 Session 过期链：Rust typed 错误与统一响应检查经本地服务返回 401；Swift 增加 App 级 single-flight、canonical Keychain、冷启动自动恢复、直连/校卡 Token 一次重试和支付写 POST 禁止重放；记录旧 500 根因 | SDK 全量 25 项本地通过；Swift/macOS CI、iPhone 13 Pro Simulator、IPA、Archive 待本轮远端 commit 通过后回填，不连接真实登录/扣款接口 | SDK `64b3564`；iOS 待提交 |

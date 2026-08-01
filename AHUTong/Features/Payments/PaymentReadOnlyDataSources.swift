@@ -261,11 +261,16 @@ actor YCardReadOnlyClient {
 
     private let campusAPI: any CampusCoreAPI
     private let session: URLSession
+    private let refreshCoordinator: SessionRefreshCoordinator
     private var accessToken: String?
     private var sessionCookies: [CampusCookie] = []
 
-    init(campusAPI: any CampusCoreAPI) {
+    init(
+        campusAPI: any CampusCoreAPI,
+        refreshCoordinator: SessionRefreshCoordinator = .shared
+    ) {
         self.campusAPI = campusAPI
+        self.refreshCoordinator = refreshCoordinator
         let configuration = Self.makeConfiguration()
         session = URLSession(
             configuration: configuration,
@@ -276,9 +281,11 @@ actor YCardReadOnlyClient {
 
     init(
         campusAPI: any CampusCoreAPI,
-        configuration: URLSessionConfiguration
+        configuration: URLSessionConfiguration,
+        refreshCoordinator: SessionRefreshCoordinator = .shared
     ) {
         self.campusAPI = campusAPI
+        self.refreshCoordinator = refreshCoordinator
         session = URLSession(
             configuration: configuration,
             delegate: YCardReadOnlyNoRedirectDelegate(),
@@ -309,6 +316,20 @@ actor YCardReadOnlyClient {
         queryItems: [URLQueryItem] = [],
         formItems: [URLQueryItem] = []
     ) async throws -> Data {
+        try await request(
+            endpoint,
+            queryItems: queryItems,
+            formItems: formItems,
+            mayRefreshSession: true
+        )
+    }
+
+    private func request(
+        _ endpoint: YCardReadOnlyEndpoint,
+        queryItems: [URLQueryItem],
+        formItems: [URLQueryItem],
+        mayRefreshSession: Bool
+    ) async throws -> Data {
         try await prepareCredentialsIfNeeded()
         let request = try Self.makeRequest(
             endpoint,
@@ -328,13 +349,36 @@ actor YCardReadOnlyClient {
         guard let response = rawResponse as? HTTPURLResponse else {
             throw YCardReadOnlyError.invalidResponse
         }
+        if CampusSessionExpiryDetector.isExpired(response: response, data: data)
+            || (300..<400).contains(response.statusCode) {
+            clearCredentials()
+            guard mayRefreshSession else {
+                throw YCardReadOnlyError.credentialsUnavailable
+            }
+            do {
+                try await refreshCoordinator.refresh { [campusAPI] in
+                    try await campusAPI.refreshSession()
+                }
+            } catch let error as CampusCoreError
+                where error == .credentialsUnavailable
+                    || error == .credentialsRejected
+                    || error == .unauthorized {
+                throw YCardReadOnlyError.credentialsUnavailable
+            } catch {
+                throw finiteYCardReadOnlyError(error)
+            }
+            return try await self.request(
+                endpoint,
+                queryItems: queryItems,
+                formItems: formItems,
+                mayRefreshSession: false
+            )
+        }
         guard response.url == request.url else {
             clearCredentials()
             throw YCardReadOnlyError.invalidResponse
         }
-        if (300..<400).contains(response.statusCode)
-            || response.statusCode == 401
-            || response.statusCode == 403 {
+        if response.statusCode == 401 || response.statusCode == 403 {
             clearCredentials()
             throw YCardReadOnlyError.credentialsUnavailable
         }
@@ -423,10 +467,13 @@ actor YCardReadOnlyClient {
         let token: String
         do {
             token = try await campusAPI.cardAccessToken()
-        } catch let error as CampusCoreError where error == .unauthorized {
+        } catch let error as CampusCoreError
+            where error == .unauthorized
+                || error == .credentialsUnavailable
+                || error == .credentialsRejected {
             throw YCardReadOnlyError.credentialsUnavailable
         } catch {
-            throw YCardReadOnlyError.credentialsUnavailable
+            throw finiteYCardReadOnlyError(error)
         }
         guard !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw YCardReadOnlyError.credentialsUnavailable

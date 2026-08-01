@@ -359,6 +359,68 @@ final class YCardProductionPaymentGatewayTests: XCTestCase {
         XCTAssertEqual(YCardProductionTestURLProtocol.requestCount, 0)
     }
 
+    func testReadOnlyOperationRefreshesSessionAndRetriesOnce() async throws {
+        let api = YCardProductionCampusAPIStub()
+        let client = YCardProductionPaymentClient(
+            campusAPI: api,
+            configuration: YCardProductionPaymentClient.makeConfiguration(
+                protocolClasses: [YCardProductionTestURLProtocol.self]
+            ),
+            mockTransportEnabled: true,
+            refreshCoordinator: SessionRefreshCoordinator()
+        )
+        YCardProductionTestURLProtocol.handler = { request, index in
+            try response(
+                request,
+                status: index == 1 ? 401 : 200,
+                json: index == 1 ? "" : #"{"code":200,"success":true,"data":{"card":[]}}"#
+            )
+        }
+
+        _ = try await client.execute(
+            .cardBalance,
+            queryItems: YCardReadOnlyContract.cardAccountQuery
+        )
+
+        XCTAssertEqual(YCardProductionTestURLProtocol.requestCount, 2)
+        let refreshCount = await api.refreshCount()
+        XCTAssertEqual(refreshCount, 1)
+    }
+
+    func testOrderCreationPostIsNeverRepeatedAfterSessionRefresh() async throws {
+        let api = YCardProductionCampusAPIStub()
+        let client = YCardProductionPaymentClient(
+            campusAPI: api,
+            configuration: YCardProductionPaymentClient.makeConfiguration(
+                protocolClasses: [YCardProductionTestURLProtocol.self]
+            ),
+            mockTransportEnabled: true,
+            refreshCoordinator: SessionRefreshCoordinator()
+        )
+        YCardProductionTestURLProtocol.handler = { request, _ in
+            try response(request, status: 401)
+        }
+        let form = try YCardProductionPaymentSigner(
+            clock: { Date(timeIntervalSince1970: 1_767_326_645) },
+            nonce: { "abc123def45" },
+            timeZone: TimeZone(secondsFromGMT: 0)!
+        ).cardCreate(amount: "10.00", cardType: "01")
+
+        do {
+            _ = try await client.execute(.cardCreate, formFields: form.fields)
+            XCTFail("Expected credential failure")
+        } catch {
+            XCTAssertEqual(
+                error as? YCardProductionPaymentError,
+                .credentialsUnavailable
+            )
+        }
+
+        XCTAssertEqual(YCardProductionTestURLProtocol.requestCount, 1)
+        let refreshCount = await api.refreshCount()
+        XCTAssertEqual(refreshCount, 1)
+    }
+
     func testCardBankCreateSubmitAndBalanceRefresh() async throws {
         let paths = YCardProductionLockedBox<[String]>([])
         YCardProductionTestURLProtocol.handler = { request, index in
@@ -1620,6 +1682,7 @@ private final class YCardProductionLockedBox<Value>: @unchecked Sendable {
 }
 
 private actor YCardProductionCampusAPIStub: CampusCoreAPI {
+    private var refreshes = 0
     func initialize(cookiesJSON: String) { }
     func login(studentID: String, password: String) throws -> User {
         throw CampusCoreError.invalidResponse
@@ -1633,4 +1696,6 @@ private actor YCardProductionCampusAPIStub: CampusCoreAPI {
     func cardBalance() throws -> Double { throw CampusCoreError.invalidResponse }
     func cardQRCode() throws -> String { throw CampusCoreError.invalidResponse }
     func cardAccessToken() -> String { "fixture-token" }
+    func refreshSession() { refreshes += 1 }
+    func refreshCount() -> Int { refreshes }
 }

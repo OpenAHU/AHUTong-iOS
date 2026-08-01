@@ -30,6 +30,24 @@ final class CredentialStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testStudentIDUsesOneCanonicalKeyAcrossCaseAndWhitespace() async throws {
+        let store = CredentialStore(secureStore: InMemorySecureStore())
+        try await store.save(
+            LoginCredentials(studentID: "  ab220001\n", password: "test-only")
+        )
+
+        let restored = try await store.credentials(for: "AB220001")
+
+        XCTAssertEqual(
+            restored,
+            LoginCredentials(studentID: "AB220001", password: "test-only")
+        )
+        try await store.removeCredentials(for: " ab220001 ")
+        let removed = try await store.credentials(for: "AB220001")
+        XCTAssertNil(removed)
+    }
+
+    @MainActor
     func testEmptyCredentialsAreRejected() async throws {
         let store = CredentialStore(secureStore: InMemorySecureStore())
 

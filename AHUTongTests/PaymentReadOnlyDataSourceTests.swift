@@ -316,7 +316,7 @@ final class PaymentReadOnlyRequestPolicyTests: XCTestCase {
         )
     }
 
-    func testRedirectAndAuthorizationFailuresClearMemoryCredentials() async throws {
+    func testRedirectAndAuthorizationFailuresRefreshTokenAndRetryOnce() async throws {
         for statusCode in [302, 401, 403] {
             let api = YCardReadOnlyAPIStub(cookies: """
                 [{"name":"SESSION","value":"old-cookie","domain":"ycard.ahu.edu.cn","path":"/","secure":true}]
@@ -350,26 +350,16 @@ final class PaymentReadOnlyRequestPolicyTests: XCTestCase {
                 )
             }
 
-            do {
-                _ = try await client.request(
-                    .cardAccount,
-                    queryItems: YCardReadOnlyContract.cardAccountQuery
-                )
-                XCTFail("Expected credentialsUnavailable for HTTP \(statusCode)")
-            } catch {
-                XCTAssertEqual(
-                    error as? YCardReadOnlyError,
-                    .credentialsUnavailable
-                )
-            }
-            await api.setCookies("[]")
-            _ = try await client.request(
+            let result = try await client.request(
                 .cardAccount,
                 queryItems: YCardReadOnlyContract.cardAccountQuery
             )
 
             let tokenRequestCount = await api.tokenRequestCount()
+            let refreshCount = await api.refreshCount()
+            XCTAssertEqual(String(decoding: result, as: UTF8.self), "ok")
             XCTAssertEqual(tokenRequestCount, 2)
+            XCTAssertEqual(refreshCount, 1)
             XCTAssertEqual(sentCookies.value.count, 2)
             XCTAssertEqual(sentCookies.value[0], "SESSION=old-cookie")
             XCTAssertNil(sentCookies.value[1])
@@ -1461,6 +1451,7 @@ private final class YCardReadOnlyLockedBox<Value>: @unchecked Sendable {
 private actor YCardReadOnlyAPIStub: CampusCoreAPI {
     private var cookies: String
     private var tokenRequests = 0
+    private var refreshes = 0
 
     init(cookies: String) {
         self.cookies = cookies
@@ -1490,9 +1481,76 @@ private actor YCardReadOnlyAPIStub: CampusCoreAPI {
         return "temporary-token-\(tokenRequests)"
     }
 
+    func testYCardLoginHTMLRefreshesOnceAndSecondRejectionStops() async throws {
+        for secondStatus in [200, 401] {
+            let api = YCardReadOnlyAPIStub(cookies: "[]")
+            let configuration = YCardReadOnlyClient.makeConfiguration()
+            configuration.protocolClasses = [YCardReadOnlyTestURLProtocol.self]
+            let client = YCardReadOnlyClient(
+                campusAPI: api,
+                configuration: configuration,
+                refreshCoordinator: SessionRefreshCoordinator()
+            )
+            let requestCount = YCardReadOnlyLockedBox(0)
+            YCardReadOnlyTestURLProtocol.handler = { request in
+                let count = requestCount.withValue {
+                    $0 += 1
+                    return $0
+                }
+                if count == 1 {
+                    return (
+                        HTTPURLResponse(
+                            url: request.url!,
+                            statusCode: 200,
+                            httpVersion: "HTTP/1.1",
+                            headerFields: ["Content-Type": "text/html"]
+                        )!,
+                        Data(#"<html><form id="loginForm"><input name="username"><input name="password"></form></html>"#.utf8)
+                    )
+                }
+                return (
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: secondStatus,
+                        httpVersion: "HTTP/1.1",
+                        headerFields: nil
+                    )!,
+                    Data("ok".utf8)
+                )
+            }
+
+            if secondStatus == 200 {
+                let data = try await client.request(
+                    .cardAccount,
+                    queryItems: YCardReadOnlyContract.cardAccountQuery
+                )
+                XCTAssertEqual(String(decoding: data, as: UTF8.self), "ok")
+            } else {
+                do {
+                    _ = try await client.request(
+                        .cardAccount,
+                        queryItems: YCardReadOnlyContract.cardAccountQuery
+                    )
+                    XCTFail("Expected second token rejection to stop")
+                } catch {
+                    XCTAssertEqual(error as? YCardReadOnlyError, .credentialsUnavailable)
+                }
+            }
+            XCTAssertEqual(requestCount.value, 2)
+            let refreshCount = await api.refreshCount()
+            XCTAssertEqual(refreshCount, 1)
+        }
+    }
+
+    func refreshSession() {
+        refreshes += 1
+        cookies = "[]"
+    }
+
     func setCookies(_ value: String) {
         cookies = value
     }
 
     func tokenRequestCount() -> Int { tokenRequests }
+    func refreshCount() -> Int { refreshes }
 }

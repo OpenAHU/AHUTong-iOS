@@ -19,13 +19,16 @@ private struct CampusCardTokenResponse: Decodable {
 }
 
 enum RustCampusServiceErrorMapper {
-    static func message(from data: Data) -> String? {
+    static func code(from data: Data) -> String? {
         guard let value = try? JSONSerialization.jsonObject(with: data)
-                as? [String: Any],
-              let code = value["error"] as? String else {
+                as? [String: Any] else {
             return nil
         }
-        return switch code {
+        return value["error"] as? String
+    }
+
+    static func message(from data: Data) -> String? {
+        switch code(from: data) {
         case "campus_service_error":
             "校园服务暂不可用，请稍后重试"
         case "campus_service_unavailable":
@@ -84,6 +87,7 @@ protocol CampusCoreAPI: Sendable {
     func cardQRCode() async throws -> String
     func cardAccessToken() async throws -> String
     func refreshSession() async throws
+    func invalidateStoredSession() async
     func persistSessionCookies() async throws
 }
 
@@ -94,6 +98,7 @@ extension CampusCoreAPI {
     func gradeRank(studentID: String) async throws -> CampusGradeRankInfo? { nil }
     func cardAccessToken() async throws -> String { throw CampusCoreError.credentialsUnavailable }
     func refreshSession() async throws { throw CampusCoreError.credentialsUnavailable }
+    func invalidateStoredSession() async {}
     func persistSessionCookies() async throws { throw CampusCoreError.invalidResponse }
 }
 
@@ -102,6 +107,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     private let session: URLSession
     private let sessionStore: CampusSessionStore
     private let credentialStore: CredentialStore
+    private let refreshCoordinator: SessionRefreshCoordinator
     private let gradeParser = CampusGradeParser()
     private let cardParser = CampusCardResponseParser()
 
@@ -109,12 +115,14 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         server: RustLocalServer = .shared,
         session: URLSession = .shared,
         sessionStore: CampusSessionStore = CampusSessionStore(),
-        credentialStore: CredentialStore = CredentialStore()
+        credentialStore: CredentialStore = CredentialStore(),
+        refreshCoordinator: SessionRefreshCoordinator = .shared
     ) {
         self.server = server
         self.session = session
         self.sessionStore = sessionStore
         self.credentialStore = credentialStore
+        self.refreshCoordinator = refreshCoordinator
     }
 
     func initialize(cookiesJSON: String) async throws {
@@ -190,7 +198,11 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func cardAccessToken() async throws -> String {
-        let data = try await authenticatedRequest(path: "/ycard/refresh_token", method: "POST")
+        let data = try await authenticatedRequest(
+            path: "/ycard/refresh_token",
+            method: "POST",
+            retryPolicy: .safeRead
+        )
         let response = try JSONDecoder().decode(CampusCardTokenResponse.self, from: data)
         guard !response.accessToken.isEmpty else { throw CampusCoreError.invalidResponse }
         return response.accessToken
@@ -199,12 +211,31 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     func refreshSession() async throws {
         guard let snapshot = try await sessionStore.load(),
               let credentials = try await credentialStore.credentials(for: snapshot.user.studentID) else {
+            await postNotification(.campusReauthenticationRequired)
             throw CampusCoreError.credentialsUnavailable
         }
         try await initialize(cookiesJSON: "")
-        let user = try await login(studentID: credentials.studentID, password: credentials.password)
+        let user: User
+        do {
+            user = try await login(
+                studentID: credentials.studentID,
+                password: credentials.password
+            )
+        } catch CampusCoreError.credentialsRejected {
+            await invalidateStoredSession()
+            throw CampusCoreError.credentialsRejected
+        }
         let cookies = try await dumpCookies()
         try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+    }
+
+    func invalidateStoredSession() async {
+        if let snapshot = try? await sessionStore.load() {
+            try? await credentialStore.removeCredentials(for: snapshot.user.studentID)
+        }
+        try? await sessionStore.clear()
+        try? await initialize(cookiesJSON: "")
+        await postNotification(.campusCredentialsRejected)
     }
 
     func persistSessionCookies() async throws {
@@ -213,21 +244,27 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         try await sessionStore.save(CampusSessionSnapshot(user: snapshot.user, cookiesJSON: cookies))
     }
 
-    private func authenticatedRequest(path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+    private func authenticatedRequest(
+        path: String,
+        method: String = "GET",
+        body: Data? = nil,
+        retryPolicy: CampusRequestRetryPolicy? = nil
+    ) async throws -> Data {
+        let retryPolicy = retryPolicy ?? .automatic(forHTTPMethod: method)
         do {
             return try await request(path: path, method: method, body: body)
         } catch CampusCoreError.unauthorized {
+            try await refreshCoordinator.refresh { [self] in
+                try await self.refreshSession()
+            }
+            guard retryPolicy.allowsAutomaticRetry else {
+                throw CampusCoreError.unauthorized
+            }
             do {
-                try await refreshSession()
                 return try await request(path: path, method: method, body: body)
-            } catch {
-                if let coreError = error as? CampusCoreError,
-                   coreError == .credentialsUnavailable || coreError == .unauthorized {
-                    await MainActor.run {
-                        NotificationCenter.default.post(name: .campusSessionExpired, object: nil)
-                    }
-                }
-                throw error
+            } catch CampusCoreError.unauthorized {
+                await invalidateStoredSession()
+                throw CampusCoreError.credentialsRejected
             }
         }
     }
@@ -251,13 +288,26 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         guard let response = response as? HTTPURLResponse else {
             throw CampusCoreError.invalidResponse
         }
-        if response.statusCode == 401 { throw CampusCoreError.unauthorized }
+        if response.statusCode == 401 {
+            switch RustCampusServiceErrorMapper.code(from: data) {
+            case "campus_session_expired": throw CampusCoreError.unauthorized
+            case "campus_login_rejected": throw CampusCoreError.credentialsRejected
+            default:
+                throw CampusCoreError.campus("本地校园服务认证失败，请稍后重试")
+            }
+        }
         guard (200..<300).contains(response.statusCode) else {
             let message = RustCampusServiceErrorMapper.message(from: data)
                 ?? "校园服务请求失败（\(response.statusCode)）"
             throw CampusCoreError.campus(message)
         }
         return data
+    }
+
+    private func postNotification(_ name: Notification.Name) async {
+        await MainActor.run {
+            NotificationCenter.default.post(name: name, object: nil)
+        }
     }
 
     private static func findWeek(in value: Any) -> Int? {
