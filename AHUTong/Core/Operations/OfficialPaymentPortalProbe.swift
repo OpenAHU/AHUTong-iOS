@@ -279,13 +279,17 @@ struct OfficialPaymentPortalProbeService: OfficialPaymentPortalProbing {
             url: url,
             resolvingAgainstBaseURL: false
         ),
-              components.scheme?.lowercased() == "https",
-              components.host?.lowercased() == "ycard.ahu.edu.cn",
-              components.port == nil || components.port == 443,
-              components.user == nil,
-              components.password == nil,
-              components.percentEncodedPath == "/plat/",
-              components.fragment == nil,
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == "ycard.ahu.edu.cn",
+              url.port == nil || url.port == 443,
+              url.user == nil,
+              url.password == nil,
+              url.path == "/plat",
+              url.hasDirectoryPath,
+              ["/plat", "/plat/"].contains(
+                  components.percentEncodedPath.lowercased()
+              ),
+              url.fragment == nil,
               let items = components.queryItems,
               items.count == 1,
               items[0].name == "name",
@@ -303,24 +307,10 @@ struct OfficialPaymentPortalProbeService: OfficialPaymentPortalProbing {
               items.count == 1,
               items[0].name == "redirectUrl",
               let rawTarget = items[0].value,
-              let target = URL(string: rawTarget),
-              target.scheme?.lowercased() == "https",
-              target.host?.lowercased() == "ycard.ahu.edu.cn",
-              target.port == nil || target.port == 443,
-              target.user == nil,
-              target.password == nil,
-              target.path == "/plat/",
-              target.fragment == nil,
-              let targetItems = URLComponents(
-                  url: target,
-                  resolvingAgainstBaseURL: false
-              )?.queryItems,
-              targetItems.count == 1,
-              targetItems[0].name == "name",
-              targetItems[0].value == "loginTransit" else {
+              let target = URL(string: rawTarget) else {
             return false
         }
-        return true
+        return isExpectedPortalTargetURL(target)
     }
 
     private static func failure(

@@ -184,6 +184,16 @@ final class OfficialPaymentPortalProbeTests: XCTestCase {
                 target: "https://ycard.ahu.edu.cn/not-plat/?name=loginTransit"
             ),
             makeOfficialPaymentEntryURL(
+                target: "https://ycard.ahu.edu.cn/plat?name=loginTransit"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://ycard.ahu.edu.cn/plat//?name=loginTransit"
+            ),
+            makeOfficialPaymentEntryURL(
+                target: "https://ycard.ahu.edu.cn/plat/%2e%2e/other/"
+                    + "?name=loginTransit"
+            ),
+            makeOfficialPaymentEntryURL(
                 target: "https://ycard.ahu.edu.cn/plat/?name=loginTransit&next=evil"
             ),
             makeOfficialPaymentEntryURL(
@@ -210,6 +220,43 @@ final class OfficialPaymentPortalProbeTests: XCTestCase {
                 ),
                 .failed(.unsafeRedirect),
                 "Unexpectedly accepted entry URL: \(entryURL)"
+            )
+        }
+    }
+
+    func testRedirectTargetRequiresTheOfficialDirectoryURL() throws {
+        let responseURL = OfficialSchoolPaymentPortal.loginURL
+        let rejectedTargets = [
+            "https://ycard.ahu.edu.cn/plat?name=loginTransit",
+            "https://ycard.ahu.edu.cn/plat//?name=loginTransit",
+            "https://ycard.ahu.edu.cn/plat/%2e%2e/other/"
+                + "?name=loginTransit"
+        ]
+
+        for target in rejectedTargets {
+            var components = URLComponents(
+                string: "https://ycard.ahu.edu.cn/berserker-auth/cas/login/neusoftCas"
+            )!
+            components.queryItems = [
+                URLQueryItem(name: "redirectUrl", value: target)
+            ]
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: responseURL,
+                statusCode: 302,
+                httpVersion: "HTTP/1.1",
+                headerFields: [
+                    "Location": try XCTUnwrap(components.url).absoluteString
+                ]
+            ))
+
+            XCTAssertEqual(
+                OfficialPaymentPortalProbeService.evaluate(
+                    response: response,
+                    elapsedMilliseconds: 1,
+                    checkedAt: Date(timeIntervalSince1970: 1)
+                ),
+                .failed(.unsafeRedirect),
+                "Unexpectedly accepted redirect target: \(target)"
             )
         }
     }

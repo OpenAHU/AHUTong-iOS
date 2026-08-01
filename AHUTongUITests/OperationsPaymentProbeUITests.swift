@@ -77,9 +77,14 @@ final class OperationsPaymentProbeUITests: XCTestCase {
         // System alerts do not guarantee that SwiftUI button identifiers are
         // bridged through UIAlertController. Scope the stable localized labels
         // to this exact alert so similarly named buttons elsewhere cannot match.
-        let cancel = confirmation.buttons["取消"]
-        let confirm = confirmation.buttons["继续打开"]
+        let cancel = confirmation.buttons
+            .matching(NSPredicate(format: "label == %@", "取消"))
+            .firstMatch
+        let confirm = confirmation.buttons
+            .matching(NSPredicate(format: "label == %@", "继续打开"))
+            .firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 2))
+        XCTAssertTrue(cancel.isHittable)
         XCTAssertTrue(confirm.exists)
         cancel.tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: 2))
