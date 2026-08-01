@@ -156,12 +156,16 @@ struct CampusHTTPResponse: Sendable {
 }
 
 enum CampusSessionExpiryDetector {
+    static func isExpiredURL(_ url: URL?) -> Bool {
+        isLoginURL(url)
+    }
+
     static func isExpired(response: HTTPURLResponse, data: Data) -> Bool {
         if response.statusCode == 401 || response.statusCode == 403 {
             return true
         }
 
-        if isLoginURL(response.url) {
+        if isExpiredURL(response.url) {
             return true
         }
 

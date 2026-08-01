@@ -462,7 +462,10 @@ struct CMBRechargeView: View {
                         entryURL: entryURL,
                         cookies: cookies,
                         requestID: requestID,
-                        state: webState
+                        state: webState,
+                        onSessionExpired: {
+                            Task { await session.prepare() }
+                        }
                     )
 
                     if webState.isLoading, webState.progress == 0 {
@@ -665,9 +668,10 @@ private struct CMBRechargeWebViewRepresentable: UIViewRepresentable {
     let cookies: [CampusCookie]
     let requestID: Int
     @ObservedObject var state: CMBRechargeWebState
+    let onSessionExpired: @MainActor () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(state: state)
+        Coordinator(state: state, onSessionExpired: onSessionExpired)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -710,9 +714,15 @@ private struct CMBRechargeWebViewRepresentable: UIViewRepresentable {
         private weak var state: CMBRechargeWebState?
         private var progressObservation: NSKeyValueObservation?
         private var loadedRequestID: Int?
+        private var automaticSessionRefreshes = 0
+        private let onSessionExpired: @MainActor () -> Void
 
-        init(state: CMBRechargeWebState) {
+        init(
+            state: CMBRechargeWebState,
+            onSessionExpired: @escaping @MainActor () -> Void
+        ) {
             self.state = state
+            self.onSessionExpired = onSessionExpired
         }
 
         func observeProgress(of webView: WKWebView) {
@@ -778,6 +788,11 @@ private struct CMBRechargeWebViewRepresentable: UIViewRepresentable {
                 return .cancel
             }
 
+            if CampusSessionExpiryDetector.isExpiredURL(url) {
+                handleSessionExpiration(in: webView)
+                return .cancel
+            }
+
             switch CMBRechargeSecurityPolicy.navigationDecision(for: url) {
             case .allow:
                 if navigationAction.targetFrame == nil {
@@ -802,6 +817,16 @@ private struct CMBRechargeWebViewRepresentable: UIViewRepresentable {
             guard let url = navigationResponse.response.url else {
                 return .cancel
             }
+
+            if let response = navigationResponse.response as? HTTPURLResponse,
+               CampusSessionExpiryDetector.isExpired(
+                   response: response,
+                   data: Data()
+               ) {
+                handleSessionExpiration(in: webView)
+                return .cancel
+            }
+
             guard CMBRechargeSecurityPolicy.isAllowedSchoolURL(url) else {
                 state?.isLoading = false
                 state?.errorMessage = "已阻止非学校页面返回的内容"
@@ -854,6 +879,18 @@ private struct CMBRechargeWebViewRepresentable: UIViewRepresentable {
             if (error as NSError).code == NSURLErrorCancelled { return }
             state?.isLoading = false
             state?.errorMessage = "学校充值页面加载失败，请检查网络后重试"
+        }
+
+        private func handleSessionExpiration(in webView: WKWebView) {
+            webView.stopLoading()
+            guard automaticSessionRefreshes == 0 else {
+                state?.isLoading = false
+                state?.errorMessage = "校园卡登录状态仍然无效，请手动重试"
+                return
+            }
+            automaticSessionRefreshes += 1
+            state?.isLoading = true
+            onSessionExpired()
         }
     }
 }

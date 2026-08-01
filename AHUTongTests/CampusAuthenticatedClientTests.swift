@@ -140,6 +140,24 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         XCTAssertEqual(refreshCount, 1)
     }
 
+    func testSchoolLoginURLIsExpiredButExternalLoginURLIsNot() throws {
+        let school = try XCTUnwrap(HTTPURLResponse(
+            url: try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn/login")),
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/html"]
+        ))
+        let external = try XCTUnwrap(HTTPURLResponse(
+            url: try XCTUnwrap(URL(string: "https://example.com/login")),
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/html"]
+        ))
+
+        XCTAssertTrue(CampusSessionExpiryDetector.isExpired(response: school, data: Data()))
+        XCTAssertFalse(CampusSessionExpiryDetector.isExpired(response: external, data: Data()))
+    }
+
     func testConcurrentUnauthorizedRequestsShareOneRefresh() async throws {
         let api = CampusAuthenticatedClientAPIStub(
             cookies: "[]",

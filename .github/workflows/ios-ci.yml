@@ -44,6 +44,9 @@ jobs:
         with:
           workspaces: Vendor/sdk
 
+      - name: Test Rust SDK
+        run: cargo test --manifest-path Vendor/sdk/Cargo.toml --all-features
+
       - name: Block live payment hosts during automated tests
         shell: bash
         run: |
