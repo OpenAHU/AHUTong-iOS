@@ -43,6 +43,6 @@ PAY-02、PAY-03、PAY-05 的 `third_party` 不直接透传任意服务端对象�
 
 ## 自动化与真机验收
 
-GitHub Actions 和自动测试不得连接真实扣款接口，也不得执行自动扣款。CI 同时设置应用级禁写环境开关并在 runner 主机层阻断支付域名；URLProtocol/Mock 测试使用完全本地的合成响应验证字段、固定签名向量、Gson `third_party` 顺序/空值语义、OkHttp 表单特殊字符固定向量与独立服务端解码往返、键盘映射、成功、拒绝、超时、未知状态、恢复和重复点击。
+GitHub Actions 和自动测试不得连接真实扣款接口，也不得执行自动扣款。CI 同时设置应用级禁写环境开关并在 runner 主机层阻断支付域名；URLProtocol/Mock 测试使用完全本地的合成响应验证字段、固定签名向量、Gson `third_party` 顺序/空值语义、OkHttp 表单特殊字符固定向量与独立服务端解码往返、每订单 `orderid`/动态键盘材料绑定、Android 结果边界、成功、拒绝、超时、未知状态、恢复和重复点击。
 
 代码与自动化通过后，PAY-01、PAY-02、PAY-03、PAY-05 的状态为“客户端已实现，待真机小额验收”，而不是“缺少安全 broker”。真机最终确认只能由获授权测试者手动执行，并按 `docs/migration/payment-device-acceptance.md` 核对订单和余额；自动化通过不能代替真实资金链路验收。

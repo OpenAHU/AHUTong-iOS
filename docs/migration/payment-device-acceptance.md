@@ -2,7 +2,7 @@
 
 本清单用于 iPhone 13 Pro 上的人工小额支付验证。所有步骤都必须使用本人获授权的校园账号和账户；不要录制、截图或分享姓名、学号、Token、Cookie、手机号、房间、余额、订单号、六位密码、安全键盘材料、签名或完整请求/响应。
 
-推荐验收构建以本轮最终 GitHub Actions 记录为准。未签名 IPA 仍须在本机使用 Personal Team、Sideloadly 或 AltStore 做 7 天签名后安装，不能直接安装，也不等同于 TestFlight/App Store 包。
+推荐验收构建为 iOS commit `c15123b` 的 GitHub Actions run `30706286050`、Artifact `AHUTong-unsigned-ipa-91`（ID `8820461167`）；其中 IPA 为 6,837,668 bytes，SHA-256 `DA780F9B4C7AAC3444A8816A6E60F19CC8DFC5A92291C6C003807FE36AF11C9C`。该未签名 IPA 仍须在本机使用 Personal Team、Sideloadly 或 AltStore 做 7 天签名后安装，不能直接安装，也不等同于 TestFlight/App Store 包。
 
 ## 安全边界
 
