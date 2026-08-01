@@ -77,5 +77,7 @@ Rust 使用真正的 `CampusSessionExpired` 错误类型，其稳定公开码为
 
 - Rust fixture 覆盖登录 HTML、CAS/JWXT 最终 URL、登录重定向、401/403、七类受保护功能以及非认证的网络/5xx/解析失败；服务错误转换测试锁定 401 JSON 契约。
 - Swift URLProtocol/Mock 覆盖并发 401 single-flight、登录 HTML/最终 URL、GET 一次重试、第二次 401 终止、5xx 保留身份、canonical Keychain、校卡 Token 更新，以及支付 POST 不重放。
-- CI 设置 `AHUTONG_CI_DISABLE_LIVE_PAYMENT=1` 并阻断真实支付域；所有自动测试只使用本地 fixture、URLProtocol 或 Mock，不执行真实登录和真实支付。
+- CI 设置 `AHUTONG_CI_DISABLE_LIVE_PAYMENT=1`，并阻断 CAS、教务、校园服务、校卡及支付域名；所有自动测试只使用本地 fixture、URLProtocol 或 Mock，不执行真实登录和真实支付。demo 会话不会执行前台课程提醒维护，也不处理生产认证失效通知。
 - 物理 iPhone 只需人工验证真实校园会话过期后的恢复、Keychain 升级提示，以及支付前 Session 刷新不重复建单；测试记录不得包含账号、Cookie、Token 或密码。
+
+最终自动化证据见迁移路线图 `E-20260802-01`：Rust 25 项、Swift 349 个单元测试和 iPhone 13 Pro Simulator 9 个 UI 测试全绿；同一代码提交的未签名 IPA 与 Release Archive 均成功生成。真实账号主动制造 Session 过期、旧版仅有 Snapshot 的升级路径，以及支付入口刷新后的不重复写请求仍由物理 iPhone 人工验收。
