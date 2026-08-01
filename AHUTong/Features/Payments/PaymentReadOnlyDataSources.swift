@@ -545,7 +545,7 @@ enum YCardPaymentDecoder {
             )
         }
         let phone = display.phone.nilIfEmpty
-            ?? payload.data?.phone.nilIfEmpty
+            ?? payload.data?.phone?.nilIfEmpty
             ?? requestedPhone
         let identifier = payload.data?.accountID.map { String($0) }
             ?? payload.data?.identifier?.nilIfEmpty
