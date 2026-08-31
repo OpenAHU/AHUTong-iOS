@@ -189,7 +189,12 @@ struct CampusCardPanel: View {
         .padding(.top, 12)
         .padding(.bottom, 20)
         .frame(maxWidth: .infinity)
-        .accessibilityIdentifier("campus-card.qr-panel")
+        .overlay {
+            Color.clear
+                .accessibilityElement()
+                .accessibilityIdentifier("campus-card.qr-panel")
+                .allowsHitTesting(false)
+        }
         .task { await model.loadQRCode(demo: demo) }
     }
 
