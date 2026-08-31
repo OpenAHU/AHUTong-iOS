@@ -111,7 +111,7 @@ struct CampusCardPanel: View {
         Group {
             if showsQRCode { qrCard } else { balanceCard }
         }
-        .frame(height: showsQRCode ? 400 : 140)
+        .frame(height: showsQRCode ? nil : 140)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .task { await model.load(demo: demo) }
@@ -184,12 +184,12 @@ struct CampusCardPanel: View {
                 .padding(.top, 12)
                 .frame(maxWidth: .infinity)
 
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("campus-card.qr-panel")
         .task { await model.loadQRCode(demo: demo) }
     }
 

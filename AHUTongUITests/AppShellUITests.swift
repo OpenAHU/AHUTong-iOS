@@ -40,6 +40,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(campusCardBalance.waitForExistence(timeout: 3))
         campusCardBalance.tap()
         XCTAssertTrue(app.images["campus-card.qr-image"].waitForExistence(timeout: 3))
+        let campusCardQRPanel = app.otherElements["campus-card.qr-panel"]
+        XCTAssertTrue(campusCardQRPanel.waitForExistence(timeout: 3))
+        XCTAssertLessThan(campusCardQRPanel.frame.height, 300, "二维码面板应按内容收紧，而不是保留固定大高度")
         waitForRendering()
         capture("17-card-qrcode", app: app)
 
