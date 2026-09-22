@@ -172,9 +172,7 @@ private struct AndroidAgreementDialog: View {
                 .accessibilityIdentifier("onboarding.title")
 
             ScrollView {
-                Text(document.body)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                AgreementDocumentBodyView(document: document)
             }
             .frame(maxHeight: 300)
             .clipped()
@@ -239,12 +237,57 @@ struct AgreementDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     AndroidHeader(title: document.title, large: true)
-                    Text(document.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    AgreementDocumentBodyView(document: document)
                         .padding(.horizontal, 24)
                 }
             }
         }
         .androidDetailScreen()
+    }
+}
+
+private struct AgreementDocumentBodyView: View {
+    @Environment(\.openURL) private var openURL
+    let document: AgreementDocument
+    @State private var qqMessage: String?
+
+    var body: some View {
+        Group {
+            if document == .community {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("目前安大通的商业价值处于探索阶段，为了持久化发展、优化广大同学的体验，急需几名大一/大二的同学做发展规划。")
+                    Text("如果您有兴趣，欢迎联系我们！")
+                    Button {
+                        openURL(AgreementDocument.communityQQGroupURL) { accepted in
+                            if !accepted {
+                                qqMessage = "请安装 QQ 后重试，或手动加入反馈群：1006203134"
+                            }
+                        }
+                    } label: {
+                        Label("加入 QQ 群 1006203134", systemImage: "arrow.up.right.square")
+                            .font(.headline)
+                            .foregroundStyle(AndroidParityPalette.systemTheme)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("onboarding.community.qq-group")
+                    Text("另外，如果您对安大通有任何想法或建议，也欢迎加群反馈！")
+                }
+            } else {
+                Text(document.body)
+            }
+        }
+        .font(.body)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .alert("无法打开 QQ", isPresented: Binding(
+            get: { qqMessage != nil },
+            set: { if !$0 { qqMessage = nil } }
+        )) {
+            Button("知道了", role: .cancel) { qqMessage = nil }
+        } message: {
+            Text(qqMessage ?? "")
+        }
     }
 }

@@ -13,6 +13,10 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
 
     var id: String { rawValue }
 
+    static let communityQQGroupURL = URL(
+        string: "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=1006203134&card_type=group&source=qrcode"
+    )!
+
     var title: String {
         switch self {
         case .disclaimer:

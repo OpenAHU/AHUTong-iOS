@@ -54,8 +54,7 @@ struct SettingsView: View {
                         .buttonStyle(SettingsPressFeedbackStyle())
                         .accessibilityIdentifier("settings.contributors")
                         AndroidSettingButton(label: "意见反馈", systemImage: AndroidParitySymbol.feedback) {
-                            let url = URL(string: "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=1006203134&card_type=group&source=qrcode")!
-                            openURL(url) { accepted in
+                            openURL(AgreementDocument.communityQQGroupURL) { accepted in
                                 if !accepted { feedbackMessage = "请安装 QQ 后重试，或手动加入反馈群：1006203134" }
                             }
                         }

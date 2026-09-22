@@ -24,6 +24,7 @@ final class AppShellUITests: XCTestCase {
 
         app.buttons["onboarding.continue"].tap()
         XCTAssertTrue(app.staticTexts["商业合作"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["onboarding.community.qq-group"].waitForExistence(timeout: 2))
         waitForRendering()
         capture("03-community", app: app)
         app.buttons["onboarding.decline"].tap()
