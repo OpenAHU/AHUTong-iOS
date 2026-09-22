@@ -72,7 +72,6 @@ actor RustLocalServer {
 
 protocol CampusCoreAPI: Sendable {
     func initialize(cookiesJSON: String) async throws
-    func login(studentID: String, password: String) async throws -> User
     func dumpCookies() async throws -> String
     func cookiesFlat() async throws -> String
     func schedule() async throws -> [Course]
@@ -86,7 +85,8 @@ protocol CampusCoreAPI: Sendable {
     func cardBalance() async throws -> Double
     func cardQRCode() async throws -> String
     func cardAccessToken() async throws -> String
-    func refreshSession() async throws
+    func refreshSession(scope: CampusSessionScope) async throws
+    func validateSession(scope: CampusSessionScope) async throws
     func invalidateStoredSession() async
     func persistSessionCookies() async throws
 }
@@ -97,7 +97,17 @@ extension CampusCoreAPI {
     func gradeProfiles() async throws -> [CampusGradeStudentProfile] { [] }
     func gradeRank(studentID: String) async throws -> CampusGradeRankInfo? { nil }
     func cardAccessToken() async throws -> String { throw CampusCoreError.credentialsUnavailable }
-    func refreshSession() async throws { throw CampusCoreError.credentialsUnavailable }
+    func refreshSession(scope: CampusSessionScope) async throws {
+        throw CampusCoreError.credentialsUnavailable
+    }
+    func validateSession(scope: CampusSessionScope) async throws {
+        switch scope {
+        case .academic:
+            _ = try await currentWeek()
+        case .campusCard:
+            _ = try await cardBalance()
+        }
+    }
     func invalidateStoredSession() async {}
     func persistSessionCookies() async throws { throw CampusCoreError.invalidResponse }
 }
@@ -131,12 +141,6 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         )
         let body = try JSONEncoder().encode(["cookies_json": cookiesJSON])
         _ = try await request(path: "/init", method: "POST", body: body)
-    }
-
-    func login(studentID: String, password: String) async throws -> User {
-        let body = try JSONEncoder().encode(["username": studentID, "password": password])
-        let data = try await request(path: "/login", method: "POST", body: body)
-        return try JSONDecoder().decode(User.self, from: data)
     }
 
     func dumpCookies() async throws -> String {
@@ -190,11 +194,17 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func cardBalance() async throws -> Double {
-        try cardParser.balance(from: try await authenticatedRequest(path: "/ycard/balance"))
+        try cardParser.balance(from: try await authenticatedRequest(
+            path: "/ycard/balance",
+            scope: .campusCard
+        ))
     }
 
     func cardQRCode() async throws -> String {
-        try cardParser.qrPayload(from: try await authenticatedRequest(path: "/ycard/qrcode"))
+        try cardParser.qrPayload(from: try await authenticatedRequest(
+            path: "/ycard/qrcode",
+            scope: .campusCard
+        ))
     }
 
     func cardAccessToken() async throws -> String {
@@ -208,25 +218,59 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         return response.accessToken
     }
 
-    func refreshSession() async throws {
+    func refreshSession(scope: CampusSessionScope) async throws {
+        if scope == .campusCard {
+            do {
+                try await CampusInteractiveAuthenticationCoordinator.shared.requestCampusCardLogin()
+                return
+            } catch {
+                throw CampusCoreError.credentialsUnavailable
+            }
+        }
         guard let snapshot = try await sessionStore.load(),
               let credentials = try await credentialStore.credentials(for: snapshot.user.studentID) else {
             await postNotification(.campusReauthenticationRequired)
             throw CampusCoreError.credentialsUnavailable
         }
-        try await initialize(cookiesJSON: "")
-        let user: User
         do {
-            user = try await login(
-                studentID: credentials.studentID,
-                password: credentials.password
+            let result = try await CampusWebAuthenticationService.shared.refreshAcademic(
+                credentials: credentials
             )
-        } catch CampusCoreError.credentialsRejected {
+            let existing = (try? JSONDecoder().decode(
+                [CampusCookie].self,
+                from: Data(snapshot.cookiesJSON.utf8)
+            )) ?? []
+            let merged = CampusCookieMerger.merge(existing: existing, incoming: result.cookies)
+            let cookies = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
+            try await initialize(cookiesJSON: cookies)
+            try await validateSession(scope: .academic)
+            try await sessionStore.save(CampusSessionSnapshot(user: snapshot.user, cookiesJSON: cookies))
+        } catch CampusWebAuthenticationError.credentialsRejected {
             await invalidateStoredSession()
             throw CampusCoreError.credentialsRejected
+        } catch CampusWebAuthenticationError.interactionRequired,
+                CampusWebAuthenticationError.credentialsUnavailable,
+                CampusWebAuthenticationError.inactive,
+                CampusWebAuthenticationError.timedOut {
+            await postNotification(.campusReauthenticationRequired)
+            throw CampusCoreError.credentialsUnavailable
+        } catch {
+            try? await initialize(cookiesJSON: snapshot.cookiesJSON)
+            throw error
         }
-        let cookies = try await dumpCookies()
-        try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+    }
+
+    func validateSession(scope: CampusSessionScope) async throws {
+        switch scope {
+        case .academic:
+            let data = try await request(path: "/schedule/current-week")
+            let object = try JSONSerialization.jsonObject(with: data)
+            guard Self.findWeek(in: object) != nil else {
+                throw CampusCoreError.invalidResponse
+            }
+        case .campusCard:
+            _ = try cardParser.balance(from: try await request(path: "/ycard/balance"))
+        }
     }
 
     func invalidateStoredSession() async {
@@ -248,14 +292,15 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         path: String,
         method: String = "GET",
         body: Data? = nil,
-        retryPolicy: CampusRequestRetryPolicy? = nil
+        retryPolicy: CampusRequestRetryPolicy? = nil,
+        scope: CampusSessionScope = .academic
     ) async throws -> Data {
         let retryPolicy = retryPolicy ?? .automatic(forHTTPMethod: method)
         do {
             return try await request(path: path, method: method, body: body)
         } catch CampusCoreError.unauthorized {
-            try await refreshCoordinator.refresh { [self] in
-                try await self.refreshSession()
+            try await refreshCoordinator.refresh(scope: scope) { [self] in
+                try await self.refreshSession(scope: scope)
             }
             guard retryPolicy.allowsAutomaticRetry else {
                 throw CampusCoreError.unauthorized
@@ -263,8 +308,12 @@ actor RustCampusCoreAPI: CampusCoreAPI {
             do {
                 return try await request(path: path, method: method, body: body)
             } catch CampusCoreError.unauthorized {
-                await invalidateStoredSession()
-                throw CampusCoreError.credentialsRejected
+                if scope == .academic {
+                    await invalidateStoredSession()
+                    throw CampusCoreError.credentialsRejected
+                }
+                await postNotification(.campusCardAuthenticationRequired)
+                throw CampusCoreError.credentialsUnavailable
             }
         }
     }

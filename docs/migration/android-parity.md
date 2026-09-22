@@ -7,12 +7,12 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
-| 当前里程碑 | 为苹果官方与学校授权准备，iOS 已删除教评入口、业务代码、网络链路、本地预设与自动化覆盖 |
-| 当前焦点 | 确认删除后的首页/工具页、历史首页布局迁移、成绩受限文本和隐私数据映射均不再提供教评功能链路 |
-| 下一步 | 在 macOS/Xcode 环境运行完整构建、单元测试与 UI 回归，并将授权审查需要的功能与数据清单提交给苹果和学校审核 |
+| 当前里程碑 | iOS 登录已改为官方可见 WebView 首登、前台隐藏 WebView 续期和版本化隐私决策；拒绝/撤回后进入只含课表与设置的体验账户 |
+| 当前焦点 | 验证 CAS/ADWMH WebView、Keychain Cookie 合并、scope single-flight、JSON 课表导入和隐私撤回的 macOS/Simulator/真机行为 |
+| 下一步 | 在 macOS/Xcode 环境运行完整构建、单元/UI 测试与 Archive；物理 iPhone 使用授权账号验证首登、Cookie 过期、ADWMH 验证码和撤回同意 |
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
-| 严格完成定义 | 20 / 25（80.0%）；PAY-01～05 均待授权账号/物理 iPhone 证据，自动化不执行真实扣款 |
+| 严格完成定义 | 19 / 25（76.0%）；AUTH-02 的新 WebView 链路待 macOS/真机验证，PAY-01～05 均待授权账号/物理 iPhone 证据 |
 | 当前分支 | `codex/ios-authorization-prep` |
 | 最近更新 | 2026-09-22 |
 
@@ -206,7 +206,7 @@ iOS/
 | D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `30697541236` 在 Xcode 26.6（17F113）、iPhone 13 Pro / iOS 26.5 Simulator 上通过 277 个单元测试与 10 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-87` 为 22,453,461 bytes。设备 run `30697541215` 与 Archive run `30697541230` 成功；物理 iPhone 13 Pro 的真实校园账号数据由用户验证 |
 | D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 已确定当前方案 | 当前不集成第三方崩溃、统计或广告 SDK；灰度只向自有端点发送不可逆账号摘要并提供本地兜底；未来新增数据收集必须先更新隐私清单和用途评估 |
-| D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 免责声明与隐私说明为必要确认；社区/商业合作仅供自愿阅读，不阻塞使用；拒绝时留在协议页且不保存状态，不主动退出 App；正式发布文本仍需隐私/合规复核 |
+| D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 隐私政策首先展示并记录接受/拒绝；接受即授权本机 Keychain 保存账密/Cookie 及前台 WebView 续期，拒绝仍可进入课表体验账户；设置可撤回并删除凭据；免责声明仍需接受，社区说明为可选 |
 
 ## 7. 里程碑
 
@@ -263,8 +263,8 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 已完成 | Rust 在统一认证边界以 typed `campus_session_expired` 覆盖最终登录 URL、登录跳转、登录表单及 401/403，本地服务稳定返回 401；App 级 actor 共享一次重登录，成功后 GET/HEAD 和显式只读 Token/查询最多重试一次，写 POST 不重放。仅明确密码拒绝清 Keychain；网络/5xx/解析错误保留离线身份。canonical 学号统一 Keychain 查询，旧 Snapshot 缺凭据时显示一次性重新登录提示 | SDK 25 项、Swift 349 单测和 9 UI 全绿，iPhone 13 Pro Simulator、IPA/Archive 证据见 `E-20260802-01`；SDK `64b3564`，iOS `d194f9d`～`bc35276`。设计见 `docs/session-refresh.md` | 2026-08-02 |
-| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 已完成 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入 cache-first/refresh/stale-cache Repository；业务缓存通过 Apple C ABI 写入 GuiXu，物理键为 SHA-256 摘要且逻辑键强制账号命名空间；升级时一次性读取旧 UserDefaults/文件缓存、写入 GuiXu 后删除旧副本；Widget 快照与提醒刷新仍由同一课表结果驱动 | 原课表 Repository/文件缓存/周次/模型 12 项及新增 GuiXu FFI/迁移 2 项测试；全状态 UI 见 `E-20260715-01`，最终 macOS 复验见 `E-20260715-02`；Commits `d8516f2`、`edfd219`，SDK `e826156` | 2026-07-15 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待验证 | 隐私 v3 同意后以官方可见 WebView 首登，账密/Cookie 只入 ThisDeviceOnly Keychain；教务过期时前台隐藏 WebView single-flight 续期，ADWMH 验证码转可见 WebView；写请求不重放。Apple target 不编译 Rust `/login` 与外部 OCR；拒绝/撤回进入体验账户 | Windows 静态与契约测试已补齐；macOS/Simulator/Archive 及授权账号真机证据待运行，设计见 `docs/session-refresh.md` | 2026-09-22 |
+| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | 真实账户保留 cache-first/refresh/stale-cache，并同步不含学号的体验课表副本；体验账户绝不请求 CampusCoreAPI，可导入最大 1 MB/500 门课程的 v1 JSON，只接受当前/下学期并原子覆盖；Widget 继续读取本地快照 | `ExperienceScheduleStoreTests`、拒绝隐私 UI 路径与原课表回归待 macOS CI | 2026-09-22 |
 | SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周左右分页、真实日期、单双周、重叠课程、总览、下学期、课程详情和全状态完整；新增 Android 3.2.0 同款地点缩写、周次范围及总览可读文本 | 原功能证据见 `E-20260714-01`、`E-20260717-04`、`E-20260717-06`；`ScheduleTextFormatter` 与全量回归见 `E-20260726-01` | 2026-07-26 |
 | HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、编辑工具库、已放工具过滤和账号隔离持久化完整；紧凑天气点击只进入天气，不与课程入口冲突 | `HomeWidgetLayoutTests`、确定性紧凑天气 UI 专项及既有双端证据全部通过，见 `E-20260726-01` | 2026-07-26 |
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | SDK 成绩/学籍/排名、筛选/搜索与账号隔离缓存完整；教务系统返回受限的 `gradeDetail` 时只展示清理 HTML 后的服务端文本，不再跳转教评；单学籍失败不遮蔽其他学籍 | gradeDetail-only 解析、HTML 清理、单学籍隔离和 Demo 学期回归保留；教评跳转于 2026-09-22 移除 | 2026-09-22 |
@@ -295,13 +295,13 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | 覆盖切片 | 状态 | 本轮补齐内容 | 预定自动验证 |
 | --- | --- | --- | --- |
 | APP-01、PREF-01、OPS-01 | 已完成 | 系统 `TabView`/`UITabBar`、UIKit 原生导航栏、双原生返回；隐藏 Debug、更新、反馈、许可证、主题与 Dynamic Type；液态玻璃无用户开关 | 原生导航与底栏见 `E-20260716-01`；液态玻璃入口移除见 `E-20260716-02`；Debug 可见行移除见 `E-20260717-02` |
-| AUTH-02、CONTENT-01 | 已完成 | Cookie 父域/Path/Secure/HttpOnly、响应 Cookie 持久化、401/403/登录重定向自动续期；网络/5xx 不误退出且保留离线缓存；续期凭据被拒时清理失效材料并由根导航回到登录页 | Cookie 匹配/响应/重试契约、离线恢复、续期拒绝与会话测试 |
+| AUTH-02、CONTENT-01 | 待验证 | Cookie 父域/Path/Secure/HttpOnly、响应 Cookie 持久化、401/403/登录重定向识别保留；续期已改为前台隐藏教务 WebView 与可见 ADWMH 验证码，网络/5xx 不删除凭据 | Cookie 匹配/响应/重试契约保留；新 WebView 与体验账户路径待 macOS/真机回归 |
 | SCH-01、SCH-02、HOME-01 | 已完成 | 当前学期按真实日期推导、真实下学期 SDK 接口、重叠课程分栏；首页课程入口、拖放编辑、灰度门、账号隔离布局和已放工具过滤 | Semester、布局、课表 Repository/UI 回归；Rust server feature 编译 |
 | ACA-01、ACA-02、ACA-03 | 已完成 | 多学籍切换、真实学期排名、账号隔离成绩/考试缓存；空闲教室默认全楼栋与日期约束 | Rust 多学籍/排名解析、Swift 成绩/考试/空教室单测与全状态 UI |
 | CARD-01、INFO-01、INFO-03、CONTENT-03 | 已完成 | 校园卡缓存键改为不可逆账号摘要，二维码显示时亮度提升并恢复；天气页首次进入先请求定位、拒绝后降级 IP，首页显示开关生效；校历用 PhotoKit 真正保存照片；学习资料流式临时文件落盘与系统分享 | 账号摘要、定位优先/拒绝降级、PhotoKit adapter、现有服务契约/缓存测试、Release device 构建 |
 | SYS-01、SYS-02 | 已完成 | Widget 随跨周时间线推进课程与周次；未来三周通知重排；前台/时区变化维护；ActivityKit 锁屏与灵动岛实现 | 跨周 Widget/提醒单测、Widget Extension 编译、IPA/Archive 扩展检查 |
 
-PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再把安全 broker 或学校官方页面作为阻塞/兜底。教学评价移出当前范围后，严格完成度为 20 / 25；未完成的五个切片均为缺少授权账号与物理 iPhone 真实链路证据的支付功能。
+PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再把安全 broker 或学校官方页面作为阻塞/兜底。教学评价移出当前范围后，严格完成度原为 20 / 25；本轮 AUTH-02 WebView 重构在 macOS/真机复验前降为待验证，因此当前为 19 / 25。
 
 ## 9. 平台差异与已知 Android 缺口
 
@@ -555,3 +555,4 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 2026-08-31 | CARD-003 | 移除校园卡付款码展开态固定 `400pt` 高度与占满剩余空间的 Spacer，面板改由二维码、余额和内边距自然撑高，保留余额收起态 `140pt` 高度；独立 overlay 测量标记避免覆盖二维码原辅助功能标识 | UI smoke 锁定付款码面板高度小于 `300pt`；CI `33355172892` 通过 349 个单元测试与 9 个 UI 测试 | `9fcca9f`、`f62f4aa` |
 | 2026-08-31 | REL-001 | 将 App 与 Widget 的 `MARKETING_VERSION` 统一设为 `1.0.0`，构建号继续保持 `1`；本次仅调整客户端版本配置，不执行上传或商店发布 | `project.yml` 双 target 版本字段静态复核；CI `33355172892` 完成 macOS/Xcode 构建与全量测试 | `f522279` |
 | 2026-09-22 | ACA-007 | 为苹果官方与学校授权准备，从 iOS 整体移除教学评价：删除首页/工具/受限成绩入口、视图与模型、预设存储、Token/Cookie 会话引导、问卷读取/检查/提交 API 及相关单元/UI 测试；历史首页布局解码时自动清理已退役的 `evaluation` 卡片 | Windows 静态搜索、布局迁移测试与 `git diff --check`；macOS/Xcode 构建及回归待运行 | — |
+| 2026-09-22 | AUTH-010 | 以官方 WebView 替换 iOS Rust 无头登录/OCR：隐私 v3 明确凭据用途与撤回，首登可见、教务前台隐藏续期、ADWMH 验证码可见降级；拒绝/撤回进入只含课表+设置的体验账户，支持历史缓存和 v1 JSON 导入 | 新增隐私决策、Web 安全策略、体验课表与 UI 测试；Android target `cargo check --features server` 通过，Apple check 因 Windows 缺少 `xcrun/clang` 停在环境边界，macOS/Xcode/真机待验证 | SDK `4d882f2`；iOS 待提交 |

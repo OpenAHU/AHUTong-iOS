@@ -14,22 +14,19 @@ final class AppShellUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["onboarding.title"].waitForExistence(timeout: 8))
         waitForRendering()
-        capture("01-community", app: app)
+        XCTAssertTrue(app.staticTexts["隐私政策"].exists)
+        capture("01-privacy", app: app)
 
         app.buttons["onboarding.decline"].tap()
-        XCTAssertTrue(app.staticTexts["隐私政策"].waitForExistence(timeout: 2))
-        waitForRendering()
-        capture("02-privacy", app: app)
-
-        app.buttons["onboarding.decline"].tap()
-        XCTAssertTrue(app.alerts["需要你的同意"].waitForExistence(timeout: 2))
-        app.alerts.buttons["继续查看"].tap()
-
-        app.buttons["onboarding.continue"].tap()
         XCTAssertTrue(app.staticTexts["温馨提示与免责声明"].waitForExistence(timeout: 2))
         waitForRendering()
-        capture("03-disclaimer", app: app)
+        capture("02-disclaimer", app: app)
+
         app.buttons["onboarding.continue"].tap()
+        XCTAssertTrue(app.staticTexts["商业合作"].waitForExistence(timeout: 2))
+        waitForRendering()
+        capture("03-community", app: app)
+        app.buttons["onboarding.decline"].tap()
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 3), "四入口必须由系统 Tab Bar 承载")
@@ -272,6 +269,30 @@ final class AppShellUITests: XCTestCase {
         XCTAssertEqual(reminder.value as? String, "开启")
         waitForRendering()
         capture("23-course-reminder-enabled", app: app)
+    }
+
+    @MainActor
+    func testDeclinedPrivacyUsesScheduleOnlyExperienceAccount() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-onboarding"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["隐私政策"].waitForExistence(timeout: 8))
+        app.buttons["onboarding.decline"].tap()
+        XCTAssertTrue(app.staticTexts["温馨提示与免责声明"].waitForExistence(timeout: 3))
+        app.buttons["onboarding.continue"].tap()
+        XCTAssertTrue(app.staticTexts["商业合作"].waitForExistence(timeout: 3))
+        app.buttons["onboarding.decline"].tap()
+
+        let login = app.buttons["login.submit"]
+        XCTAssertTrue(login.waitForExistence(timeout: 5))
+        login.tap()
+
+        XCTAssertTrue(tabButton("schedule", app: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(tabButton("settings", app: app).exists)
+        XCTAssertFalse(tabButton("home", app: app).exists)
+        XCTAssertFalse(tabButton("tools", app: app).exists)
+        XCTAssertTrue(app.buttons["schedule.settings"].waitForExistence(timeout: 4))
     }
 
     @MainActor

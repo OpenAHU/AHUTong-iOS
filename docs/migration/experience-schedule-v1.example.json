@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "semester": {
+    "schoolYear": "2026-2027",
+    "term": "1"
+  },
+  "currentWeek": 1,
+  "courses": [
+    {
+      "weekday": 1,
+      "startWeek": 1,
+      "endWeek": 16,
+      "extra": "",
+      "location": "博学南楼 A101",
+      "name": "课程名称",
+      "teacher": "教师",
+      "length": 2,
+      "startTime": 1,
+      "courseId": "local-1",
+      "weekIndexes": [1, 2, 3]
+    }
+  ]
+}

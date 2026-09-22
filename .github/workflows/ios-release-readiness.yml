@@ -156,6 +156,10 @@ jobs:
             echo "Private signing material found in app binary." >&2
             exit 1
           fi
+          if strings "$app/AHUTong" | grep -F '118.25.8.226/ocr/captcha' >/dev/null; then
+            echo "Legacy external OCR login endpoint found in app binary." >&2
+            exit 1
+          fi
           find "$RUNNER_TEMP/AHUTong.xcarchive" -maxdepth 5 -type f | sort
 
       - name: Upload unsigned archive evidence

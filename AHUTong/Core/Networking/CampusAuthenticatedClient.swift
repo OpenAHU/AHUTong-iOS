@@ -3,6 +3,7 @@ import Foundation
 extension Notification.Name {
     static let campusCredentialsRejected = Notification.Name("AHUTong.campusCredentialsRejected")
     static let campusReauthenticationRequired = Notification.Name("AHUTong.campusReauthenticationRequired")
+    static let campusCardAuthenticationRequired = Notification.Name("AHUTong.campusCardAuthenticationRequired")
 }
 
 enum CampusWebError: LocalizedError, Equatable, Sendable {
@@ -318,8 +319,11 @@ actor CampusAuthenticatedClient {
         if CampusSessionExpiryDetector.isExpired(response: response, data: data) {
             if mayRefreshSession {
                 logger.notice("Campus web session expired; refreshing path=\(url.path)")
-                try await refreshCoordinator.refresh { [campusAPI] in
-                    try await campusAPI.refreshSession()
+                let scope: CampusSessionScope = url.host?.lowercased() == "adwmh.ahu.edu.cn"
+                    ? .campusCard
+                    : .academic
+                try await refreshCoordinator.refresh(scope: scope) { [campusAPI] in
+                    try await campusAPI.refreshSession(scope: scope)
                 }
                 guard retryPolicy.allowsAutomaticRetry else {
                     throw CampusWebError.unauthorized
@@ -336,7 +340,16 @@ actor CampusAuthenticatedClient {
                 )
             }
             if retryPolicy.allowsAutomaticRetry {
-                await campusAPI.invalidateStoredSession()
+                if url.host?.lowercased() == "adwmh.ahu.edu.cn" {
+                    await MainActor.run {
+                        NotificationCenter.default.post(
+                            name: .campusCardAuthenticationRequired,
+                            object: nil
+                        )
+                    }
+                } else {
+                    await campusAPI.invalidateStoredSession()
+                }
             }
             throw CampusWebError.unauthorized
         }

@@ -275,7 +275,7 @@ struct OperationsDiagnosticsView: View {
                             Task {
                                 do {
                                     try await appModel.campusAPI.initialize(cookiesJSON: "")
-                                    try await appModel.campusAPI.refreshSession()
+                                    try await appModel.campusAPI.refreshSession(scope: .academic)
                                     model.setOperationMessage("Cookie 已刷新")
                                 } catch {
                                     model.setOperationMessage(error.localizedDescription)

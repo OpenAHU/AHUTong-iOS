@@ -28,6 +28,8 @@ GitHub Runner 不接收 Apple ID、密码、证书或描述文件。未签名 IP
 ## 发布前人工检查
 
 - [ ] 使用授权校园测试账号验证登录、课表和 PAY-01～05；真实支付只由测试者在明确授权的小额环境中手动确认。
+- [ ] 验证隐私 v3 接受/拒绝/撤回、可见 CAS 首登、前台隐藏 WebView 续期、ADWMH 验证码降级，以及只含课表+设置的体验账户。
+- [ ] 确认 Apple target 不编译 Rust `/login` 与外部 OCR 链路；Release Archive 会拒绝包含旧 OCR 端点的二进制。
 - [x] PAY-01、PAY-03、PAY-05 的客户端签名与 PAY-02 安全键盘兼容逻辑已按 Android `2c33b0b` 隔离实现；协议常量只存在于私有支付兼容层，值不得进入日志、文档、诊断或验收记录。
 - [x] CI/自动测试通过应用级禁写开关、runner 域名阻断和 URLProtocol/Mock 禁止连接真实扣款接口。
 - [ ] 对照 `PrivacyInfo.xcprivacy` 和 App Store Connect 隐私标签，确认实际数据用途一致。

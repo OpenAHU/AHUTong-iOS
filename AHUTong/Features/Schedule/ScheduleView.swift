@@ -1,5 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import WidgetKit
+
+enum ScheduleAccessMode: Equatable, Sendable {
+    case authenticated
+    case experience
+}
 
 struct ScheduleWeekNavigation {
     static let validWeeks = 1...20
@@ -65,9 +71,18 @@ final class ScheduleViewModel: ObservableObject {
     private let nextRepository: ScheduleRepository
     private let api: any CampusCoreAPI
     private let semester: Semester
+    private let accessMode: ScheduleAccessMode
+    private let experienceStore: ExperienceScheduleStore
 
-    init(api: any CampusCoreAPI, userID: String) {
+    init(
+        api: any CampusCoreAPI,
+        userID: String,
+        accessMode: ScheduleAccessMode = .authenticated,
+        experienceStore: ExperienceScheduleStore = ExperienceScheduleStore()
+    ) {
         self.api = api
+        self.accessMode = accessMode
+        self.experienceStore = experienceStore
         let store = AppPersistence.migratingDefaults()
         let scopedStore = UserScopedStore(store: store, userID: userID)
         currentRepository = ScheduleRepository(
@@ -105,6 +120,10 @@ final class ScheduleViewModel: ObservableObject {
             source = .cache
             return
         }
+        if accessMode == .experience {
+            await loadExperience(previewNext: previewNext)
+            return
+        }
         state = .loading
         do {
             let result = try await repository(previewNext: previewNext).load(
@@ -114,6 +133,12 @@ final class ScheduleViewModel: ObservableObject {
             currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? 1)
             source = result.source
             state = .loaded(result.courses)
+            try? await experienceStore.save(
+                courses: result.courses,
+                semester: previewNext ? semester.next : semester,
+                currentWeek: currentWeek,
+                updatesCurrentWeek: !previewNext
+            )
             if !previewNext { await updateSystemIntegrations(courses: result.courses) }
         } catch is CancellationError {
             return
@@ -124,6 +149,10 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     func refresh(previewNext: Bool = false) async {
+        if accessMode == .experience {
+            await loadExperience(previewNext: previewNext)
+            return
+        }
         state = .loading
         do {
             let result = try await repository(previewNext: previewNext).load(
@@ -134,12 +163,43 @@ final class ScheduleViewModel: ObservableObject {
             source = result.source
             state = .loaded(result.courses)
             currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? currentWeek)
+            try? await experienceStore.save(
+                courses: result.courses,
+                semester: previewNext ? semester.next : semester,
+                currentWeek: currentWeek,
+                updatesCurrentWeek: !previewNext
+            )
             if !previewNext { await updateSystemIntegrations(courses: result.courses) }
         } catch is CancellationError {
             return
         } catch {
             state = .failed(AppErrorState(message: error.localizedDescription))
             if !previewNext { await publishWidget(.unavailable(.expired)) }
+        }
+    }
+
+    func importExperienceSchedule(_ data: Data) async throws -> Semester {
+        guard accessMode == .experience else {
+            throw ExperienceScheduleError.invalidDocument
+        }
+        let imported = try await experienceStore.importDocument(
+            data,
+            allowedSemesters: [semester, semester.next]
+        )
+        await loadExperience(previewNext: imported == semester.next)
+        return imported
+    }
+
+    private func loadExperience(previewNext: Bool) async {
+        state = .loading
+        let snapshot = await experienceStore.snapshot()
+        let target = previewNext ? semester.next : semester
+        let courses = snapshot.coursesBySemester[target.rawValue] ?? []
+        currentWeek = previewNext ? 1 : snapshot.resolvedCurrentWeek()
+        source = .cache
+        state = courses.isEmpty ? .empty : .loaded(courses)
+        if !previewNext {
+            await updateSystemIntegrations(courses: courses)
         }
     }
 
@@ -187,6 +247,8 @@ struct ScheduleView: View {
     @State private var selectedWeek = 1
     @State private var selectedCourse: Course?
     @State private var showSettings = false
+    @State private var showsScheduleImporter = false
+    @State private var importMessage: String?
     @AppStorage("schedule.show-all") private var showAllCourses = false
     @AppStorage("schedule.preview-next") private var previewNextSemester = false
 
@@ -198,9 +260,27 @@ struct ScheduleView: View {
 
     init(appModel: AppModel) {
         let userID: String
-        if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = "guest" }
-        _model = StateObject(wrappedValue: ScheduleViewModel(api: appModel.campusAPI, userID: userID))
+        let accessMode: ScheduleAccessMode
+        switch appModel.sessionState {
+        case let .authenticated(user):
+            userID = user.studentID
+            accessMode = .authenticated
+        case .experience:
+            userID = AppModel.experienceUser.studentID
+            accessMode = .experience
+        default:
+            userID = "guest"
+            accessMode = .authenticated
+        }
+        _model = StateObject(wrappedValue: ScheduleViewModel(
+            api: appModel.campusAPI,
+            userID: userID,
+            accessMode: accessMode
+        ))
+        _isExperienceMode = State(initialValue: accessMode == .experience)
     }
+
+    @State private var isExperienceMode: Bool
 
     var body: some View {
         AndroidScreen {
@@ -222,8 +302,31 @@ struct ScheduleView: View {
         .sheet(isPresented: $showSettings) {
             ScheduleSettingsView(
                 showAllCourses: $showAllCourses,
-                previewNextSemester: $previewNextSemester
+                previewNextSemester: $previewNextSemester,
+                isExperienceMode: isExperienceMode,
+                importAction: {
+                    showSettings = false
+                    Task { @MainActor in
+                        await Task.yield()
+                        showsScheduleImporter = true
+                    }
+                }
             )
+        }
+        .fileImporter(
+            isPresented: $showsScheduleImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+        .alert("课表导入", isPresented: Binding(
+            get: { importMessage != nil },
+            set: { if !$0 { importMessage = nil } }
+        )) {
+            Button("好", role: .cancel) { importMessage = nil }
+        } message: {
+            Text(importMessage ?? "")
         }
     }
 
@@ -544,6 +647,33 @@ struct ScheduleView: View {
     private func shortLocation(_ location: String) -> String {
         ScheduleTextFormatter.shortLocation(location)
     }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        guard case let .success(urls) = result, let url = urls.first else {
+            if case let .failure(error) = result { importMessage = error.localizedDescription }
+            return
+        }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size <= ExperienceScheduleStore.maximumDocumentSize else {
+                throw ExperienceScheduleError.fileTooLarge
+            }
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            Task {
+                do {
+                    let semester = try await model.importExperienceSchedule(data)
+                    previewNextSemester = semester == Semester.current().next
+                    importMessage = "课表导入成功"
+                } catch {
+                    importMessage = error.localizedDescription
+                }
+            }
+        } catch {
+            importMessage = error.localizedDescription
+        }
+    }
 }
 
 private struct ScheduleSettingsView: View {
@@ -551,6 +681,8 @@ private struct ScheduleSettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Binding var showAllCourses: Bool
     @Binding var previewNextSemester: Bool
+    let isExperienceMode: Bool
+    let importAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -575,11 +707,21 @@ private struct ScheduleSettingsView: View {
                 identifier: "schedule.settings.next-semester",
                 isOn: $previewNextSemester
             )
+            if isExperienceMode {
+                Button(action: importAction) {
+                    Label("导入课表 JSON", systemImage: "square.and.arrow.down")
+                        .font(.body.bold())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(ScheduleSettingPressStyle())
+                .accessibilityIdentifier("schedule.settings.import")
+            }
             Spacer(minLength: 0)
         }
         .padding(24)
         .background(AndroidParityPalette.raisedSurface(colorScheme))
-        .presentationDetents([.height(310)])
+        .presentationDetents([.height(isExperienceMode ? 370 : 310)])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(32)
     }

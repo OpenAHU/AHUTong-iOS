@@ -7,6 +7,9 @@ struct RootView: View {
     @StateObject private var onboardingModel: OnboardingViewModel
     @StateObject private var appModel: AppModel
     @StateObject private var grayGate = GrayFeatureGateModel()
+    @StateObject private var toastCenter = AppToastCenter()
+    @State private var restoredConsentKey = ""
+    @State private var campusCardLogin: CampusCardLoginRequest?
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -30,10 +33,10 @@ struct RootView: View {
             } else if appModel.sessionState == .loading {
                 AndroidSplashView()
             } else if appModel.sessionState == .signedOut {
-                LoginView(appModel: appModel)
+                LoginView(appModel: appModel, onboardingModel: onboardingModel)
             } else {
                 TabView(selection: $selectedTab) {
-                    ForEach(AppTab.allCases) { tab in
+                    ForEach(availableTabs) { tab in
                         NavigationStack {
                             destination(for: tab)
                         }
@@ -48,16 +51,20 @@ struct RootView: View {
                 .background(AndroidParityRootBackground())
             }
         }
+        .environmentObject(toastCenter)
+        .overlay { AppToastOverlay(center: toastCenter) }
         .task {
-            async let onboarding: Void = onboardingModel.load(
+            if ProcessInfo.processInfo.arguments.contains("--reset-onboarding") {
+                UserDefaults.standard.removeObject(forKey: AppModel.experienceEnabledKey)
+            }
+            await onboardingModel.load(
                 resetForUITesting: ProcessInfo.processInfo.arguments.contains("--reset-onboarding"),
                 acceptForUITesting: ProcessInfo.processInfo.arguments.contains("--demo-consent")
             )
-            async let session: Void = appModel.restore(
-                demoSession: AppRuntime.isDemoSession
-            )
-            _ = await (onboarding, session)
-            await reloadGrayGate()
+            await restoreForCurrentConsent()
+        }
+        .onChange(of: onboardingModel.consent) { _, _ in
+            Task { await restoreForCurrentConsent() }
         }
         .onOpenURL { url in
             guard url.scheme == "ahutong" else { return }
@@ -66,7 +73,12 @@ struct RootView: View {
             }
         }
         .tint(themeTint)
-        .onChange(of: appModel.sessionState) { _, _ in Task { await reloadGrayGate() } }
+        .onChange(of: appModel.sessionState) { _, state in
+            if case .experience = state, !availableTabs.contains(selectedTab) {
+                selectedTab = .schedule
+            }
+            Task { await reloadGrayGate() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
             Task { await reloadGrayGate() }
         }
@@ -78,11 +90,53 @@ struct RootView: View {
             guard !AppRuntime.isDemoSession else { return }
             Task { await appModel.requireReauthentication() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .campusCardAuthenticationRequired)) { _ in
+            guard !AppRuntime.isDemoSession else { return }
+            Task {
+                guard let credentials = await appModel.currentCredentials() else {
+                    toastCenter.show("本机没有可用的校园账号凭据")
+                    await CampusInteractiveAuthenticationCoordinator.shared.fail(
+                        CampusWebAuthenticationError.credentialsUnavailable
+                    )
+                    return
+                }
+                campusCardLogin = CampusCardLoginRequest(credentials: credentials)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
             Task { await rescheduleCourseRemindersIfNeeded() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await rescheduleCourseRemindersIfNeeded() } }
+        }
+        .fullScreenCover(item: $campusCardLogin) { request in
+            CampusWebLoginScreen(
+                mode: .visibleCampusCard(request.credentials),
+                title: "校园卡服务登录"
+            ) { result in
+                switch result {
+                case let .success(authentication):
+                    Task {
+                        do {
+                            try await appModel.completeCampusCardLogin(authentication)
+                            await CampusInteractiveAuthenticationCoordinator.shared.succeed()
+                            toastCenter.show("校园卡登录已恢复")
+                        } catch {
+                            await CampusInteractiveAuthenticationCoordinator.shared.fail(
+                                error as? CampusWebAuthenticationError ?? .invalidResponse
+                            )
+                            toastCenter.show(error.localizedDescription)
+                        }
+                    }
+                case let .failure(error):
+                    Task {
+                        await CampusInteractiveAuthenticationCoordinator.shared.fail(
+                            error as? CampusWebAuthenticationError ?? .navigationFailed
+                        )
+                    }
+                    toastCenter.show(error.localizedDescription)
+                }
+            }
         }
     }
 
@@ -107,6 +161,28 @@ struct RootView: View {
 
     private var themeTint: Color {
         AndroidThemeColor.color(for: themeColor)
+    }
+
+    private var availableTabs: [AppTab] {
+        if case .experience = appModel.sessionState {
+            return [.schedule, .settings]
+        }
+        return AppTab.allCases
+    }
+
+    private func restoreForCurrentConsent() async {
+        guard onboardingModel.isLoaded, onboardingModel.consent.isComplete else { return }
+        let key = "\(onboardingModel.consent.confirmedVersion ?? 0)-\(onboardingModel.consent.privacyDecision.rawValue)-\(AppRuntime.isDemoSession)"
+        guard key != restoredConsentKey else { return }
+        restoredConsentKey = key
+        guard appModel.sessionState == .loading || appModel.sessionState == .signedOut else {
+            return
+        }
+        await appModel.restore(
+            privacyDecision: onboardingModel.consent.privacyDecision,
+            demoSession: AppRuntime.isDemoSession
+        )
+        await reloadGrayGate()
     }
 
     private func reloadGrayGate() async {
@@ -143,6 +219,11 @@ struct RootView: View {
             // Foreground maintenance is best-effort; existing pending requests remain valid.
         }
     }
+}
+
+private struct CampusCardLoginRequest: Identifiable {
+    let id = UUID()
+    let credentials: LoginCredentials
 }
 
 enum CourseReminderMaintenancePolicy {

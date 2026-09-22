@@ -51,6 +51,12 @@
     <true/>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+    <key>WKAppBoundDomains</key>
+    <array>
+        <string>one.ahu.edu.cn</string>
+        <string>jw.ahu.edu.cn</string>
+        <string>adwmh.ahu.edu.cn</string>
+    </array>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UISupportedInterfaceOrientations</key>

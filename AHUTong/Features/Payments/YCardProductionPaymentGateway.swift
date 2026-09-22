@@ -990,7 +990,7 @@ actor YCardProductionPaymentClient {
             }
             do {
                 try await refreshCoordinator.refresh { [campusAPI] in
-                    try await campusAPI.refreshSession()
+                    try await campusAPI.refreshSession(scope: .academic)
                 }
             } catch {
                 throw YCardProductionPaymentError.credentialsUnavailable

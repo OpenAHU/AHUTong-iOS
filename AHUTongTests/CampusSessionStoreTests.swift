@@ -12,8 +12,8 @@ final class CampusSessionStoreTests: XCTestCase {
             credentialStore: CredentialStore(secureStore: secureStore)
         )
 
-        try await model.login(studentID: "AB220001", password: "secret")
-        XCTAssertEqual(model.sessionState, .authenticated(User(name: "测试同学", studentID: "AB220001")))
+        try await model.completeWebLogin(Self.webLoginResult())
+        XCTAssertEqual(model.sessionState, .authenticated(User(name: "AB220001", studentID: "AB220001")))
 
         let restored = AppModel(
             campusAPI: api,
@@ -24,7 +24,7 @@ final class CampusSessionStoreTests: XCTestCase {
 
         XCTAssertEqual(restored.sessionState, model.sessionState)
         let initializedCookies = await api.lastInitializedCookies()
-        XCTAssertEqual(initializedCookies, "cookie-json")
+        XCTAssertTrue(initializedCookies.contains("SESSION"))
     }
 
     @MainActor
@@ -36,13 +36,54 @@ final class CampusSessionStoreTests: XCTestCase {
             sessionStore: CampusSessionStore(secureStore: secureStore),
             credentialStore: CredentialStore(secureStore: secureStore)
         )
-        try await model.login(studentID: "AB220001", password: "secret")
+        try await model.completeWebLogin(Self.webLoginResult())
 
         await model.signOut()
 
         XCTAssertEqual(model.sessionState, .signedOut)
         let persistedSession = try await CampusSessionStore(secureStore: secureStore).load()
         XCTAssertNil(persistedSession)
+    }
+
+    @MainActor
+    func testPrivacyRevocationClearsCredentialsAndEntersExperienceMode() async throws {
+        let secureStore = InMemorySecureStore()
+        let sessionStore = CampusSessionStore(secureStore: secureStore)
+        let credentialStore = CredentialStore(secureStore: secureStore)
+        let scheduleDataStore = InMemoryDataStore()
+        let experienceStore = ExperienceScheduleStore(store: scheduleDataStore)
+        let semester = Semester.current()
+        let course = ScheduleViewModel.demoCourses[0]
+        try await experienceStore.save(courses: [course], semester: semester, currentWeek: 2)
+        let suite = "experience-session-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try await sessionStore.save(CampusSessionSnapshot(
+            user: User(name: "测试同学", studentID: "AB220001"),
+            cookiesJSON: "[]"
+        ))
+        try await credentialStore.save(LoginCredentials(
+            studentID: "AB220001",
+            password: "test-only"
+        ))
+        let model = AppModel(
+            campusAPI: CampusCoreAPIStub(),
+            sessionStore: sessionStore,
+            credentialStore: credentialStore,
+            experienceScheduleStore: experienceStore,
+            defaults: defaults,
+            accountCacheCleaner: {}
+        )
+
+        await model.enterExperienceMode(preserveSchedule: false)
+
+        let persistedSession = try await sessionStore.load()
+        let persistedCredentials = try await credentialStore.credentials(for: "AB220001")
+        let experienceCourses = await experienceStore.courses(for: semester)
+        XCTAssertEqual(model.sessionState, .experience(AppModel.experienceUser))
+        XCTAssertNil(persistedSession)
+        XCTAssertNil(persistedCredentials)
+        XCTAssertEqual(experienceCourses, [course])
     }
 
     @MainActor
@@ -188,6 +229,22 @@ final class CampusSessionStoreTests: XCTestCase {
         XCTAssertEqual(restoredSnapshot, snapshot)
         XCTAssertNotNil(restoredCredentials)
     }
+
+    private static func webLoginResult() -> CampusWebAuthenticationResult {
+        CampusWebAuthenticationResult(
+            credentials: LoginCredentials(studentID: "AB220001", password: "secret"),
+            cookies: [
+                CampusCookie(
+                    name: "SESSION",
+                    value: "test-only",
+                    domain: "jw.ahu.edu.cn",
+                    path: "/",
+                    secure: true,
+                    httpOnly: true
+                )
+            ]
+        )
+    }
 }
 
 private actor CampusCoreAPIStub: CampusCoreAPI {
@@ -238,7 +295,7 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     func grades() -> CampusGradeReport { CampusGradeReport(grades: [], gradePointAverage: nil, rank: nil, studentProfiles: []) }
     func cardBalance() -> Double { 126.35 }
     func cardQRCode() -> String { "DEMO-QR" }
-    func refreshSession() async throws {
+    func refreshSession(scope: CampusSessionScope) async throws {
         guard let sessionStore,
               let credentialStore,
               let snapshot = try await sessionStore.load(),

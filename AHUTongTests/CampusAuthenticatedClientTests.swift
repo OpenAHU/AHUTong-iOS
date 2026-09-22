@@ -572,7 +572,7 @@ private actor CampusAuthenticatedClientAPIStub: CampusCoreAPI {
     func cardBalance() throws -> Double { throw CampusCoreError.invalidResponse }
     func cardQRCode() throws -> String { throw CampusCoreError.invalidResponse }
 
-    func refreshSession() async {
+    func refreshSession(scope: CampusSessionScope) async {
         refreshes += 1
         if let refreshDelay {
             try? await Task.sleep(for: refreshDelay)

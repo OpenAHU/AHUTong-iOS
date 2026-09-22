@@ -357,7 +357,7 @@ actor YCardReadOnlyClient {
             }
             do {
                 try await refreshCoordinator.refresh { [campusAPI] in
-                    try await campusAPI.refreshSession()
+                    try await campusAPI.refreshSession(scope: .academic)
                 }
             } catch let error as CampusCoreError
                 where error == .credentialsUnavailable

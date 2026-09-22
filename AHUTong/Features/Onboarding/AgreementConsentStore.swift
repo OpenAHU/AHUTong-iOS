@@ -3,6 +3,7 @@ import Foundation
 protocol AgreementConsentStoring: Sendable {
     func load() async throws -> AgreementConsent
     func setAccepted(_ accepted: Bool, document: AgreementDocument) async throws -> AgreementConsent
+    func setPrivacyDecision(_ decision: PrivacyConsentDecision) async throws -> AgreementConsent
     func confirmRequiredDocuments() async throws -> AgreementConsent
     func reset() async throws
 }
@@ -32,6 +33,9 @@ actor AgreementConsentStore: AgreementConsentStoring {
         _ accepted: Bool,
         document: AgreementDocument
     ) async throws -> AgreementConsent {
+        if document == .privacy {
+            return try await setPrivacyDecision(accepted ? .accepted : .declined)
+        }
         var consent = try await load()
         if accepted {
             consent.acceptedDocumentIDs.insert(document.id)
@@ -46,9 +50,23 @@ actor AgreementConsentStore: AgreementConsentStoring {
         return consent
     }
 
+    func setPrivacyDecision(_ decision: PrivacyConsentDecision) async throws -> AgreementConsent {
+        var consent = try await load()
+        consent.privacyDecision = decision
+        consent.privacyPolicyVersion = AgreementConsent.currentPrivacyPolicyVersion
+        consent.confirmedVersion = nil
+        if decision == .accepted {
+            consent.acceptedDocumentIDs.insert(AgreementDocument.privacy.id)
+        } else {
+            consent.acceptedDocumentIDs.remove(AgreementDocument.privacy.id)
+        }
+        try await store.set(try JSONEncoder().encode(consent), forKey: Self.storageKey)
+        return consent
+    }
+
     func confirmRequiredDocuments() async throws -> AgreementConsent {
         var consent = try await load()
-        guard consent.hasAcceptedRequiredDocuments else {
+        guard consent.hasResolvedRequiredDocuments else {
             return consent
         }
         consent.confirmedVersion = AgreementConsent.currentVersion

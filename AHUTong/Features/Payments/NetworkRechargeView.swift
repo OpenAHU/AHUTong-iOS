@@ -486,7 +486,7 @@ actor OfficialNetworkRechargeDataSource: NetworkRechargeDataSource {
             sessionCookies = []
             do {
                 try await refreshCoordinator.refresh { [campusAPI] in
-                    try await campusAPI.refreshSession()
+                    try await campusAPI.refreshSession(scope: .academic)
                 }
             } catch {
                 throw NetworkRechargeSafetyError.credentialsUnavailable

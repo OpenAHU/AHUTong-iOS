@@ -34,6 +34,20 @@ final class AgreementConsentStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDecliningPrivacyStillAllowsExperienceModeConsent() async throws {
+        let store = AgreementConsentStore(store: InMemoryDataStore())
+
+        _ = try await store.setPrivacyDecision(.declined)
+        _ = try await store.setAccepted(true, document: .disclaimer)
+        let consent = try await store.confirmRequiredDocuments()
+
+        XCTAssertEqual(consent.privacyDecision, .declined)
+        XCTAssertTrue(consent.hasResolvedRequiredDocuments)
+        XCTAssertFalse(consent.hasAcceptedRequiredDocuments)
+        XCTAssertTrue(consent.isComplete)
+    }
+
+    @MainActor
     func testResetRevokesConsent() async throws {
         let store = AgreementConsentStore(store: InMemoryDataStore())
         _ = try await store.setAccepted(true, document: .disclaimer)
@@ -49,9 +63,10 @@ final class AgreementConsentStoreTests: XCTestCase {
         let privacy = AgreementDocument.privacy.body
         let disclaimer = AgreementDocument.disclaimer.body
 
-        XCTAssertTrue(privacy.contains("安徽大学对应业务系统"))
-        XCTAssertTrue(privacy.contains("联系人、手机号和内容"))
-        XCTAssertTrue(privacy.contains("不运营用于汇集用户业务数据的自有云服务"))
+        XCTAssertTrue(privacy.contains("ThisDeviceOnly"))
+        XCTAssertTrue(privacy.contains("隐藏 WebView"))
+        XCTAssertTrue(privacy.contains("第三方 OCR"))
+        XCTAssertTrue(privacy.contains("安大通体验用户"))
         XCTAssertFalse(privacy.contains("不会将您的用户数据上传"))
         XCTAssertFalse(disclaimer.contains("不会收集、存储或泄露用户的任何个人信息"))
     }
@@ -59,7 +74,9 @@ final class AgreementConsentStoreTests: XCTestCase {
     func testPreviousPolicyVersionRequiresRenewedConsent() {
         let previous = AgreementConsent(
             acceptedDocumentIDs: Set(AgreementDocument.allCases.map(\.id)),
-            confirmedVersion: AgreementConsent.currentVersion - 1
+            confirmedVersion: AgreementConsent.currentVersion - 1,
+            privacyDecision: .accepted,
+            privacyPolicyVersion: AgreementConsent.currentPrivacyPolicyVersion - 1
         )
 
         XCTAssertFalse(previous.isComplete)

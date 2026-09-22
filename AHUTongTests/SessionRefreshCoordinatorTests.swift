@@ -41,6 +41,22 @@ final class SessionRefreshCoordinatorTests: XCTestCase {
         XCTAssertEqual(attemptCount, 2)
     }
 
+    func testDifferentScopesDoNotShareTheSameRefreshTask() async throws {
+        let coordinator = SessionRefreshCoordinator()
+        let login = SessionRefreshLoginProbe()
+
+        async let academic: Void = coordinator.refresh(scope: .academic) {
+            try await login.perform()
+        }
+        async let campusCard: Void = coordinator.refresh(scope: .campusCard) {
+            try await login.perform()
+        }
+        _ = try await (academic, campusCard)
+
+        let loginCount = await login.count()
+        XCTAssertEqual(loginCount, 2)
+    }
+
     func testOnlyGetAndHeadAreAutomaticallyRetryable() {
         XCTAssertTrue(CampusRequestRetryPolicy.automatic(forHTTPMethod: "GET").allowsAutomaticRetry)
         XCTAssertTrue(CampusRequestRetryPolicy.automatic(forHTTPMethod: "head").allowsAutomaticRetry)

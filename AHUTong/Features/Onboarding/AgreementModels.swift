@@ -1,5 +1,11 @@
 import Foundation
 
+enum PrivacyConsentDecision: String, Codable, Equatable, Sendable {
+    case unset
+    case accepted
+    case declined
+}
+
 enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
     case disclaimer
     case privacy
@@ -27,7 +33,7 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
         case .disclaimer:
             "了解开源版本、非官方分发和使用风险。"
         case .privacy:
-            "了解账号、课表等数据的处理和本地存储方式。"
+            "了解账号密码、Cookie、课表等数据的用途、本地存储和撤回方式。"
         case .community:
             "可选阅读，不影响使用应用。"
         }
@@ -45,12 +51,13 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
             """
         case .privacy:
             """
-            1. 为完成您主动使用的功能，安大通会处理姓名、学号、校园系统会话、课表、成绩等必要数据。密码、Token 和 Cookie 使用 iOS Keychain 或仅在当前操作的内存中保存。
-            2. 登录、教务、校园卡、失物招领等请求会发送到安徽大学对应业务系统；天气查询会按您的授权向天气服务发送位置、城市或网络定位信息。发布失物招领时，您填写的联系人、手机号和内容会提交到校方失物招领服务。
-            3. 支付功能仅在您主动确认后通过学校 HTTPS 接口创建并提交订单。App 包含与 Android 客户端一致的协议兼容签名常量，但不把它们作为用户凭据；六位密码仅在当前操作的内存中用于安全键盘映射，完成后立即清除，不进入日志、剪贴板或持久化存储。
-            4. 课表、缓存、偏好和小组件快照保存在本机或 App Group；退出登录时会清理会话和共享课表快照。用于灰度判断的学号只生成不可逆摘要，不发送原始学号。
-            5. 当前版本不接入广告、跨 App 跟踪、第三方统计或崩溃上报，也不运营用于汇集用户业务数据的自有云服务。除完成您选择的功能外，不向其他第三方出售或共享个人数据。
-            6. 您可以拒绝定位、通知和照片权限；对应功能会降级或不可用，但不影响其他基础功能。您也可以退出登录以清理本机会话。
+            1. 在您同意后，安大通会从安徽大学官方登录页读取您主动输入的学号和密码，并使用仅本设备可用的 iOS ThisDeviceOnly Keychain 保存。校园系统 Cookie 同样只保存在本机 Keychain。
+            2. 学号、密码和 Cookie 仅用于登录 one.ahu.edu.cn、jw.ahu.edu.cn 及必要的 adwmh.ahu.edu.cn 校园服务。当您在前台使用 App 且 Cookie 过期时，App 可能启动隐藏 WebView，将保存的凭据填入校方登录页以恢复会话。遇到验证码、设备验证或页面变化时，必须由您在可见页面继续。
+            3. 账号、密码、Token 和 Cookie 不会进入日志、诊断、剪贴板、iCloud 备份或开发者服务器，也不会发送给第三方 OCR、统计或广告服务。安大通不将这些凭据用于校园服务登录以外的用途。
+            4. 登录、教务、校园卡、失物招领等请求会直接发送到安徽大学对应业务系统；天气查询会按您的授权向天气服务发送必要的位置或城市信息。
+            5. 支付功能仅在您主动确认后通过学校 HTTPS 接口提交。校园卡六位密码只在当前操作的内存中短暂存在，完成后立即清除。
+            6. 课表、缓存、偏好和小组件快照保存在本机或 App Group。您拒绝或在设置中撤回同意后，App 会删除账号密码和校园 Cookie，并切换为“安大通体验用户”。之前缓存或手动导入的课表会保留，直到您清除缓存或重新导入。
+            7. 拒绝本政策仍可使用体验账户的课表和设置；其他需要真实校园身份的功能不可用。您可随时在设置中重新同意或撤回同意。
             """
         case .community:
             """
@@ -63,24 +70,69 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
 }
 
 struct AgreementConsent: Codable, Equatable, Sendable {
-    static let currentVersion = 2
+    static let currentVersion = 3
+    static let currentPrivacyPolicyVersion = 3
 
     var acceptedDocumentIDs: Set<String> = []
     var confirmedVersion: Int? = nil
+    var privacyDecision: PrivacyConsentDecision = .unset
+    var privacyPolicyVersion: Int? = nil
 
     static let empty = AgreementConsent()
 
     var hasAcceptedRequiredDocuments: Bool {
-        AgreementDocument.allCases
-            .filter(\.isRequired)
-            .allSatisfy { acceptedDocumentIDs.contains($0.id) }
+        acceptedDocumentIDs.contains(AgreementDocument.disclaimer.id)
+            && privacyDecision == .accepted
+    }
+
+    var hasResolvedRequiredDocuments: Bool {
+        acceptedDocumentIDs.contains(AgreementDocument.disclaimer.id)
+            && privacyDecision != .unset
     }
 
     var isComplete: Bool {
-        hasAcceptedRequiredDocuments && confirmedVersion == Self.currentVersion
+        hasResolvedRequiredDocuments
+            && privacyPolicyVersion == Self.currentPrivacyPolicyVersion
+            && confirmedVersion == Self.currentVersion
     }
 
     func isAccepted(_ document: AgreementDocument) -> Bool {
+        if document == .privacy {
+            return privacyDecision == .accepted
+        }
         acceptedDocumentIDs.contains(document.id)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case acceptedDocumentIDs
+        case confirmedVersion
+        case privacyDecision
+        case privacyPolicyVersion
+    }
+
+    init(
+        acceptedDocumentIDs: Set<String> = [],
+        confirmedVersion: Int? = nil,
+        privacyDecision: PrivacyConsentDecision = .unset,
+        privacyPolicyVersion: Int? = nil
+    ) {
+        self.acceptedDocumentIDs = acceptedDocumentIDs
+        self.confirmedVersion = confirmedVersion
+        self.privacyDecision = privacyDecision
+        self.privacyPolicyVersion = privacyPolicyVersion
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        acceptedDocumentIDs = try container.decodeIfPresent(
+            Set<String>.self,
+            forKey: .acceptedDocumentIDs
+        ) ?? []
+        confirmedVersion = try container.decodeIfPresent(Int.self, forKey: .confirmedVersion)
+        privacyDecision = try container.decodeIfPresent(
+            PrivacyConsentDecision.self,
+            forKey: .privacyDecision
+        ) ?? .unset
+        privacyPolicyVersion = try container.decodeIfPresent(Int.self, forKey: .privacyPolicyVersion)
     }
 }

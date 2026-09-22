@@ -1542,7 +1542,7 @@ private actor YCardReadOnlyAPIStub: CampusCoreAPI {
         }
     }
 
-    func refreshSession() {
+    func refreshSession(scope: CampusSessionScope) {
         refreshes += 1
         cookies = "[]"
     }

@@ -14,7 +14,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     var canContinue: Bool {
-        consent.hasAcceptedRequiredDocuments
+        consent.hasResolvedRequiredDocuments
     }
 
     func load(resetForUITesting: Bool = false, acceptForUITesting: Bool = false) async {
@@ -27,7 +27,11 @@ final class OnboardingViewModel: ObservableObject {
             }
             if acceptForUITesting {
                 for document in AgreementDocument.allCases {
-                    _ = try await store.setAccepted(true, document: document)
+                    if document == .privacy {
+                        _ = try await store.setPrivacyDecision(.accepted)
+                    } else {
+                        _ = try await store.setAccepted(true, document: document)
+                    }
                 }
                 consent = try await store.confirmRequiredDocuments()
             } else {
@@ -47,6 +51,25 @@ final class OnboardingViewModel: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = "无法保存协议状态，请重试。"
+        }
+    }
+
+    func setPrivacyDecision(_ decision: PrivacyConsentDecision) async {
+        do {
+            consent = try await store.setPrivacyDecision(decision)
+            errorMessage = nil
+        } catch {
+            errorMessage = "无法保存隐私选择，请重试。"
+        }
+    }
+
+    func setPrivacyDecisionAndConfirm(_ decision: PrivacyConsentDecision) async {
+        do {
+            _ = try await store.setPrivacyDecision(decision)
+            consent = try await store.confirmRequiredDocuments()
+            errorMessage = nil
+        } catch {
+            errorMessage = "无法保存隐私选择，请重试。"
         }
     }
 
@@ -74,6 +97,7 @@ struct OnboardingView: View {
     @ObservedObject var model: OnboardingViewModel
     @Environment(\.colorScheme) private var colorScheme
     @State private var currentIndex = 0
+    @EnvironmentObject private var toastCenter: AppToastCenter
 
     var body: some View {
         AndroidScreen {
@@ -91,11 +115,11 @@ struct OnboardingView: View {
         .alert("需要你的同意", isPresented: $model.showsDeclineExplanation) {
             Button("继续查看", role: .cancel) { }
         } message: {
-            Text("我们不会保存同意状态，也不会进入应用。你可以继续阅读并在准备好后选择同意。")
+            Text("免责声明是继续使用所需的确认。你可以继续阅读，并在准备好后选择同意。")
         }
     }
 
-    private var documents: [AgreementDocument] { [.community, .privacy, .disclaimer] }
+    private var documents: [AgreementDocument] { [.privacy, .disclaimer, .community] }
 
     private var currentDocument: AgreementDocument {
         documents[min(currentIndex, documents.count - 1)]
@@ -104,7 +128,9 @@ struct OnboardingView: View {
     private func acceptCurrent() {
         let document = currentDocument
         Task {
-            if document.isRequired && !model.consent.isAccepted(document) {
+            if document == .privacy {
+                await model.setPrivacyDecision(.accepted)
+            } else if document.isRequired && !model.consent.isAccepted(document) {
                 await model.toggle(document)
             }
             if currentIndex == documents.count - 1 {
@@ -116,7 +142,13 @@ struct OnboardingView: View {
     }
 
     private func declineCurrent() {
-        if currentDocument.isRequired {
+        if currentDocument == .privacy {
+            Task {
+                await model.setPrivacyDecision(.declined)
+                toastCenter.show("已拒绝隐私条款，只能使用安大通体验账户和课表功能。")
+                currentIndex += 1
+            }
+        } else if currentDocument.isRequired {
             model.showsDeclineExplanation = true
         } else if currentIndex < documents.count - 1 {
             currentIndex += 1

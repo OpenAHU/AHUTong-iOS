@@ -1696,6 +1696,6 @@ private actor YCardProductionCampusAPIStub: CampusCoreAPI {
     func cardBalance() throws -> Double { throw CampusCoreError.invalidResponse }
     func cardQRCode() throws -> String { throw CampusCoreError.invalidResponse }
     func cardAccessToken() -> String { "fixture-token" }
-    func refreshSession() { refreshes += 1 }
+    func refreshSession(scope: CampusSessionScope) { refreshes += 1 }
     func refreshCount() -> Int { refreshes }
 }

@@ -10,31 +10,32 @@ actor SessionRefreshCoordinator {
         let task: Task<Void, Error>
     }
 
-    private var activeRefresh: ActiveRefresh?
+    private var activeRefreshes: [CampusSessionScope: ActiveRefresh] = [:]
 
     func refresh(
+        scope: CampusSessionScope = .academic,
         operation: @escaping @Sendable () async throws -> Void
     ) async throws {
-        if let activeRefresh {
+        if let activeRefresh = activeRefreshes[scope] {
             return try await activeRefresh.task.value
         }
 
         let id = UUID()
         let task = Task { try await operation() }
-        activeRefresh = ActiveRefresh(id: id, task: task)
+        activeRefreshes[scope] = ActiveRefresh(id: id, task: task)
 
         do {
             try await task.value
-            clearRefresh(id: id)
+            clearRefresh(id: id, scope: scope)
         } catch {
-            clearRefresh(id: id)
+            clearRefresh(id: id, scope: scope)
             throw error
         }
     }
 
-    private func clearRefresh(id: UUID) {
-        guard activeRefresh?.id == id else { return }
-        activeRefresh = nil
+    private func clearRefresh(id: UUID, scope: CampusSessionScope) {
+        guard activeRefreshes[scope]?.id == id else { return }
+        activeRefreshes[scope] = nil
     }
 }
 

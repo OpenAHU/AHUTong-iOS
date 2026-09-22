@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var toastCenter: AppToastCenter
     @ObservedObject var onboardingModel: OnboardingViewModel
     @ObservedObject var appModel: AppModel
     @State private var showClearConfirmation = false
@@ -13,6 +14,7 @@ struct SettingsView: View {
     @State private var debugTapCount = 0
     @State private var lastDebugTap = Date.distantPast
     @State private var showsDebug = false
+    @State private var showsPrivacyConsent = false
 
     var body: some View {
         AndroidScreen {
@@ -22,15 +24,24 @@ struct SettingsView: View {
                     appCard
                     section("账户信息")
                     accountCard
-                    NavigationLink {
-                        AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
-                    } label: {
-                        AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
-                            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-                            .padding(.horizontal, 16)
+                    section("隐私与登录")
+                    privacyConsentRow
+                    AndroidSettingButton(label: "查看隐私政策", systemImage: "hand.raised") {
+                        showsPrivacyConsent = true
                     }
-                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
-                    .accessibilityIdentifier("settings.preferences")
+                    .padding(.horizontal, 16)
+                    .accessibilityIdentifier("settings.privacy-policy")
+                    if !appModel.isExperienceMode {
+                        NavigationLink {
+                            AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
+                        } label: {
+                            AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
+                                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                                .padding(.horizontal, 16)
+                        }
+                        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
+                        .accessibilityIdentifier("settings.preferences")
+                    }
                     section("关于")
                     settingsGroup {
                         NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
@@ -105,6 +116,18 @@ struct SettingsView: View {
         .navigationDestination(isPresented: $showsDebug) {
             OperationsDiagnosticsView(userID: currentUser?.studentID, appModel: appModel).androidDetailScreen()
         }
+        .sheet(isPresented: $showsPrivacyConsent) {
+            PrivacyConsentSheet(
+                accept: onboardingModel.consent.privacyDecision == .accepted ? nil : {
+                    Task {
+                        await onboardingModel.setPrivacyDecisionAndConfirm(.accepted)
+                        await appModel.prepareForRealLogin()
+                        showsPrivacyConsent = false
+                        toastCenter.show("已同意保存登录信息，请登录真实校园账号")
+                    }
+                }
+            )
+        }
     }
 
     private var appCard: some View {
@@ -128,13 +151,27 @@ struct SettingsView: View {
     }
 
     private var accountCard: some View {
-        let user: User? = if case let .authenticated(user) = appModel.sessionState { user } else { nil }
+        let user: User? = switch appModel.sessionState {
+        case let .authenticated(user), let .experience(user): user
+        default: nil
+        }
         return VStack(alignment: .leading, spacing: 28) {
             Text(user?.name ?? "未登录").font(.title2)
             Button {
-                Task { await appModel.signOut() }
+                if appModel.isExperienceMode {
+                    if onboardingModel.consent.privacyDecision == .accepted {
+                        Task { await appModel.prepareForRealLogin() }
+                    } else {
+                        showsPrivacyConsent = true
+                    }
+                } else {
+                    Task { await appModel.signOut() }
+                }
             } label: {
-                Label("重新登录", systemImage: "rectangle.portrait.and.arrow.forward")
+                Label(
+                    appModel.isExperienceMode ? "登录真实账号" : "重新登录",
+                    systemImage: "rectangle.portrait.and.arrow.forward"
+                )
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
@@ -143,6 +180,40 @@ struct SettingsView: View {
         .padding(24)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
         .padding(.horizontal, 16)
+    }
+
+    private var privacyConsentRow: some View {
+        Button {
+            if onboardingModel.consent.privacyDecision == .accepted {
+                Task {
+                    await onboardingModel.setPrivacyDecisionAndConfirm(.declined)
+                    await appModel.enterExperienceMode()
+                    toastCenter.show("已切换为安大通体验用户，除课表外的校园功能已停用。")
+                }
+            } else {
+                showsPrivacyConsent = true
+            }
+        } label: {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("保存登录信息并自动续期")
+                        .font(.headline)
+                    Text("账号、密码和 Cookie 仅保存在本机 Keychain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                AndroidPreferenceToggle(
+                    isOn: onboardingModel.consent.privacyDecision == .accepted
+                )
+            }
+            .padding(20)
+            .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal, 16)
+        }
+        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 24))
+        .accessibilityIdentifier("settings.privacy-consent")
+        .accessibilityValue(onboardingModel.consent.privacyDecision == .accepted ? "开启" : "关闭")
     }
 
     private func section(_ text: String) -> some View {
@@ -155,6 +226,7 @@ struct SettingsView: View {
     }
 
     private func registerDebugTap() {
+        guard !appModel.isExperienceMode else { return }
         let now = Date()
         debugTapCount = now.timeIntervalSince(lastDebugTap) <= 1 ? debugTapCount + 1 : 1
         lastDebugTap = now
@@ -529,6 +601,38 @@ private struct AndroidPreferenceToggle: View {
     }
 }
 
+private struct PrivacyConsentSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let accept: (() -> Void)?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(AgreementDocument.privacy.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+            }
+            .navigationTitle(AgreementDocument.privacy.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 12) {
+                    Button(accept == nil ? "关闭" : "取消") { dismiss() }
+                        .buttonStyle(.bordered)
+                    if let accept {
+                        Button("同意并去登录", action: accept)
+                            .buttonStyle(.borderedProminent)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(.regularMaterial)
+            }
+        }
+        .presentationDetents([.large])
+        .accessibilityIdentifier("settings.privacy-consent-sheet")
+    }
+}
+
 struct IOSLicenseEntry: Identifiable, Equatable, Sendable {
     let name: String
     let author: String
@@ -788,6 +892,7 @@ private struct ContributorsView: View {
     }
 }
 
+@MainActor
 enum AppDataCleaner {
     static func clearCaches() async {
         await AppPersistence.clearCaches()
