@@ -340,14 +340,7 @@ actor CampusAuthenticatedClient {
                 )
             }
             if retryPolicy.allowsAutomaticRetry {
-                if url.host?.lowercased() == "adwmh.ahu.edu.cn" {
-                    await MainActor.run {
-                        NotificationCenter.default.post(
-                            name: .campusCardAuthenticationRequired,
-                            object: nil
-                        )
-                    }
-                } else {
+                if url.host?.lowercased() != "adwmh.ahu.edu.cn" {
                     await campusAPI.invalidateStoredSession()
                 }
             }

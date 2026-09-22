@@ -64,7 +64,7 @@ final class CampusCardViewModel: ObservableObject {
         let cached = cachedBalance
         balanceState = .loading(cached)
         do {
-            let value = try await api.cardBalance()
+            let value = try await api.cardBalance(allowsInteractiveLogin: force)
             defaults.set(value, forKey: cacheKey)
             balanceState = .loaded(value)
         } catch {
@@ -72,7 +72,15 @@ final class CampusCardViewModel: ObservableObject {
         }
     }
 
-    func loadQRCode(demo: Bool) async {
+    func loadQRCode(demo: Bool, force: Bool = false) async {
+        if !force {
+            switch qrState {
+            case .loading, .loaded, .failed:
+                return
+            case .idle:
+                break
+            }
+        }
         qrState = .loading
         do {
             let payload: String
@@ -167,7 +175,7 @@ struct CampusCardPanel: View {
                 Button { showsQRCode = false } label: { Image(systemName: "arrow.left") }
                 Spacer()
                 Button {
-                    Task { await model.loadQRCode(demo: demo) }
+                    Task { await model.loadQRCode(demo: demo, force: true) }
                     showsFullQRCode = true
                 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
             }
@@ -177,7 +185,7 @@ struct CampusCardPanel: View {
 
             qrImage(size: 138)
                 .contentShape(Rectangle())
-                .onTapGesture { Task { await model.loadQRCode(demo: demo) } }
+                .onTapGesture { Task { await model.loadQRCode(demo: demo, force: true) } }
 
             balanceText
                 .font(.title2.bold())

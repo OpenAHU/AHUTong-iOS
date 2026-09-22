@@ -83,6 +83,7 @@ protocol CampusCoreAPI: Sendable {
     func gradeProfiles() async throws -> [CampusGradeStudentProfile]
     func gradeRank(studentID: String) async throws -> CampusGradeRankInfo?
     func cardBalance() async throws -> Double
+    func cardBalance(allowsInteractiveLogin: Bool) async throws -> Double
     func cardQRCode() async throws -> String
     func cardAccessToken() async throws -> String
     func refreshSession(scope: CampusSessionScope) async throws
@@ -97,6 +98,9 @@ extension CampusCoreAPI {
     func gradeProfiles() async throws -> [CampusGradeStudentProfile] { [] }
     func gradeRank(studentID: String) async throws -> CampusGradeRankInfo? { nil }
     func cardAccessToken() async throws -> String { throw CampusCoreError.credentialsUnavailable }
+    func cardBalance(allowsInteractiveLogin: Bool) async throws -> Double {
+        try await cardBalance()
+    }
     func refreshSession(scope: CampusSessionScope) async throws {
         throw CampusCoreError.credentialsUnavailable
     }
@@ -194,9 +198,14 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func cardBalance() async throws -> Double {
+        try await cardBalance(allowsInteractiveLogin: true)
+    }
+
+    func cardBalance(allowsInteractiveLogin: Bool) async throws -> Double {
         try cardParser.balance(from: try await authenticatedRequest(
             path: "/ycard/balance",
-            scope: .campusCard
+            scope: .campusCard,
+            allowsInteractiveLogin: allowsInteractiveLogin
         ))
     }
 
@@ -293,12 +302,16 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         method: String = "GET",
         body: Data? = nil,
         retryPolicy: CampusRequestRetryPolicy? = nil,
-        scope: CampusSessionScope = .academic
+        scope: CampusSessionScope = .academic,
+        allowsInteractiveLogin: Bool = true
     ) async throws -> Data {
         let retryPolicy = retryPolicy ?? .automatic(forHTTPMethod: method)
         do {
             return try await request(path: path, method: method, body: body)
         } catch CampusCoreError.unauthorized {
+            if scope == .campusCard, !allowsInteractiveLogin {
+                throw CampusCoreError.credentialsUnavailable
+            }
             try await refreshCoordinator.refresh(scope: scope) { [self] in
                 try await self.refreshSession(scope: scope)
             }
@@ -312,7 +325,6 @@ actor RustCampusCoreAPI: CampusCoreAPI {
                     await invalidateStoredSession()
                     throw CampusCoreError.credentialsRejected
                 }
-                await postNotification(.campusCardAuthenticationRequired)
                 throw CampusCoreError.credentialsUnavailable
             }
         }
