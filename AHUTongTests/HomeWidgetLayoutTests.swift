@@ -19,6 +19,16 @@ final class HomeWidgetLayoutTests: XCTestCase {
         XCTAssertEqual(layout.slots[3], "exam")
     }
 
+    func testDecodingRemovesRetiredWidgets() throws {
+        let data = Data(#"{"slots":["grade","evaluation","exam",null,null,null,null,null]}"#.utf8)
+
+        let layout = try JSONDecoder().decode(HomeWidgetLayout.self, from: data)
+
+        XCTAssertEqual(layout.slots[0], "grade")
+        XCTAssertNil(layout.slots[1])
+        XCTAssertEqual(layout.slots[2], "exam")
+    }
+
     func testAddRemoveAndMovePreserveUniqueSlots() {
         var layout = HomeWidgetLayout(slots: ["grade", nil, "exam"])
         layout.add("weather")
@@ -41,11 +51,13 @@ final class HomeWidgetLayoutTests: XCTestCase {
         let defaultIDs = AndroidToolItem.visible(in: HomeWidgetLayout()).map(\.id)
         XCTAssertFalse(defaultIDs.contains("bathroom"))
         XCTAssertFalse(defaultIDs.contains("electricity"))
+        XCTAssertFalse(defaultIDs.contains("evaluation"))
         XCTAssertEqual(defaultIDs.last, "network-recharge")
 
         let emptyLayout = HomeWidgetLayout(slots: Array(repeating: nil, count: HomeWidgetLayout.slotCount))
         let allIDs = AndroidToolItem.visible(in: emptyLayout).map(\.id)
         XCTAssertEqual(Array(allIDs.prefix(2)), ["bathroom", "electricity"])
+        XCTAssertFalse(allIDs.contains("evaluation"))
         XCTAssertEqual(allIDs.last, "network-recharge")
     }
 

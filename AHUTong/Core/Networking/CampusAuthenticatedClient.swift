@@ -55,23 +55,6 @@ struct CampusCookie: Codable, Equatable, Sendable {
         return path
     }
 
-    func isScoped(to serviceURL: URL) -> Bool {
-        guard matches(serviceURL) else { return false }
-        let cookiePath = (path ?? "/").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard cookiePath != "/", !cookiePath.isEmpty else {
-            // Root cookies carry the shared CAS/JWXT session. Clearing them
-            // for one feature would log every other campus service out.
-            return false
-        }
-        let normalizedCookiePath = cookiePath.hasSuffix("/")
-            ? String(cookiePath.dropLast())
-            : cookiePath
-        let normalizedServicePath = serviceURL.path.hasSuffix("/")
-            ? String(serviceURL.path.dropLast())
-            : serviceURL.path
-        return normalizedServicePath == normalizedCookiePath
-            || normalizedServicePath.hasPrefix("\(normalizedCookiePath)/")
-    }
 }
 
 enum CampusCookieResponsePolicy {
@@ -296,35 +279,6 @@ actor CampusAuthenticatedClient {
             mayRefreshSession: refreshesSessionOnUnauthorized,
             retryPolicy: retryPolicy ?? .automatic(forHTTPMethod: method)
         )
-    }
-
-    @discardableResult
-    func clearCookies(matching url: URL) async throws -> Int {
-        try await clearCookies { $0.matches(url) }
-    }
-
-    @discardableResult
-    func clearCookies(scopedTo serviceURL: URL) async throws -> Int {
-        try await clearCookies { $0.isScoped(to: serviceURL) }
-    }
-
-    private func clearCookies(
-        where shouldRemove: (CampusCookie) -> Bool
-    ) async throws -> Int {
-        let rawCookies = try await campusAPI.cookiesFlat()
-        let cookies: [CampusCookie]
-        do {
-            cookies = try JSONDecoder().decode([CampusCookie].self, from: Data(rawCookies.utf8))
-        } catch {
-            throw CampusWebError.invalidResponse
-        }
-        let retained = cookies.filter { !shouldRemove($0) }
-        let removedCount = cookies.count - retained.count
-        guard removedCount > 0 else { return 0 }
-        let json = String(decoding: try JSONEncoder().encode(retained), as: UTF8.self)
-        try await campusAPI.initialize(cookiesJSON: json)
-        try await campusAPI.persistSessionCookies()
-        return removedCount
     }
 
     private func response(

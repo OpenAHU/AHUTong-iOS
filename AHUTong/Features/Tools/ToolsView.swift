@@ -90,7 +90,6 @@ struct ToolsView: View {
             case "electricity": ElectricityPaymentView(appModel: appModel).androidDetailScreen()
             case "grade": GradeView(appModel: appModel).androidDetailScreen()
             case "exam": ExamView(appModel: appModel).androidDetailScreen()
-            case "evaluation": EvaluationView(appModel: appModel).androidDetailScreen()
             case "network-recharge": NetworkRechargeView(appModel: appModel).androidDetailScreen()
             case "phone-book": PhoneBookView().androidDetailScreen()
             case "school-calendar": SchoolCalendarView().androidDetailScreen()
@@ -154,7 +153,6 @@ struct AndroidToolItem: Identifiable {
         AndroidToolItem(id: "grade", title: "成绩单", systemImage: "chart.bar.doc.horizontal", tint: .yellow),
         AndroidToolItem(id: "phone-book", title: "电话本", systemImage: "person.crop.rectangle.stack", tint: Color(red: 0, green: 150 / 255, blue: 136 / 255)),
         AndroidToolItem(id: "exam", title: "考场查询", systemImage: "mappin.and.ellipse", tint: AndroidParityPalette.success),
-        AndroidToolItem(id: "evaluation", title: "教评", systemImage: "list.bullet.rectangle.fill", tint: Color(red: 13 / 255, green: 148 / 255, blue: 136 / 255)),
         AndroidToolItem(id: "school-calendar", title: "校历", systemImage: "square.grid.2x2", tint: .purple),
         AndroidToolItem(id: "free-classroom", title: "空闲教室", systemImage: "building.2", tint: Color(red: 3 / 255, green: 169 / 255, blue: 244 / 255)),
         AndroidToolItem(id: "lost-found", title: "失物招领", systemImage: AndroidParitySymbol.lostAndFoundBag, tint: Color(red: 25 / 255, green: 118 / 255, blue: 210 / 255)),

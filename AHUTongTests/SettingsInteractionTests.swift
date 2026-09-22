@@ -22,8 +22,7 @@ final class SettingsInteractionTests: XCTestCase {
         XCTAssertGreaterThan(pressed.highlightOpacity, 0)
     }
 
-    @MainActor
-    func testAccountPreferencesAndEvaluationPresetsDoNotCrossUsers() throws {
+    func testAccountPreferenceKeysDoNotExposeOrCrossUsers() {
         let firstKey = AccountPreferenceKey.make(
             "payment.cmb-card-recharge-preferred",
             userID: "student-a"
@@ -34,21 +33,21 @@ final class SettingsInteractionTests: XCTestCase {
         )
         XCTAssertNotEqual(firstKey, secondKey)
         XCTAssertFalse(firstKey.contains("student-a"))
+    }
 
-        let suite = "settings-isolation-\(UUID().uuidString)"
+    func testRetiredEvaluationPreferencesAreRemoved() throws {
+        let suite = "retired-preferences-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let firstStore = EvaluationPresetStore(defaults: defaults, userID: "student-a")
-        let secondStore = EvaluationPresetStore(defaults: defaults, userID: "student-b")
-        let firstPreset = EvaluationPreset(
-            optionIndexes: ["question": 2],
-            textAnswers: ["comment": "仅属于第一个账号"],
-            isAnonymous: true
-        )
+        let scopedKey = AccountPreferenceKey.make("evaluation.preset.v1", userID: "student-a")
+        defaults.set(Data("legacy".utf8), forKey: scopedKey)
+        defaults.set(Data("legacy".utf8), forKey: "evaluation.preset.v1")
+        defaults.set(true, forKey: "unrelated")
 
-        firstStore.save(firstPreset)
+        RetiredPreferenceCleaner.clean(defaults: defaults)
 
-        XCTAssertEqual(firstStore.load(), firstPreset)
-        XCTAssertEqual(secondStore.load(), EvaluationPreset())
+        XCTAssertNil(defaults.data(forKey: scopedKey))
+        XCTAssertNil(defaults.data(forKey: "evaluation.preset.v1"))
+        XCTAssertTrue(defaults.bool(forKey: "unrelated"))
     }
 }

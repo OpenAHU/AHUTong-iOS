@@ -456,30 +456,6 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         XCTAssertEqual(refreshCount, 0)
     }
 
-    func testClearingEvaluationCookiesPreservesSharedRootSession() async throws {
-        let api = CampusAuthenticatedClientAPIStub(
-            cookies: """
-            [
-              {"name":"EVAL","value":"old","domain":"jw.ahu.edu.cn","path":"/eams5-evaluation-service","secure":true},
-              {"name":"ROOT","value":"old","domain":".ahu.edu.cn","path":"/","secure":true},
-              {"name":"LOST","value":"keep","domain":"adwmh.ahu.edu.cn","path":"/","secure":true}
-            ]
-            """
-        )
-        let client = CampusAuthenticatedClient(campusAPI: api, session: Self.makeSession())
-        let url = try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/eams5-evaluation-service/"))
-
-        let removed = try await client.clearCookies(scopedTo: url)
-        let initializedValue = await api.lastInitializedCookies()
-        let initialized = try XCTUnwrap(initializedValue)
-        let cookies = try JSONDecoder().decode([CampusCookie].self, from: Data(initialized.utf8))
-        let persistCount = await api.persistCount()
-
-        XCTAssertEqual(removed, 1)
-        XCTAssertEqual(cookies.map(\.name), ["ROOT", "LOST"])
-        XCTAssertEqual(persistCount, 1)
-    }
-
     private static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [CampusTestURLProtocol.self]

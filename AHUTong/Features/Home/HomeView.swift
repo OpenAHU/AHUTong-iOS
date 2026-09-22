@@ -12,7 +12,6 @@ struct HomeWidgetSpec: Identifiable, Codable, Equatable, Sendable {
         HomeWidgetSpec(id: "grade", title: "成绩单", systemImage: "chart.bar.doc.horizontal.fill", tintHex: 0xFFC107),
         HomeWidgetSpec(id: "phone_book", title: "电话本", systemImage: "phone.fill", tintHex: 0x009688),
         HomeWidgetSpec(id: "exam", title: "考场查询", systemImage: "pencil.and.list.clipboard", tintHex: 0x4CAF50),
-        HomeWidgetSpec(id: "evaluation", title: "教评", systemImage: "list.bullet.rectangle.fill", tintHex: 0x0D9488),
         HomeWidgetSpec(id: "school_calendar", title: "校历", systemImage: "calendar", tintHex: 0x9C27B0),
         HomeWidgetSpec(id: "free_classroom", title: "空闲教室", systemImage: "building.2.fill", tintHex: 0x03A9F4),
         HomeWidgetSpec(id: "lost_found", title: "失物招领", systemImage: "shippingbox.fill", tintHex: 0x1976D2),
@@ -33,6 +32,20 @@ struct HomeWidgetLayout: Codable, Equatable, Sendable {
                   known.contains(value), seen.insert(value).inserted else { return nil }
             return value
         }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(slots: try container.decode([String?].self, forKey: .slots))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(slots, forKey: .slots)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case slots
     }
 
     mutating func add(_ id: String) {
@@ -526,7 +539,6 @@ struct HomeView: View {
             switch spec.id {
             case "grade": NavigationLink { GradeView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
             case "exam": NavigationLink { ExamView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "evaluation": NavigationLink { EvaluationView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
             case "phone_book": NavigationLink { PhoneBookView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
             case "school_calendar": NavigationLink { SchoolCalendarView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
             case "weather": NavigationLink { WeatherView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)

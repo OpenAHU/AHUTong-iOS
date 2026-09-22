@@ -1,5 +1,19 @@
 import SwiftUI
 
+enum GradeResultDisplay {
+    static func text(_ payload: String?) -> String {
+        guard let payload else { return "" }
+        return payload
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&#160;", with: " ")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 @MainActor
 final class GradeViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<CampusGradeReport> = .idle
@@ -311,37 +325,19 @@ struct GradeView: View {
     }
 
     private func gradeCard(_ grade: CampusGrade) -> some View {
-        let needsEvaluation = GradeEvaluationGate.isRequired(grade.score)
-            || GradeEvaluationGate.isRequired(grade.detail)
-        let displayDetail = GradeEvaluationGate.displayText(grade.detail)
+        let displayScore = GradeResultDisplay.text(grade.score)
+        let displayDetail = GradeResultDisplay.text(grade.detail)
         return VStack(alignment: .leading, spacing: 8) {
             Text(grade.courseName).font(.headline.bold())
-            if needsEvaluation {
-                HStack(spacing: 4) {
-                    Text("成绩:")
-                    NavigationLink {
-                        EvaluationView(appModel: appModel).androidDetailScreen()
-                    } label: {
-                        Text(GradeEvaluationGate.message)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(AndroidParityPalette.systemTheme)
-                    }
-                    .buttonStyle(.plain)
-                    Text("  绩点: \(grade.gradePoint?.formatted() ?? "")    学分: \(grade.credit?.formatted() ?? "")")
-                }
-                .font(.body)
-                .accessibilityIdentifier("grades.evaluation-gate")
-            } else {
-                Text(
-                    "成绩: \(GradeEvaluationGate.displayText(grade.score))"
-                        + "    绩点: \(grade.gradePoint?.formatted() ?? "")"
-                        + "    学分: \(grade.credit?.formatted() ?? "")"
-                )
-                .font(.body)
-                .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-            }
+            Text(
+                "成绩: \(displayScore.isEmpty ? "暂无" : displayScore)"
+                    + "    绩点: \(grade.gradePoint?.formatted() ?? "")"
+                    + "    学分: \(grade.credit?.formatted() ?? "")"
+            )
+            .font(.body)
+            .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
             Text("\(grade.courseProperty) (\(grade.courseCode))").font(.subheadline).foregroundStyle(.secondary)
-            if !needsEvaluation, !displayDetail.isEmpty {
+            if !displayDetail.isEmpty {
                 Text(displayDetail)
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -28,12 +28,9 @@ final class GradeViewModelTests: XCTestCase {
         XCTAssertTrue(error.message.contains("加载失败"))
     }
 
-    func testEvaluationGateRecognizesHTMLPayloadAndCleansNormalScore() {
-        let gated = #"<a href="/student-summation">请先完成评教后查看</a>"#
-
-        XCTAssertTrue(GradeEvaluationGate.isRequired(gated))
-        XCTAssertEqual(GradeEvaluationGate.displayText("<b>优秀</b>&nbsp;"), "优秀")
-        XCTAssertFalse(GradeEvaluationGate.isRequired("95"))
+    func testGradeResultDisplayRemovesHTMLMarkup() {
+        XCTAssertEqual(GradeResultDisplay.text("<b>优秀</b>&nbsp;"), "优秀")
+        XCTAssertEqual(GradeResultDisplay.text("95"), "95")
     }
 }
 

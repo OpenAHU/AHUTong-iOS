@@ -490,24 +490,11 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
-    func testEvaluationNetworkRechargeAndCMBPreference() {
+    func testNetworkRechargeAndCMBPreference() {
         let app = XCUIApplication()
         launchDemo(app)
         tabButton("tools", app: app).tap()
 
-        let evaluation = app.buttons["tools.evaluation"]
-        XCTAssertTrue(evaluation.waitForExistence(timeout: 4))
-        evaluation.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["evaluation.screen"].waitForExistence(timeout: 4))
-        let evaluationTarget = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "evaluation.target."))
-            .firstMatch
-        XCTAssertTrue(evaluationTarget.waitForExistence(timeout: 4))
-        waitForRendering()
-        capture("34-evaluation", app: app)
-
-        launchDemo(app)
-        tabButton("tools", app: app).tap()
         let networkRecharge = app.buttons["tools.network-recharge"]
         XCTAssertTrue(networkRecharge.waitForExistence(timeout: 4))
         scrollUpUntilHittable(networkRecharge, app: app)

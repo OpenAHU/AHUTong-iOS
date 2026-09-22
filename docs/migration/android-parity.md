@@ -6,15 +6,15 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| 总体状态 | 已按 Android `2c33b0b` 完成 26 / 26 个切片的客户端实现；PAY-01、PAY-02、PAY-03、PAY-05 已补齐原生生产协议、签名、安全键盘映射、订单恢复和余额刷新并删除学校官方页兜底，五个支付切片均只待物理 iPhone 授权账号验收 |
-| 当前里程碑 | 四条原生支付生产链路已收口；AUTH-02 已按 Android `2c33b0b` 完成 Rust → 本地 HTTP → Swift 的 typed Session 过期、App 级 single-flight、一次安全重试及全量 macOS/Simulator/IPA/Archive 验证 |
-| 当前焦点 | 客户端可自动验证范围已收口；只剩真实校园账号的 Session 过期恢复、旧版缺凭据升级提示，以及 PAY-01～05 在物理 iPhone 上的人工验收，自动化不连接真实登录/扣款接口 |
-| 下一步 | 从 `E-20260802-01` 的未签名 IPA 在本机完成 Personal Team/Sideloadly/AltStore 7 天签名，先验证真实 Session 过期恢复，再按 `payment-device-acceptance.md` 在 iPhone 13 Pro 手动执行最小金额支付验收；任何未知结果只核验原订单，不重复建单或重提 |
-| 客户端实现覆盖 | 26 / 26（100%）；全部功能代码已经落地，不等于真实资金链路已验收 |
-| Android 生产行为对齐 | 26 / 26（100%）；PAY-01、PAY-02、PAY-03、PAY-05 已按固定 Android commit 的生产协议实现 |
-| 严格完成定义 | 21 / 26（80.8%）；PAY-01～05 均待授权账号/物理 iPhone 证据，自动化不执行真实扣款 |
-| 当前分支 | `codex/fix/session-expiry-refresh` |
-| 最近更新 | 2026-08-02 |
+| 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
+| 当前里程碑 | 为苹果官方与学校授权准备，iOS 已删除教评入口、业务代码、网络链路、本地预设与自动化覆盖 |
+| 当前焦点 | 确认删除后的首页/工具页、历史首页布局迁移、成绩受限文本和隐私数据映射均不再提供教评功能链路 |
+| 下一步 | 在 macOS/Xcode 环境运行完整构建、单元测试与 UI 回归，并将授权审查需要的功能与数据清单提交给苹果和学校审核 |
+| 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
+| Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
+| 严格完成定义 | 20 / 25（80.0%）；PAY-01～05 均待授权账号/物理 iPhone 证据，自动化不执行真实扣款 |
+| 当前分支 | `codex/ios-authorization-prep` |
+| 最近更新 | 2026-09-22 |
 
 ## 1. 目标与边界
 
@@ -28,7 +28,7 @@
 
 - 应用启动、协议确认、登录、会话恢复与退出。
 - 四个主入口：主页、课表、小工具、设置。
-- 课表、成绩、教学评价、考试、空闲教室、校历和电话本。
+- 课表、成绩、考试、空闲教室、校历和电话本。
 - 校园卡余额与付款码、校园卡充值、招商银行充值、浴室缴费、电控缴费和网费充值。
 - 天气、失物招领、学习资料浏览/Markdown 阅读/下载管理。
 - 首页自定义、课表桌面组件、课程提醒与可选 Live Activity。
@@ -40,6 +40,7 @@
 - Android `BootReceiver`、精确闹钟、Glance Widget、Material/Compose 特效的原实现。
 - Android 调试日志、用户凭据、明文密码缓存和全局明文网络放行。支付协议签名常量仅按 D-005 的明确产品决策在私有兼容层中使用，不复制 Android 的敏感调试输出。
 - Android 中失效或遗留的首登路由，不在确认产品行为前照搬。
+- 教学评价与一键教评不纳入当前 iOS 产品范围，不保留入口、提交能力、服务访问或本地预设。
 
 iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/BackgroundTasks、WidgetKit、SwiftUI 原生材质与系统交互重新设计。
 
@@ -256,7 +257,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 
 登录 Session 过期收口证据 `E-20260802-01`：Android 唯一参考固定为 `2c33b0bb923f197f1d209cb58589a6b5d052cd9f`。SDK commits `e6c1df2`、`64b3564` 已推送：共享认证响应边界在业务解析前识别 401/403、最终 CAS/JWXT 登录 URL、`tologin`/`refer` 跳转与登录表单，返回 typed `campus_session_expired`，本地 HTTP 服务只把该类型稳定映射为 401；网络、学校 5xx 和普通解析错误不误报。iOS commits `d194f9d`、`46b481c`、`bc35276` 已推送：`SessionRefreshCoordinator` 以共享 Task 完成 App 级 single-flight，canonical 学号统一 Keychain 存取，冷启动与 Rust/Swift 直连、校卡 Token、网费和 CMB 共用同一刷新能力；GET/HEAD 和明确只读 POST 最多重试一次，支付建单、动态键盘和最终提交不自动重放。最终 CI `30710319015` 在 Xcode 26.6、iPhone 13 Pro / iOS 26.5 Simulator 上通过 Rust 25 项、Swift 349 个单元测试与 9 个 UI 测试，Artifact `AHUTong-ui-parity-xcresult-94`（ID `8821874043`，22,273,912 bytes）；未签名 IPA run `30710319019` 上传 `AHUTong-unsigned-ipa-94`（ID `8821691878`，6,836,952 bytes），Archive run `30710318991` 上传 `AHUTong-release-readiness-48`（ID `8821692798`，12,125,629 bytes）并通过隐私清单和敏感边界审计。首轮 CI `30709728728` 的 346 个 Swift 单测已通过，但 UI 提醒用例留下持久开关，使后续 demo 启动误触发真实课表维护并收到认证通知后回到登录页；`bc35276` 禁止 demo/CI 的真实维护请求、隔离生产认证通知，并在 runner 阻断全部校园登录与支付域名后得到最终全绿结果，不以重跑替代修复。物理 iPhone 仍需人工验证真实账号的 Session 过期恢复、旧版仅有 Snapshot 时的一次性提示及支付入口刷新不重复写请求。
 
-> `E-20260726-01`、`E-20260801-01` 及对应历史支付变更日志记录的是当时的实现和判断；其中“安全网关阻塞、官方页面兜底”的结论已被 D-005、PAY-006 与 `E-20260801-02` 取代，不代表当前支付状态。
+> `E-20260726-01`、`E-20260801-01` 及对应历史变更日志记录的是当时的实现和判断；教学评价已于 2026-09-22 被整体移除，不再代表当前 iOS 范围。其中“安全网关阻塞、官方页面兜底”的结论已被 D-005、PAY-006 与 `E-20260801-02` 取代，不代表当前支付状态。
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -266,10 +267,10 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 已完成 | `/schedule`、`/schedule/current-week` 真实 SDK 数据源已接入 cache-first/refresh/stale-cache Repository；业务缓存通过 Apple C ABI 写入 GuiXu，物理键为 SHA-256 摘要且逻辑键强制账号命名空间；升级时一次性读取旧 UserDefaults/文件缓存、写入 GuiXu 后删除旧副本；Widget 快照与提醒刷新仍由同一课表结果驱动 | 原课表 Repository/文件缓存/周次/模型 12 项及新增 GuiXu FFI/迁移 2 项测试；全状态 UI 见 `E-20260715-01`，最终 macOS 复验见 `E-20260715-02`；Commits `d8516f2`、`edfd219`，SDK `e826156` | 2026-07-15 |
 | SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周左右分页、真实日期、单双周、重叠课程、总览、下学期、课程详情和全状态完整；新增 Android 3.2.0 同款地点缩写、周次范围及总览可读文本 | 原功能证据见 `E-20260714-01`、`E-20260717-04`、`E-20260717-06`；`ScheduleTextFormatter` 与全量回归见 `E-20260726-01` | 2026-07-26 |
 | HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、编辑工具库、已放工具过滤和账号隔离持久化完整；紧凑天气点击只进入天气，不与课程入口冲突 | `HomeWidgetLayoutTests`、确定性紧凑天气 UI 专项及既有双端证据全部通过，见 `E-20260726-01` | 2026-07-26 |
-| ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | SDK 成绩/学籍/排名、筛选/搜索与账号隔离缓存完整；按 Android 3.2.0 识别仅有 `gradeDetail` 的“请先完成评教”受限成绩并进入真实评价页，单学籍失败不遮蔽其他学籍 | gradeDetail-only 解析、评价 gate、单学籍隔离和 Demo 学期回归全部通过，见 `E-20260726-01` | 2026-07-26 |
+| ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | SDK 成绩/学籍/排名、筛选/搜索与账号隔离缓存完整；教务系统返回受限的 `gradeDetail` 时只展示清理 HTML 后的服务端文本，不再跳转教评；单学籍失败不遮蔽其他学籍 | gradeDetail-only 解析、HTML 清理、单学籍隔离和 Demo 学期回归保留；教评跳转于 2026-09-22 移除 | 2026-09-22 |
 | ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和全状态均已实现；按 Android 3.2.0 折叠已结束考试、缩短地点并重做详情卡与加载/空状态 | 原解析修复见 `E-20260717-05`；新增显示状态与全状态 UI 复验见 `E-20260726-01` | 2026-07-26 |
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 已完成 | 真实楼栋 GET 与空闲列表 POST 契约、校区/楼栋多选、节次、日期范围、查询结果和加载/空/错状态完整；页面标题、紫色查询按钮、12 间确定性结果和卡片密度与 Android 对齐 | `FreeClassroomTests` 4 项及双端正常/加载/空/错误截图在 `E-20260715-01` 通过；Commits `d8516f2`、`1c0f950` | 2026-07-15 |
-| ACA-04 | 教学评价 | `main/Evaluation.kt`、`EvaluationViewModel.kt`、`EvaluationRepository.kt` | `Features/Evaluation/` | P3 / ACA-01、AUTH-02 | 已完成 | 从受限成绩或工具页进入；真实 Token/Cookie 引导、学年/菜单初始化、任务/问卷加载、单项与预设批量提交、检查结果、会话失效重试、账号隔离预设及全状态 UI 完整 | `EvaluationTests` 覆盖路由、契约、问卷、预设、提交和非零业务码重试，Demo/UI 路径见 `E-20260726-01` | 2026-07-26 |
+| ACA-04 | 教学评价 | `main/Evaluation.kt`、`EvaluationViewModel.kt`、`EvaluationRepository.kt` | — | 不在当前 iOS 范围 | 已移除 | 首页、工具页和成绩页无入口；不包含教评模型、视图、本地预设、Token/Cookie 引导或问卷提交网络链路 | 源码与隐私数据映射静态检查；macOS/Xcode 回归待运行 | 2026-09-22 |
 | CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 已完成 | 余额刷新、动态二维码、凭据过期和刷新/关闭工具栏完整；按用户要求录屏保持可见；余额区按 Android 3.2.0 左列纵向居中，并提供招商银行充值偏好入口；付款码展开面板按内容自然撑高，不保留与二维码尺寸无关的固定空白 | 既有解析/付款码证据见 `E-20260715-02`；余额与入口 UI 最终复验见 `E-20260726-01`；紧凑高度 UI 回归及全量测试见 CI `33355172892` | 2026-08-31 |
 | PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 真实加载卡账户；银行卡按 Android `CardBalanceRequest`、`CardPayRequest` 和 ViewModel 的字段/签名规则建单、解析 `orderid`、最终提交并刷新余额。支付宝保留固定白名单小程序路径，不向剪贴板复制身份或支付信息。学校官方页面兜底已删除 | `PaymentReadOnlyDataSourceTests`、`PaymentTests`、`YCardProductionPaymentGatewayTests` 覆盖请求、固定签名向量、成功/拒绝/未知、恢复和去重；macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权银行卡小额真机验收 | 2026-08-01 |
 | PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 支持 `feeitemid=409/430` 的账户查询与 `paystep=0` 建单；解析 `orderid` 后按 Android 当前协议执行安全键盘映射，再以 `paystep=2` 提交并刷新所选浴室余额。六位原始密码只短暂位于内存并在提交/退出后清空 | URLProtocol 测试分别覆盖 409/430 完整流程、字段白名单、映射、成功与刷新；共享状态机覆盖拒绝、超时、未知、恢复和重复点击。macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权浴室账户小额真机验收 | 2026-08-01 |
@@ -300,12 +301,13 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | CARD-01、INFO-01、INFO-03、CONTENT-03 | 已完成 | 校园卡缓存键改为不可逆账号摘要，二维码显示时亮度提升并恢复；天气页首次进入先请求定位、拒绝后降级 IP，首页显示开关生效；校历用 PhotoKit 真正保存照片；学习资料流式临时文件落盘与系统分享 | 账号摘要、定位优先/拒绝降级、PhotoKit adapter、现有服务契约/缓存测试、Release device 构建 |
 | SYS-01、SYS-02 | 已完成 | Widget 随跨周时间线推进课程与周次；未来三周通知重排；前台/时区变化维护；ActivityKit 锁屏与灵动岛实现 | 跨周 Widget/提醒单测、Widget Extension 编译、IPA/Archive 扩展检查 |
 
-PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再把安全 broker 或学校官方页面作为阻塞/兜底。严格完成度仍保持 21 / 26，是因为五个支付切片都缺少授权账号与物理 iPhone 的真实链路证据；这与客户端实现完成度和 Android 生产行为对齐度分开统计。
+PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再把安全 broker 或学校官方页面作为阻塞/兜底。教学评价移出当前范围后，严格完成度为 20 / 25；未完成的五个切片均为缺少授权账号与物理 iPhone 真实链路证据的支付功能。
 
 ## 9. 平台差异与已知 Android 缺口
 
 | 项目 | Android 现状 | iOS 迁移决策 |
 | --- | --- | --- |
+| 教学评价 | Android 3.2.0 提供单项与预设批量评教 | 为官方和学校授权准备，当前 iOS 整体移除该切片，不保留首页/工具/成绩入口、本地预设、会话引导或提交 API |
 | 首登流程 | `Setup.kt` 的登录路由已注释但仍导航，主登录当前直接进入 Home，`Info.kt` 非正常必经链路 | Root 使用单一版本化协议 gate；必要说明确认后才进入 App Shell；拒绝保持在当前页，设置中可再次查看和撤回，不翻译遗留导航 |
 | 首启商业弹窗 | Android 将“商业合作”与两份必要说明同等处理，拒绝即退出 | iOS 将其作为自愿阅读的社区说明，不保存强制同意，也不阻塞核心功能 |
 | 返回导航 | Android 使用 Compose 顶栏与系统返回分发 | iOS 详情页保留 Android 同款内容布局，同时恢复 `UINavigationController` 原生导航栏与系统返回按钮；不自定义转场 delegate，仅启用系统拥有的左边缘 `interactivePopGestureRecognizer`，iOS 26+ 同时启用由 UIKit 协调滚动/横向手势冲突的 `interactiveContentPopGestureRecognizer` |
@@ -552,3 +554,4 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 2026-08-02 | AUTH-009 | 按 Android `2c33b0b` 修复真实 Session 过期链：Rust typed 错误与统一响应检查经本地服务返回 401；Swift 增加 App 级 single-flight、canonical Keychain、冷启动自动恢复、直连/校卡 Token 一次重试和支付写 POST 禁止重放；记录旧 500 根因，并修复 UI demo 提醒偏好触发真实认证请求的测试隔离缺陷 | CI `30710319015`：Rust 25 项、Swift 349 单测 + 9 UI 全绿；IPA `30710319019`、Archive `30710318991` 成功，见 `E-20260802-01` | SDK `e6c1df2`、`64b3564`；iOS `d194f9d`、`46b481c`、`bc35276` |
 | 2026-08-31 | CARD-003 | 移除校园卡付款码展开态固定 `400pt` 高度与占满剩余空间的 Spacer，面板改由二维码、余额和内边距自然撑高，保留余额收起态 `140pt` 高度；独立 overlay 测量标记避免覆盖二维码原辅助功能标识 | UI smoke 锁定付款码面板高度小于 `300pt`；CI `33355172892` 通过 349 个单元测试与 9 个 UI 测试 | `9fcca9f`、`f62f4aa` |
 | 2026-08-31 | REL-001 | 将 App 与 Widget 的 `MARKETING_VERSION` 统一设为 `1.0.0`，构建号继续保持 `1`；本次仅调整客户端版本配置，不执行上传或商店发布 | `project.yml` 双 target 版本字段静态复核；CI `33355172892` 完成 macOS/Xcode 构建与全量测试 | `f522279` |
+| 2026-09-22 | ACA-007 | 为苹果官方与学校授权准备，从 iOS 整体移除教学评价：删除首页/工具/受限成绩入口、视图与模型、预设存储、Token/Cookie 会话引导、问卷读取/检查/提交 API 及相关单元/UI 测试；历史首页布局解码时自动清理已退役的 `evaluation` 卡片 | Windows 静态搜索、布局迁移测试与 `git diff --check`；macOS/Xcode 构建及回归待运行 | — |

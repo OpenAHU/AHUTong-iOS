@@ -35,7 +35,7 @@ final class CampusGradeParserTests: XCTestCase {
         XCTAssertTrue(report.grades.isEmpty)
     }
 
-    func testParsesEvaluationGateWhenGradeDetailIsTheOnlyScorePayload() throws {
+    func testParsesRestrictedGradeDetailWhenItIsTheOnlyScorePayload() throws {
         let data = Data(#"""
         {
           "items": [{
@@ -52,7 +52,7 @@ final class CampusGradeParserTests: XCTestCase {
 
         XCTAssertEqual(grade.courseName, "编译原理")
         XCTAssertEqual(grade.score, "")
-        XCTAssertTrue(GradeEvaluationGate.isRequired(grade.detail))
+        XCTAssertEqual(GradeResultDisplay.text(grade.detail), "请先完成评教后查看")
     }
 
     func testGradeProfileDisplayNameMatchesAndroidFallbacks() {

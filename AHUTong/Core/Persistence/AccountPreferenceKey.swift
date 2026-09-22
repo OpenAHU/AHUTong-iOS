@@ -12,3 +12,14 @@ enum AccountPreferenceKey {
         return "account.\(digest).\(name)"
     }
 }
+
+enum RetiredPreferenceCleaner {
+    private static let retiredKeys = ["evaluation.preset.v1"]
+
+    static func clean(defaults: UserDefaults = .standard) {
+        let keys = defaults.dictionaryRepresentation().keys
+        for key in keys where retiredKeys.contains(where: { key == $0 || key.hasSuffix(".\($0)") }) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}
