@@ -100,7 +100,7 @@ struct AgreementConsent: Codable, Equatable, Sendable {
         if document == .privacy {
             return privacyDecision == .accepted
         }
-        acceptedDocumentIDs.contains(document.id)
+        return acceptedDocumentIDs.contains(document.id)
     }
 
     enum CodingKeys: String, CodingKey {

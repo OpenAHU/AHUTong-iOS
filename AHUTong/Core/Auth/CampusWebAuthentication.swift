@@ -387,8 +387,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
                 "password": credentials.password
             ],
             in: nil,
-            contentWorld: .page
-        ) { [weak self] result in
+            in: .page,
+            completionHandler: { [weak self] result in
             let succeeded: Bool
             if case let .success(value) = result {
                 succeeded = value as? Bool == true
@@ -403,7 +403,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
                 }
                 self.pendingCredentials = credentials
             }
-        }
+        })
     }
 
     private func detectRejectedCredentials() {
@@ -417,8 +417,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             script,
             arguments: [:],
             in: nil,
-            contentWorld: .page
-        ) { [weak self] result in
+            in: .page,
+            completionHandler: { [weak self] result in
             let rejected: Bool
             if case let .success(value) = result {
                 rejected = value as? Bool == true
@@ -433,7 +433,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
                     self.finish(throwing: CampusWebAuthenticationError.interactionRequired)
                 }
             }
-        }
+        })
     }
 
     private func prefillCampusCardLogin(_ credentials: LoginCredentials) {
@@ -456,7 +456,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
                 "password": credentials.password
             ],
             in: nil,
-            contentWorld: .page,
+            in: .page,
             completionHandler: nil
         )
         pendingCredentials = credentials
