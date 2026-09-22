@@ -64,11 +64,11 @@ final class AgreementConsentStoreTests: XCTestCase {
         let disclaimer = AgreementDocument.disclaimer.body
 
         XCTAssertTrue(privacy.contains("ThisDeviceOnly"))
-        XCTAssertTrue(privacy.contains("隐藏 WebView"))
-        XCTAssertTrue(privacy.contains("第三方 OCR"))
+        XCTAssertTrue(privacy.contains("App 可启动 WebView"))
+        XCTAssertTrue(privacy.contains("远程验证码识别请求只包含"))
         XCTAssertTrue(privacy.contains("首次登录需要图形验证码"))
         XCTAssertTrue(privacy.contains("远程验证码识别接口"))
-        XCTAssertTrue(privacy.contains("不保存到本机文件"))
+        XCTAssertTrue(privacy.contains("保存到本机文件"))
         XCTAssertTrue(privacy.contains("不附带学号、密码、Cookie、Token"))
         XCTAssertTrue(privacy.contains("安大通体验用户"))
         XCTAssertFalse(privacy.contains("不会将您的用户数据上传"))
