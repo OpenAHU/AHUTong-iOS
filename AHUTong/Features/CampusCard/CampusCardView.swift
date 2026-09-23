@@ -73,11 +73,12 @@ final class CampusCardViewModel: ObservableObject {
     }
 
     func loadQRCode(demo: Bool, force: Bool = false) async {
+        if case .loading = qrState { return }
         if !force {
             switch qrState {
-            case .loading, .loaded, .failed:
+            case .loaded, .failed:
                 return
-            case .idle:
+            case .idle, .loading:
                 break
             }
         }
@@ -87,7 +88,12 @@ final class CampusCardViewModel: ObservableObject {
             if demo {
                 payload = "AHUTONG-DEMO-PAYMENT-CODE"
             } else {
-                payload = try await api.cardQRCode()
+                do {
+                    payload = try await api.cardQRCode()
+                } catch CampusCoreError.credentialsUnavailable where force {
+                    try await api.refreshSession(scope: .campusCard)
+                    payload = try await api.cardQRCode()
+                }
             }
             qrState = .loaded(payload)
         } catch {
@@ -174,18 +180,18 @@ struct CampusCardPanel: View {
             HStack {
                 Button { showsQRCode = false } label: { Image(systemName: "arrow.left") }
                 Spacer()
-                Button {
-                    Task { await model.loadQRCode(demo: demo, force: true) }
-                    showsFullQRCode = true
-                } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+                if case .loaded = model.qrState {
+                    Button { showsFullQRCode = true } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    }
+                    .accessibilityIdentifier("campus-card.qr-expand")
+                }
             }
             .font(.headline)
             .foregroundStyle(.primary)
             .frame(height: 48)
 
             qrImage(size: 138)
-                .contentShape(Rectangle())
-                .onTapGesture { Task { await model.loadQRCode(demo: demo, force: true) } }
 
             balanceText
                 .font(.title2.bold())
@@ -203,7 +209,9 @@ struct CampusCardPanel: View {
                 .accessibilityIdentifier("campus-card.qr-panel")
                 .allowsHitTesting(false)
         }
-        .task { await model.loadQRCode(demo: demo) }
+        .task {
+            if demo { await model.loadQRCode(demo: true) }
+        }
     }
 
     @ViewBuilder
@@ -227,10 +235,22 @@ struct CampusCardPanel: View {
         case .loading:
             ProgressView().frame(width: size, height: size)
         case let .failed(message):
-            Text("加载失败\n\(message)").font(.caption2).multilineTextAlignment(.center)
-                .frame(width: size, height: size)
+            Button {
+                Task { await model.loadQRCode(demo: demo, force: true) }
+            } label: {
+                Text("加载失败\n\(message)\n点此重试")
+                    .font(.caption2)
+                    .multilineTextAlignment(.center)
+                    .frame(width: size, height: size)
+            }
+            .accessibilityIdentifier("campus-card.qr-retry")
         case .idle:
-            Color.clear.frame(width: size, height: size)
+            Button("获取付款码") {
+                Task { await model.loadQRCode(demo: demo, force: true) }
+            }
+            .font(.caption)
+            .frame(width: size, height: size)
+            .accessibilityIdentifier("campus-card.qr-load")
         }
     }
 }

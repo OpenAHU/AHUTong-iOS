@@ -31,9 +31,13 @@ struct CampusLostFoundRemote: LostFoundRemote {
         client = CampusAuthenticatedClient(campusAPI: campusAPI)
     }
 
+    init(client: CampusAuthenticatedClient) {
+        self.client = client
+    }
+
     func catalog() async throws -> LostFoundCatalog {
-        async let campusesData = client.data(url: baseURL.appendingPathComponent("lostfound/campus/all"))
-        async let typesData = client.data(url: baseURL.appendingPathComponent("lostfound/type/all"))
+        async let campusesData = requestData(url: baseURL.appendingPathComponent("lostfound/campus/all"))
+        async let typesData = requestData(url: baseURL.appendingPathComponent("lostfound/type/all"))
         let campuses = try JSONDecoder().decode(ObjectEnvelope<[LostFoundCampus]>.self, from: await campusesData)
         let types = try JSONDecoder().decode(ObjectEnvelope<[LostFoundType]>.self, from: await typesData)
         guard Self.success(campuses.code), Self.success(types.code) else {
@@ -50,7 +54,7 @@ struct CampusLostFoundRemote: LostFoundRemote {
         ])
         let envelope = try JSONDecoder().decode(
             ObjectEnvelope<LostFoundPage>.self,
-            from: await client.data(url: url)
+            from: await requestData(url: url)
         )
         guard Self.success(envelope.code) else { throw CampusWebError.server(envelope.msg) }
         return envelope.object
@@ -79,7 +83,7 @@ struct CampusLostFoundRemote: LostFoundRemote {
             title: draft.title,
             state: String(draft.state)
         )
-        let data = try await client.data(
+        let data = try await requestData(
             url: baseURL.appendingPathComponent("lostfound/saveupdate"),
             method: "POST",
             body: try JSONEncoder().encode(payload),
@@ -108,7 +112,7 @@ struct CampusLostFoundRemote: LostFoundRemote {
         var components = URLComponents()
         components.queryItems = [URLQueryItem(name: "id", value: id)]
         let body = components.percentEncodedQuery?.data(using: .utf8)
-        let data = try await client.data(
+        let data = try await requestData(
             url: baseURL.appendingPathComponent("lostfound/delete"),
             method: "POST",
             body: body,
@@ -119,6 +123,21 @@ struct CampusLostFoundRemote: LostFoundRemote {
     }
 
     private static func success(_ code: Int) -> Bool { code == 0 || code == 200 }
+
+    private func requestData(
+        url: URL,
+        method: String = "GET",
+        body: Data? = nil,
+        contentType: String? = nil
+    ) async throws -> Data {
+        try await client.response(
+            url: url,
+            method: method,
+            body: body,
+            contentType: contentType,
+            refreshesSessionOnUnauthorized: false
+        ).data
+    }
 
     private func allPages(state: Int) async throws -> [LostFoundItem] {
         let size = 100

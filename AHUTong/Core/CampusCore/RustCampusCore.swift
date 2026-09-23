@@ -198,22 +198,27 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func cardBalance() async throws -> Double {
-        try await cardBalance(allowsInteractiveLogin: true)
+        try await cardBalance(allowsInteractiveLogin: false)
     }
 
     func cardBalance(allowsInteractiveLogin: Bool) async throws -> Double {
-        try cardParser.balance(from: try await authenticatedRequest(
+        let balance = try cardParser.balance(from: try await authenticatedRequest(
             path: "/ycard/balance",
             scope: .campusCard,
             allowsInteractiveLogin: allowsInteractiveLogin
         ))
+        try? await persistSessionCookies()
+        return balance
     }
 
     func cardQRCode() async throws -> String {
-        try cardParser.qrPayload(from: try await authenticatedRequest(
+        let payload = try cardParser.qrPayload(from: try await authenticatedRequest(
             path: "/ycard/qrcode",
-            scope: .campusCard
+            scope: .campusCard,
+            allowsInteractiveLogin: false
         ))
+        try? await persistSessionCookies()
+        return payload
     }
 
     func cardAccessToken() async throws -> String {
@@ -303,7 +308,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         body: Data? = nil,
         retryPolicy: CampusRequestRetryPolicy? = nil,
         scope: CampusSessionScope = .academic,
-        allowsInteractiveLogin: Bool = true
+        allowsInteractiveLogin: Bool = false
     ) async throws -> Data {
         let retryPolicy = retryPolicy ?? .automatic(forHTTPMethod: method)
         do {

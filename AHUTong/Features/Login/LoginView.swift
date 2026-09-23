@@ -64,7 +64,7 @@ struct LoginView: View {
                         } else {
                             Image(systemName: privacyAccepted ? "rectangle.portrait.and.arrow.right" : "calendar")
                         }
-                        Text(state == .working ? "正在登录" : "登录")
+                        Text(state == .working ? "请稍候" : (privacyAccepted ? "登录" : "使用体验账户"))
                     }
                     .font(.headline)
                     .foregroundStyle(.white)
@@ -77,6 +77,17 @@ struct LoginView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
                 .accessibilityIdentifier("login.submit")
+
+                if privacyAccepted {
+                    Button("暂不登录，使用体验账户") {
+                        enterExperienceMode()
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .buttonStyle(.plain)
+                    .disabled(state == .working)
+                    .padding(.bottom, 16)
+                    .accessibilityIdentifier("login.experience")
+                }
             }
         }
         .fullScreenCover(isPresented: $showsWebLogin) {
@@ -103,12 +114,17 @@ struct LoginView: View {
         if privacyAccepted {
             showsWebLogin = true
         } else {
-            state = .working
-            Task {
-                await appModel.enterExperienceMode()
-                state = .idle
-                toastCenter.show("已进入安大通体验账户")
-            }
+            enterExperienceMode()
+        }
+    }
+
+    private func enterExperienceMode() {
+        guard state != .working else { return }
+        state = .working
+        Task {
+            await appModel.enterExperienceMode()
+            state = .idle
+            toastCenter.show("已进入安大通体验账户")
         }
     }
 

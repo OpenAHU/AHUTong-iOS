@@ -3,6 +3,38 @@ import XCTest
 
 final class CampusSessionStoreTests: XCTestCase {
     @MainActor
+    func testAcceptedPrivacyRestoresChosenExperienceAccountWithoutCredentials() async throws {
+        let secureStore = InMemorySecureStore()
+        let suite = "experience-skip-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let experienceStore = ExperienceScheduleStore(store: InMemoryDataStore())
+        let first = AppModel(
+            campusAPI: CampusCoreAPIStub(),
+            sessionStore: CampusSessionStore(secureStore: secureStore),
+            credentialStore: CredentialStore(secureStore: secureStore),
+            experienceScheduleStore: experienceStore,
+            defaults: defaults,
+            accountCacheCleaner: {}
+        )
+        await first.enterExperienceMode(preserveSchedule: false)
+
+        let restored = AppModel(
+            campusAPI: CampusCoreAPIStub(),
+            sessionStore: CampusSessionStore(secureStore: secureStore),
+            credentialStore: CredentialStore(secureStore: secureStore),
+            experienceScheduleStore: experienceStore,
+            defaults: defaults,
+            accountCacheCleaner: {}
+        )
+        await restored.restore(privacyDecision: .accepted)
+
+        XCTAssertEqual(restored.sessionState, .experience(AppModel.experienceUser))
+        let snapshot = try await CampusSessionStore(secureStore: secureStore).load()
+        XCTAssertNil(snapshot)
+    }
+
+    @MainActor
     func testLoginPersistsCredentialsAndRestoresCookieSession() async throws {
         let secureStore = InMemorySecureStore()
         let api = CampusCoreAPIStub()
@@ -43,6 +75,37 @@ final class CampusSessionStoreTests: XCTestCase {
         XCTAssertEqual(model.sessionState, .signedOut)
         let persistedSession = try await CampusSessionStore(secureStore: secureStore).load()
         XCTAssertNil(persistedSession)
+    }
+
+    @MainActor
+    func testCampusCardLoginKeepsCookiesUpdatedDuringValidation() async throws {
+        let secureStore = InMemorySecureStore()
+        let sessionStore = CampusSessionStore(secureStore: secureStore)
+        let api = CampusCoreAPIStub()
+        let user = User(name: "测试同学", studentID: "AB220001")
+        try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: "[]"))
+        let currentCookie = CampusCookie(
+            name: "JSESSIONID", value: "rotated-test-only", domain: "adwmh.ahu.edu.cn",
+            path: "/", secure: true, httpOnly: true
+        )
+        let currentCookies = String(decoding: try JSONEncoder().encode([currentCookie]), as: UTF8.self)
+        await api.setDumpCookies(currentCookies)
+        let model = AppModel(
+            campusAPI: api,
+            sessionStore: sessionStore,
+            credentialStore: CredentialStore(secureStore: secureStore)
+        )
+
+        try await model.completeCampusCardLogin(CampusWebAuthenticationResult(
+            credentials: nil,
+            cookies: [CampusCookie(
+                name: "JSESSIONID", value: "initial-test-only", domain: "adwmh.ahu.edu.cn",
+                path: "/", secure: true, httpOnly: true
+            )]
+        ))
+
+        let stored = try await sessionStore.load()
+        XCTAssertEqual(stored?.cookiesJSON, currentCookies)
     }
 
     @MainActor
@@ -254,6 +317,7 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     private var shouldFailNextValidationServer = false
     private var shouldRejectNextLogin = false
     private var performedLogins = 0
+    private var nextDumpCookies: String?
     private let sessionStore: CampusSessionStore?
     private let credentialStore: CredentialStore?
 
@@ -273,7 +337,8 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
         }
         return User(name: "测试同学", studentID: studentID)
     }
-    func dumpCookies() -> String { "cookie-json" }
+    func dumpCookies() -> String { nextDumpCookies ?? "cookie-json" }
+    func setDumpCookies(_ value: String) { nextDumpCookies = value }
     func cookiesFlat() -> String { "[]" }
     func schedule() -> [Course] { [] }
     func currentWeek() throws -> Int {

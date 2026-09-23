@@ -31,19 +31,42 @@ final class CampusCardInteractionTests: XCTestCase {
 
         await model.loadQRCode(demo: false, force: true)
         let explicitRetryCount = await api.qrRequestCount()
+        let refreshCount = await api.refreshCount()
 
         XCTAssertEqual(automaticCount, 1)
         XCTAssertEqual(explicitRetryCount, 2)
+        XCTAssertEqual(refreshCount, 1)
+    }
+
+    func testExplicitQRCodeLoadCanRestoreCampusCardSession() async {
+        let api = CampusCardInteractionAPI(failsQRCode: true, recoversAfterRefresh: true)
+        let suite = "campus-card-interaction-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = CampusCardViewModel(api: api, userID: "test-user", defaults: defaults)
+
+        await model.loadQRCode(demo: false)
+        let automaticRefreshCount = await api.refreshCount()
+        XCTAssertEqual(automaticRefreshCount, 0)
+
+        await model.loadQRCode(demo: false, force: true)
+
+        XCTAssertEqual(model.qrState, .loaded("TEST-QR"))
+        let explicitRefreshCount = await api.refreshCount()
+        XCTAssertEqual(explicitRefreshCount, 1)
     }
 }
 
 private actor CampusCardInteractionAPI: CampusCoreAPI {
     private var balanceFlags: [Bool] = []
     private var qrCalls = 0
+    private var refreshes = 0
     private let failsQRCode: Bool
+    private let recoversAfterRefresh: Bool
 
-    init(failsQRCode: Bool = false) {
+    init(failsQRCode: Bool = false, recoversAfterRefresh: Bool = false) {
         self.failsQRCode = failsQRCode
+        self.recoversAfterRefresh = recoversAfterRefresh
     }
 
     func initialize(cookiesJSON: String) {}
@@ -62,10 +85,18 @@ private actor CampusCardInteractionAPI: CampusCoreAPI {
     }
     func cardQRCode() throws -> String {
         qrCalls += 1
-        if failsQRCode { throw CampusCoreError.credentialsUnavailable }
+        if failsQRCode && (!recoversAfterRefresh || refreshes == 0) {
+            throw CampusCoreError.credentialsUnavailable
+        }
         return "TEST-QR"
+    }
+
+    func refreshSession(scope: CampusSessionScope) throws {
+        refreshes += 1
+        if !recoversAfterRefresh { throw CampusCoreError.credentialsUnavailable }
     }
 
     func balanceInteractionFlags() -> [Bool] { balanceFlags }
     func qrRequestCount() -> Int { qrCalls }
+    func refreshCount() -> Int { refreshes }
 }

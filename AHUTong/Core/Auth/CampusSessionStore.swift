@@ -94,6 +94,10 @@ final class AppModel: ObservableObject {
                 : .signedOut
             return
         }
+        if defaults.bool(forKey: Self.experienceEnabledKey) {
+            sessionState = .experience(Self.experienceUser)
+            return
+        }
         do {
             guard let snapshot = try await sessionStore.load() else {
                 sessionState = .signedOut
@@ -186,7 +190,8 @@ final class AppModel: ObservableObject {
         try await campusAPI.initialize(cookiesJSON: cookies)
         do {
             try await campusAPI.validateSession(scope: .campusCard)
-            try await sessionStore.save(CampusSessionSnapshot(user: snapshot.user, cookiesJSON: cookies))
+            let validatedCookies = try await campusAPI.dumpCookies()
+            try await sessionStore.save(CampusSessionSnapshot(user: snapshot.user, cookiesJSON: validatedCookies))
         } catch {
             try? await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
             throw error

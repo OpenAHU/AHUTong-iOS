@@ -112,7 +112,7 @@ struct RootView: View {
         .fullScreenCover(item: $campusCardLogin) { request in
             CampusWebLoginScreen(
                 mode: .visibleCampusCard(request.credentials),
-                title: "校园卡服务登录"
+                title: "校园服务登录"
             ) { result in
                 switch result {
                 case let .success(authentication):

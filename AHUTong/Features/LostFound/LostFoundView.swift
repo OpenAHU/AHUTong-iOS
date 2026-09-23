@@ -12,6 +12,8 @@ final class LostFoundViewModel: ObservableObject {
     @Published private(set) var catalog = LostFoundCatalog(campuses: [], types: [])
     @Published private(set) var state: LoadableState<[LostFoundItem]> = .idle
     @Published private(set) var mutation: MutationState = .idle
+    @Published private(set) var needsCampusLogin = false
+    @Published private(set) var isLoggingIntoCampus = false
     @Published private(set) var myPostsState: LoadableState<[LostFoundItem]> = .idle
     @Published private(set) var currentState = 1
     @Published private(set) var hasMore = false
@@ -22,6 +24,7 @@ final class LostFoundViewModel: ObservableObject {
 
     let currentUserID: String
     private let remote: any LostFoundRemote
+    private let campusAPI: any CampusCoreAPI
     private let demo: Bool
     private let catalogCache: JSONStore<LostFoundCatalog>
     private let itemCache: UserScopedStore
@@ -30,6 +33,7 @@ final class LostFoundViewModel: ObservableObject {
 
     init(appModel: AppModel) {
         demo = AppRuntime.isDemoSession
+        campusAPI = appModel.campusAPI
         remote = demo ? DemoLostFoundRemote() : CampusLostFoundRemote(campusAPI: appModel.campusAPI)
         if case let .authenticated(user) = appModel.sessionState { currentUserID = user.studentID } else { currentUserID = "" }
         let scoped = UserScopedStore(
@@ -76,8 +80,23 @@ final class LostFoundViewModel: ObservableObject {
             currentPage = 1
             hasMore = pageValue.pageNum < pageValue.pages
             state = pageValue.list.isEmpty ? .empty : .loaded(pageValue.list)
+            needsCampusLogin = false
         } catch {
+            recordAuthorizationFailure(error)
             if cachedItems == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
+        }
+    }
+
+    func loginCampusService() async {
+        guard !isLoggingIntoCampus else { return }
+        isLoggingIntoCampus = true
+        defer { isLoggingIntoCampus = false }
+        do {
+            try await campusAPI.refreshSession(scope: .campusCard)
+            needsCampusLogin = false
+            await load()
+        } catch {
+            mutation = .failed(error.localizedDescription)
         }
     }
 
@@ -106,6 +125,7 @@ final class LostFoundViewModel: ObservableObject {
                 key: "lost-found.items.\(currentState).v1"
             ).save(combined)
         } catch {
+            recordAuthorizationFailure(error)
             mutation = .failed(error.localizedDescription)
         }
     }
@@ -116,6 +136,7 @@ final class LostFoundViewModel: ObservableObject {
             let items = try await remote.ownedPosts(userID: currentUserID)
             myPostsState = items.isEmpty ? .empty : .loaded(items)
         } catch {
+            recordAuthorizationFailure(error)
             myPostsState = .failed(AppErrorState(message: error.localizedDescription))
         }
     }
@@ -133,6 +154,7 @@ final class LostFoundViewModel: ObservableObject {
             mutation = .succeeded("发布成功")
             return true
         } catch {
+            recordAuthorizationFailure(error)
             mutation = .failed(error.localizedDescription)
             return false
         }
@@ -152,12 +174,19 @@ final class LostFoundViewModel: ObservableObject {
             mutation = .succeeded("删除成功")
             return true
         } catch {
+            recordAuthorizationFailure(error)
             mutation = .failed(error.localizedDescription)
             return false
         }
     }
 
     func clearMutation() { mutation = .idle }
+
+    private func recordAuthorizationFailure(_ error: Error) {
+        if error as? CampusWebError == .unauthorized {
+            needsCampusLogin = true
+        }
+    }
 }
 
 struct LostFoundView: View {
@@ -185,6 +214,15 @@ struct LostFoundView: View {
                             filters
                         }
                         summary
+                        if model.needsCampusLogin {
+                            Button("登录校园服务以继续") {
+                                Task { await model.loginCampusService() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(model.isLoggingIntoCampus)
+                            .padding(.horizontal, 24)
+                            .accessibilityIdentifier("lost-found.login-campus-service")
+                        }
                         content
                     }
                     .padding(.bottom, 104)

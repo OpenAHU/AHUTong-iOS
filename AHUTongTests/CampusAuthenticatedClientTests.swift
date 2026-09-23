@@ -456,6 +456,27 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         XCTAssertEqual(refreshCount, 0)
     }
 
+    func testLostFoundAutomaticReadsDoNotPresentCampusServiceLogin() async throws {
+        let api = CampusAuthenticatedClientAPIStub(cookies: "[]")
+        let client = CampusAuthenticatedClient(campusAPI: api, session: Self.makeSession())
+        let remote = CampusLostFoundRemote(client: client)
+        CampusTestURLProtocol.handler = { request in
+            (
+                HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!,
+                Data()
+            )
+        }
+
+        do {
+            _ = try await remote.catalog()
+            XCTFail("Expected unauthorized")
+        } catch {
+            XCTAssertEqual(error as? CampusWebError, .unauthorized)
+        }
+        let refreshCount = await api.refreshCount()
+        XCTAssertEqual(refreshCount, 0)
+    }
+
     private static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [CampusTestURLProtocol.self]

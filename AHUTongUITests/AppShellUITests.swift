@@ -245,14 +245,24 @@ final class AppShellUITests: XCTestCase {
     @MainActor
     func testAndroidParityLoginAndReminderSystemStates() {
         let app = XCUIApplication()
-        app.launchArguments = ["--demo-consent"]
+        app.launchArguments = ["--reset-onboarding", "--demo-consent"]
         app.launch()
         XCTAssertTrue(app.staticTexts["login.title"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["login.experience"].exists)
         waitForRendering()
         capture("00-login", app: app)
 
+        app.buttons["login.experience"].tap()
+        XCTAssertTrue(tabButton("schedule", app: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(tabButton("settings", app: app).exists)
+        XCTAssertFalse(tabButton("home", app: app).exists)
         app.terminate()
-        app.launchArguments = ["--demo-consent", "--demo-login-state=error"]
+        app.launchArguments = ["--demo-consent"]
+        app.launch()
+        XCTAssertTrue(tabButton("schedule", app: app).waitForExistence(timeout: 5))
+
+        app.terminate()
+        app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-login-state=error"]
         app.launch()
         XCTAssertTrue(app.buttons["login.submit"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["账号或密码错误"].waitForExistence(timeout: 3))
