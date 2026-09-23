@@ -64,7 +64,7 @@ final class AgreementConsentStoreTests: XCTestCase {
         let disclaimer = AgreementDocument.disclaimer.body
 
         XCTAssertTrue(privacy.contains("ThisDeviceOnly"))
-        XCTAssertTrue(privacy.contains("App 可启动 WebView"))
+        XCTAssertTrue(privacy.contains("App 可启动隐藏 WebView"))
         XCTAssertTrue(privacy.contains("远程验证码识别请求只包含"))
         XCTAssertTrue(privacy.contains("首次登录需要图形验证码"))
         XCTAssertTrue(privacy.contains("远程验证码识别接口"))
