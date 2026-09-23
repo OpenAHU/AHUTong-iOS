@@ -71,6 +71,7 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
     case timedOut
     case blockedNavigation
     case credentialsUnavailable
+    case credentialCaptureFailed
     case credentialsRejected
     case interactionRequired
     case invalidResponse
@@ -83,6 +84,7 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
         case .timedOut: "校方登录超时，请重试"
         case .blockedNavigation: "已阻止打开非校方登录页面"
         case .credentialsUnavailable: "本机没有可用的登录信息"
+        case .credentialCaptureFailed: "校园登录已成功，但未能读取这次提交的账号密码，请返回重试"
         case .credentialsRejected: "账号或密码已失效，请重新登录"
         case .interactionRequired: "校方登录需要您继续操作"
         case .invalidResponse: "校方登录页返回了无法识别的结果"
@@ -127,6 +129,53 @@ enum CampusWebNavigationPolicy {
             return url.host?.lowercased() == "adwmh.ahu.edu.cn"
                 && (url.path == "/index/user/success" || url.path.hasPrefix("/index/user/success/"))
         }
+    }
+}
+
+enum CampusCredentialCapturePolicy {
+    static func isTrusted(scheme: String, host: String, path: String, isMainFrame: Bool) -> Bool {
+        isMainFrame
+            && scheme.lowercased() == "https"
+            && host.lowercased() == "one.ahu.edu.cn"
+            && (path == "/cas/login" || path.hasPrefix("/cas/login/"))
+    }
+}
+
+@MainActor
+final class SubmittedCredentialsCollector {
+    private(set) var credentials: LoginCredentials?
+    private var waiter: CheckedContinuation<LoginCredentials?, Never>?
+    private var timeoutTask: Task<Void, Never>?
+
+    func capture(_ value: LoginCredentials) {
+        credentials = value
+        resumeWaiter(with: value)
+    }
+
+    func wait(timeout: Duration = .seconds(2)) async -> LoginCredentials? {
+        if let credentials { return credentials }
+        return await withCheckedContinuation { continuation in
+            waiter = continuation
+            timeoutTask = Task { [weak self] in
+                do {
+                    try await Task.sleep(for: timeout)
+                } catch {
+                    return
+                }
+                self?.resumeWaiter(with: nil)
+            }
+        }
+    }
+
+    func cancel() {
+        resumeWaiter(with: nil)
+    }
+
+    private func resumeWaiter(with value: LoginCredentials?) {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        waiter?.resume(returning: value)
+        waiter = nil
     }
 }
 
@@ -192,8 +241,9 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private let mode: Mode
     private var continuation: CheckedContinuation<CampusWebAuthenticationResult, Error>?
     private var timeoutTask: Task<Void, Never>?
-    private var pendingCredentials: LoginCredentials?
+    private let submittedCredentials = SubmittedCredentialsCollector()
     private var attemptedAutomation = false
+    private var finishingSuccessfully = false
     private var completed = false
 
     init(mode: Mode) {
@@ -328,16 +378,21 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == Self.captureHandler,
-              message.frameInfo.request.url?.scheme?.lowercased() == "https",
-              message.frameInfo.request.url?.host?.lowercased() == "one.ahu.edu.cn",
               let body = message.body as? [String: Any],
+              let path = body["path"] as? String,
+              CampusCredentialCapturePolicy.isTrusted(
+                scheme: message.frameInfo.securityOrigin.protocol,
+                host: message.frameInfo.securityOrigin.host,
+                path: path,
+                isMainFrame: message.frameInfo.isMainFrame
+              ),
               let username = body["username"] as? String,
               let password = body["password"] as? String else {
             return
         }
         let canonicalID = StudentIDCanonicalizer.canonical(username)
         guard !canonicalID.isEmpty, !password.isEmpty else { return }
-        pendingCredentials = LoginCredentials(studentID: canonicalID, password: password)
+        submittedCredentials.capture(LoginCredentials(studentID: canonicalID, password: password))
     }
 
     private func configureScripts() {
@@ -345,16 +400,26 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         let script = #"""
         (() => {
           const capture = () => {
+            if (location.protocol !== 'https:' || location.hostname !== 'one.ahu.edu.cn'
+                || !/^\/cas\/login(?:\/|$)/.test(location.pathname)) return;
             const username = document.querySelector('#un')?.value || '';
             const password = document.querySelector('#pd')?.value || '';
             if (username && password) {
-              window.webkit.messageHandlers.campusCredentialCapture.postMessage({username, password});
+              window.webkit.messageHandlers.campusCredentialCapture.postMessage({username, password, path: location.pathname});
             }
           };
           document.addEventListener('click', event => {
-            if (event.target && (event.target.id === 'index_login_btn' || event.target.closest('#index_login_btn'))) capture();
+            if (event.target instanceof Element && event.target.closest('#index_login_btn')) capture();
           }, true);
           document.addEventListener('submit', capture, true);
+          document.addEventListener('keydown', event => {
+            if (event.key === 'Enter' && event.target instanceof Element
+                && event.target.closest('#un,#pd')) capture();
+          }, true);
+        })();
+        """#
+        let styleScript = #"""
+        (() => {
           const style = document.createElement('style');
           style.textContent = '#qrcode_login,#mobile_login,#saveDevice,.new-login-way{display:none!important;}';
           document.documentElement.appendChild(style);
@@ -363,11 +428,15 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         let controller = webView.configuration.userContentController
         controller.add(self, name: Self.captureHandler)
         controller.addUserScript(
-            WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+        controller.addUserScript(
+            WKUserScript(source: styleScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
     }
 
     private func automateAcademicLogin(_ credentials: LoginCredentials) {
+        submittedCredentials.capture(credentials)
         let script = #"""
         const usernameField = document.querySelector('#un');
         const passwordField = document.querySelector('#pd');
@@ -401,7 +470,6 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
                     self.finish(throwing: CampusWebAuthenticationError.interactionRequired)
                     return
                 }
-                self.pendingCredentials = credentials
             }
         })
     }
@@ -459,26 +527,36 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             in: .page,
             completionHandler: nil
         )
-        pendingCredentials = credentials
+        submittedCredentials.capture(credentials)
     }
 
     private func finishSuccessfully() async {
+        guard !finishingSuccessfully, !completed else { return }
+        finishingSuccessfully = true
+        let credentials: LoginCredentials?
+        if mode.scope == .academic {
+            credentials = await submittedCredentials.wait()
+        } else {
+            credentials = submittedCredentials.credentials
+        }
+        guard !completed else { return }
         let values = await withCheckedContinuation { continuation in
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies {
                 continuation.resume(returning: $0)
             }
         }
+        guard !completed else { return }
         let cookies = CampusWebCookiePolicy.cookies(from: values, scope: mode.scope)
         guard !cookies.isEmpty else {
             finish(throwing: CampusWebAuthenticationError.invalidResponse)
             return
         }
-        if mode.scope == .academic, pendingCredentials == nil {
-            finish(throwing: CampusWebAuthenticationError.credentialsUnavailable)
+        if mode.scope == .academic, credentials == nil {
+            finish(throwing: CampusWebAuthenticationError.credentialCaptureFailed)
             return
         }
         finish(returning: CampusWebAuthenticationResult(
-            credentials: pendingCredentials,
+            credentials: credentials,
             cookies: cookies
         ))
     }
@@ -491,6 +569,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func finish(returning result: CampusWebAuthenticationResult) {
         guard !completed else { return }
         completed = true
+        submittedCredentials.cancel()
         timeoutTask?.cancel()
         timeoutTask = nil
         webView.stopLoading()
@@ -502,6 +581,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func finish(throwing error: Error) {
         guard !completed else { return }
         completed = true
+        submittedCredentials.cancel()
         timeoutTask?.cancel()
         timeoutTask = nil
         webView.stopLoading()

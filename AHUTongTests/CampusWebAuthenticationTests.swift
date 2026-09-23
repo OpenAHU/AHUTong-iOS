@@ -3,6 +3,35 @@ import XCTest
 @testable import AHUTong
 
 final class CampusWebAuthenticationTests: XCTestCase {
+    func testCredentialCaptureOnlyAcceptsMainFrameOnSchoolCASPage() {
+        XCTAssertTrue(CampusCredentialCapturePolicy.isTrusted(
+            scheme: "https", host: "one.ahu.edu.cn", path: "/cas/login", isMainFrame: true
+        ))
+        XCTAssertFalse(CampusCredentialCapturePolicy.isTrusted(
+            scheme: "https", host: "one.ahu.edu.cn", path: "/other", isMainFrame: true
+        ))
+        XCTAssertFalse(CampusCredentialCapturePolicy.isTrusted(
+            scheme: "https", host: "example.com", path: "/cas/login", isMainFrame: true
+        ))
+        XCTAssertFalse(CampusCredentialCapturePolicy.isTrusted(
+            scheme: "https", host: "one.ahu.edu.cn", path: "/cas/login", isMainFrame: false
+        ))
+    }
+
+    @MainActor
+    func testSuccessfulNavigationWaitsForSubmittedCredentials() async {
+        let collector = SubmittedCredentialsCollector()
+        let expected = LoginCredentials(studentID: "AB220001", password: "test-only")
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(20))
+            collector.capture(expected)
+        }
+
+        let captured = await collector.wait(timeout: .seconds(1))
+
+        XCTAssertEqual(captured, expected)
+    }
+
     func testNavigationPolicyAllowsOnlyExpectedHTTPSHosts() throws {
         XCTAssertTrue(CampusWebNavigationPolicy.isAllowed(
             try XCTUnwrap(URL(string: "https://one.ahu.edu.cn/cas/login")),

@@ -3,7 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
-    @EnvironmentObject private var toastCenter: AppToastCenter
     @ObservedObject var onboardingModel: OnboardingViewModel
     @ObservedObject var appModel: AppModel
     @State private var showClearConfirmation = false
@@ -11,10 +10,6 @@ struct SettingsView: View {
     @State private var updateResult: AppUpdateResult?
     @State private var isCheckingUpdate = false
     @State private var feedbackMessage: String?
-    @State private var debugTapCount = 0
-    @State private var lastDebugTap = Date.distantPast
-    @State private var showsDebug = false
-    @State private var showsPrivacyConsent = false
 
     var body: some View {
         AndroidScreen {
@@ -22,26 +17,15 @@ struct SettingsView: View {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "设置", large: true)
                     appCard
-                    section("账户信息")
-                    accountCard
-                    section("隐私与登录")
-                    privacyConsentRow
-                    AndroidSettingButton(label: "查看隐私政策", systemImage: "hand.raised") {
-                        showsPrivacyConsent = true
+                    NavigationLink {
+                        AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
+                    } label: {
+                        AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
+                            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                            .padding(.horizontal, 16)
                     }
-                    .padding(.horizontal, 16)
-                    .accessibilityIdentifier("settings.privacy-policy")
-                    if !appModel.isExperienceMode {
-                        NavigationLink {
-                            AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
-                        } label: {
-                            AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
-                                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-                                .padding(.horizontal, 16)
-                        }
-                        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
-                        .accessibilityIdentifier("settings.preferences")
-                    }
+                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
+                    .accessibilityIdentifier("settings.preferences")
                     section("关于")
                     settingsGroup {
                         NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
@@ -112,28 +96,16 @@ struct SettingsView: View {
         )) {
             Button("知道了", role: .cancel) { feedbackMessage = nil }
         } message: { Text(feedbackMessage ?? "") }
-        .navigationDestination(isPresented: $showsDebug) {
-            OperationsDiagnosticsView(userID: currentUser?.studentID, appModel: appModel).androidDetailScreen()
-        }
-        .sheet(isPresented: $showsPrivacyConsent) {
-            PrivacyConsentSheet(
-                accept: onboardingModel.consent.privacyDecision == .accepted ? nil : {
-                    Task {
-                        await onboardingModel.setPrivacyDecisionAndConfirm(.accepted)
-                        await appModel.prepareForRealLogin()
-                        showsPrivacyConsent = false
-                        toastCenter.show("已同意保存登录信息，请登录真实校园账号")
-                    }
-                }
-            )
-        }
     }
 
     private var appCard: some View {
         AndroidCard(radius: 32, background: AndroidParityPalette.primaryContainer(colorScheme)) {
             HStack(spacing: 16) {
-                AndroidAppMark()
-                .frame(width: 72, height: 72)
+                Image("AppMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 VStack(alignment: .leading) {
                     Text("安大通").font(.title2)
                     Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0").font(.headline)
@@ -143,117 +115,16 @@ struct SettingsView: View {
             .padding(.horizontal, 24).padding(.vertical, 16)
         }
         .padding(.horizontal, 16)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: registerDebugTap)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("settings.app-card")
-    }
-
-    private var accountCard: some View {
-        let user: User? = switch appModel.sessionState {
-        case let .authenticated(user), let .experience(user): user
-        default: nil
-        }
-        return VStack(alignment: .leading, spacing: 28) {
-            Text(user?.name ?? "未登录").font(.title2)
-            Button {
-                if appModel.isExperienceMode {
-                    if onboardingModel.consent.privacyDecision == .accepted {
-                        Task { await appModel.prepareForRealLogin() }
-                    } else {
-                        showsPrivacyConsent = true
-                    }
-                } else {
-                    Task { await appModel.signOut() }
-                }
-            } label: {
-                Label(
-                    appModel.isExperienceMode ? "登录真实账号" : "重新登录",
-                    systemImage: "rectangle.portrait.and.arrow.forward"
-                )
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(SettingsPressFeedbackStyle())
-        }
-        .padding(24)
-        .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .padding(.horizontal, 16)
-    }
-
-    private var privacyConsentRow: some View {
-        Button {
-            if onboardingModel.consent.privacyDecision == .accepted {
-                Task {
-                    await onboardingModel.setPrivacyDecisionAndConfirm(.declined)
-                    await appModel.enterExperienceMode()
-                    toastCenter.show("已切换为安大通体验用户，除课表外的校园功能已停用。")
-                }
-            } else {
-                showsPrivacyConsent = true
-            }
-        } label: {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("保存登录信息并自动续期")
-                        .font(.headline)
-                    Text("账号、密码和 Cookie 仅保存在本机 Keychain")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                AndroidPreferenceToggle(
-                    isOn: onboardingModel.consent.privacyDecision == .accepted
-                )
-            }
-            .padding(20)
-            .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24))
-            .padding(.horizontal, 16)
-        }
-        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 24))
-        .accessibilityIdentifier("settings.privacy-consent")
-        .accessibilityValue(onboardingModel.consent.privacyDecision == .accepted ? "开启" : "关闭")
     }
 
     private func section(_ text: String) -> some View {
         Text(text).font(.headline.bold()).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24)
     }
 
-    private var currentUser: User? {
-        if case let .authenticated(user) = appModel.sessionState { return user }
-        return nil
-    }
-
-    private func registerDebugTap() {
-        guard !appModel.isExperienceMode else { return }
-        let now = Date()
-        debugTapCount = now.timeIntervalSince(lastDebugTap) <= 1 ? debugTapCount + 1 : 1
-        lastDebugTap = now
-        if debugTapCount >= 8 {
-            debugTapCount = 0
-            showsDebug = true
-        }
-    }
-
     private func settingsGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 2, content: content).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 16)
-    }
-}
-
-private struct AndroidAppMark: View {
-    var body: some View {
-        VStack(spacing: 2) {
-            Text("安大通")
-                .androidScaledFont(size: 12, relativeTo: .caption, weight: .bold)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(Color(red: 240 / 255, green: 112 / 255, blue: 62 / 255), in: RoundedRectangle(cornerRadius: 3))
-            Image(systemName: "building.columns")
-                .font(.system(size: 27, weight: .light))
-                .foregroundStyle(.gray)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.white, in: Circle())
     }
 }
 
@@ -387,6 +258,9 @@ final class PreferencesModel: ObservableObject {
 private struct AndroidPreferencesView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var toastCenter: AppToastCenter
+    @ObservedObject private var onboardingModel: OnboardingViewModel
+    @ObservedObject private var appModel: AppModel
     @StateObject private var model: PreferencesModel
     @AppStorage("notifications.course-reminders") private var reminders = false
     @AppStorage("notifications.live-activity") private var liveActivity = false
@@ -394,10 +268,12 @@ private struct AndroidPreferencesView: View {
     @AppStorage private var prefersCMB: Bool
     @State private var showsIslandExplanation = false
     @State private var showsCustomColor = false
+    @State private var showsPrivacyConsent = false
     @State private var customColor = ""
 
     init(onboardingModel: OnboardingViewModel, appModel: AppModel) {
-        _ = onboardingModel
+        _onboardingModel = ObservedObject(wrappedValue: onboardingModel)
+        _appModel = ObservedObject(wrappedValue: appModel)
         _model = StateObject(wrappedValue: PreferencesModel(api: appModel.campusAPI))
         let userID = if case let .authenticated(user) = appModel.sessionState {
             user.studentID
@@ -420,51 +296,96 @@ private struct AndroidPreferencesView: View {
                         .padding(.horizontal, 24)
                         .padding(.vertical, 32)
 
-                    preferenceSection("充值") {
-                        preferenceRow(
-                            title: "总是使用招商银行充值",
-                            detail: "开启后首页校园卡充值会直接进入招商银行充值",
-                            isOn: prefersCMB,
-                            identifier: "preferences.cmb-card-recharge"
-                        ) {
-                            prefersCMB.toggle()
+                    preferenceSection("账户信息") {
+                        Text(accountName)
+                            .font(.headline)
+                        Button {
+                            if appModel.isExperienceMode {
+                                if onboardingModel.consent.privacyDecision == .accepted {
+                                    Task { await appModel.prepareForRealLogin() }
+                                } else {
+                                    showsPrivacyConsent = true
+                                }
+                            } else {
+                                Task { await appModel.signOut() }
+                            }
+                        } label: {
+                            Label(
+                                appModel.isExperienceMode ? "登录真实账号" : "重新登录",
+                                systemImage: "rectangle.portrait.and.arrow.forward"
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .buttonStyle(SettingsPressFeedbackStyle())
+                        .accessibilityIdentifier("preferences.login")
                     }
 
-                    preferenceSection("通知") {
+                    preferenceSection("隐私与登录") {
                         preferenceRow(
-                            title: "课前提醒",
-                            detail: "上课前 10 分钟提醒下一节课",
-                            isOn: reminders,
-                            identifier: "preferences.course-reminders"
+                            title: "保存登录信息并自动续期",
+                            detail: "账号、密码和 Cookie 仅保存在本机 Keychain",
+                            isOn: onboardingModel.consent.privacyDecision == .accepted,
+                            identifier: "preferences.privacy-consent"
                         ) {
-                            Task {
-                                let actual = await model.setReminders(!reminders)
-                                reminders = actual
-                            }
+                            changePrivacyConsent()
                         }
+                        Button {
+                            showsPrivacyConsent = true
+                        } label: {
+                            Label("查看隐私政策", systemImage: "hand.raised")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(SettingsPressFeedbackStyle())
+                        .accessibilityIdentifier("preferences.privacy-policy")
                     }
 
-                    preferenceSection("通知增强") {
-                        preferenceRow(
-                            title: "课前倒计时岛卡提醒（实验性）",
-                            detail: "仅部分系统支持 需同时开启课前提醒",
-                            isOn: liveActivity,
-                            identifier: "preferences.island-reminder"
-                        ) {
-                            guard reminders || liveActivity else {
-                                model.errorMessage = "请先开启课前提醒"
-                                return
+                    if !appModel.isExperienceMode {
+                        preferenceSection("充值") {
+                            preferenceRow(
+                                title: "总是使用招商银行充值",
+                                detail: "开启后首页校园卡充值会直接进入招商银行充值",
+                                isOn: prefersCMB,
+                                identifier: "preferences.cmb-card-recharge"
+                            ) {
+                                prefersCMB.toggle()
                             }
-                            Task { liveActivity = await model.setLiveActivity(!liveActivity) }
                         }
-                        Button("管理系统实时活动权限") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+
+                        preferenceSection("通知") {
+                            preferenceRow(
+                                title: "课前提醒",
+                                detail: "上课前 10 分钟提醒下一节课",
+                                isOn: reminders,
+                                identifier: "preferences.course-reminders"
+                            ) {
+                                Task {
+                                    let actual = await model.setReminders(!reminders)
+                                    reminders = actual
+                                }
+                            }
                         }
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 8))
-                            .foregroundStyle(AndroidThemeColor.color(for: themeColor))
-                            .padding(.vertical, 8)
+
+                        preferenceSection("通知增强") {
+                            preferenceRow(
+                                title: "课前倒计时岛卡提醒（实验性）",
+                                detail: "仅部分系统支持 需同时开启课前提醒",
+                                isOn: liveActivity,
+                                identifier: "preferences.island-reminder"
+                            ) {
+                                guard reminders || liveActivity else {
+                                    model.errorMessage = "请先开启课前提醒"
+                                    return
+                                }
+                                Task { liveActivity = await model.setLiveActivity(!liveActivity) }
+                            }
+                            Button("管理系统实时活动权限") {
+                                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                            }
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 8))
+                                .foregroundStyle(AndroidThemeColor.color(for: themeColor))
+                                .padding(.vertical, 8)
+                        }
                     }
 
                     preferenceSection("主题颜色") {
@@ -502,7 +423,38 @@ private struct AndroidPreferencesView: View {
         } message: {
             Text("请输入 ARGB Hex 颜色代码（例如 #FF007FAC）")
         }
+        .sheet(isPresented: $showsPrivacyConsent) {
+            PrivacyConsentSheet(
+                accept: onboardingModel.consent.privacyDecision == .accepted ? nil : {
+                    Task {
+                        await onboardingModel.setPrivacyDecisionAndConfirm(.accepted)
+                        await appModel.prepareForRealLogin()
+                        showsPrivacyConsent = false
+                        toastCenter.show("已同意保存登录信息，请登录真实校园账号")
+                    }
+                }
+            )
+        }
         .accessibilityIdentifier("preferences.screen")
+    }
+
+    private var accountName: String {
+        switch appModel.sessionState {
+        case let .authenticated(user), let .experience(user): user.name
+        default: "未登录"
+        }
+    }
+
+    private func changePrivacyConsent() {
+        if onboardingModel.consent.privacyDecision == .accepted {
+            Task {
+                await onboardingModel.setPrivacyDecisionAndConfirm(.declined)
+                await appModel.enterExperienceMode()
+                toastCenter.show("已切换为安大通体验用户，除课表外的校园功能已停用。")
+            }
+        } else {
+            showsPrivacyConsent = true
+        }
     }
 
     private func preferenceSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -787,7 +739,9 @@ enum ContributorsCatalog {
         ContributorEntry(name: "😓😢😥😰", description: "架构规划、小组件", kind: .developer(qq: "330771794")),
         ContributorEntry(name: "\u{200B}", description: "页面设计、交互设计、新技术探索", kind: .developer(qq: "257314409")),
         ContributorEntry(name: "堂吉诃德", description: "爬虫、交互设计", kind: .developer(qq: "3148336396")),
-        ContributorEntry(name: "Yukon", description: "架构规划、爬虫", kind: .developer(qq: "605606366"))
+        ContributorEntry(name: "Yukon", description: "架构规划、爬虫", kind: .developer(qq: "605606366")),
+        ContributorEntry(name: "MuxYang（25级）", description: "充值系统维护、MiuixUI 开发", kind: .developer(qq: "32142587")),
+        ContributorEntry(name: "InChange-Jiang（25级）", description: "学习通日历开发、RadiantUI 开发", kind: .developer(qq: "2719904894"))
     ]
 }
 

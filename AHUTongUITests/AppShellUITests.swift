@@ -131,6 +131,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["contributors.screen"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["加入我们"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["s1nk"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["MuxYang（25级）"].exists)
         waitForRendering()
         capture("16-contributors", app: app)
 
@@ -141,6 +142,8 @@ final class AppShellUITests: XCTestCase {
         tabButton("settings", app: app).tap()
         app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["preferences.privacy-consent"].exists)
+        XCTAssertTrue(app.buttons["preferences.privacy-policy"].exists)
         XCTAssertFalse(app.staticTexts["液态玻璃"].exists)
         XCTAssertFalse(app.buttons["preferences.liquid-glass"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["preferences.native-tab-bar"].exists)
@@ -294,6 +297,12 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(tabButton("home", app: app).exists)
         XCTAssertFalse(tabButton("tools", app: app).exists)
         XCTAssertTrue(app.buttons["schedule.settings"].waitForExistence(timeout: 4))
+        tabButton("settings", app: app).tap()
+        XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 4))
+        app.buttons["settings.preferences"].tap()
+        XCTAssertTrue(app.buttons["preferences.privacy-consent"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["preferences.privacy-policy"].exists)
+        XCTAssertFalse(app.buttons["preferences.cmb-card-recharge"].exists)
     }
 
     @MainActor
@@ -506,9 +515,9 @@ final class AppShellUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(appCard.waitForExistence(timeout: 4))
         appCard.tap(withNumberOfTaps: 8, numberOfTouches: 1)
-        XCTAssertTrue(app.descendants(matching: .any)["operations.debug.screen"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["operations.debug.screen"].exists)
         waitForRendering()
-        capture("33-operations-debug", app: app)
+        capture("33-settings", app: app)
     }
 
     @MainActor
