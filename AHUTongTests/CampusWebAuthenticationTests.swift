@@ -98,7 +98,7 @@ final class CampusWebAuthenticationTests: XCTestCase {
             try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student/home")),
             scope: .academic
         ))
-        XCTAssertTrue(CampusWebNavigationPolicy.isSuccess(
+        XCTAssertFalse(CampusWebNavigationPolicy.isSuccess(
             try XCTUnwrap(URL(string: "https://adwmh.ahu.edu.cn/index/user/success")),
             scope: .campusCard
         ))

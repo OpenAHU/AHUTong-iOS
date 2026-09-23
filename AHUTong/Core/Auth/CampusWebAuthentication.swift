@@ -127,8 +127,7 @@ enum CampusWebNavigationPolicy {
             return url.host?.lowercased() == "jw.ahu.edu.cn"
                 && (url.path == "/student/home" || url.path.hasPrefix("/student/home/"))
         case .campusCard:
-            return url.host?.lowercased() == "adwmh.ahu.edu.cn"
-                && (url.path == "/index/user/success" || url.path.hasPrefix("/index/user/success/"))
+            return false
         }
     }
 }
@@ -273,21 +272,28 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     let webView: WKWebView
 
     private static let captureHandler = "campusCredentialCapture"
-    private static let campusBindStatusHandler = "campusBindStatus"
+    private static let campusServiceStatusHandler = "campusServiceStatus"
     private let mode: Mode
     private let captchaRecognizer: any CampusCaptchaRecognizing
+    private let cardLoginClient: CampusCardLoginClient
     private var continuation: CheckedContinuation<CampusWebAuthenticationResult, Error>?
     private var timeoutTask: Task<Void, Never>?
     private var campusBindTimeoutTask: Task<Void, Never>?
+    private var campusLoginTask: Task<Void, Never>?
     private var schoolAlertCompletion: (@MainActor @Sendable () -> Void)?
     private let submittedCredentials = SubmittedCredentialsCollector()
     private var attemptedAutomation = false
     private var finishingSuccessfully = false
     private var completed = false
 
-    init(mode: Mode, captchaRecognizer: any CampusCaptchaRecognizing = RemoteCampusCaptchaRecognizer()) {
+    init(
+        mode: Mode,
+        captchaRecognizer: any CampusCaptchaRecognizing = RemoteCampusCaptchaRecognizer(),
+        cardLoginClient: CampusCardLoginClient = CampusCardLoginClient()
+    ) {
         self.mode = mode
         self.captchaRecognizer = captchaRecognizer
+        self.cardLoginClient = cardLoginClient
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.limitsNavigationsToAppBoundDomains = true
@@ -305,6 +311,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     deinit {
         timeoutTask?.cancel()
         campusBindTimeoutTask?.cancel()
+        campusLoginTask?.cancel()
     }
 
     func start() async throws -> CampusWebAuthenticationResult {
@@ -435,7 +442,9 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
                 return
             }
             attemptedAutomation = true
-            Task { await automateCampusCardLogin(credentials) }
+            campusLoginTask = Task { [weak self] in
+                await self?.automateCampusCardLogin(credentials)
+            }
         case .visibleAcademic:
             break
         }
@@ -464,8 +473,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        if message.name == Self.campusBindStatusHandler {
-            handleCampusBindStatus(message)
+        if message.name == Self.campusServiceStatusHandler {
+            handleCampusServiceStatus(message)
             return
         }
         guard message.name == Self.captureHandler,
@@ -486,8 +495,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         submittedCredentials.capture(LoginCredentials(studentID: canonicalID, password: password))
     }
 
-    private func handleCampusBindStatus(_ message: WKScriptMessage) {
-        guard case .visibleCampusCard = mode,
+    private func handleCampusServiceStatus(_ message: WKScriptMessage) {
+        guard case let .visibleCampusCard(credentials) = mode,
               message.frameInfo.isMainFrame,
               message.frameInfo.securityOrigin.protocol.lowercased() == "https",
               message.frameInfo.securityOrigin.host.lowercased() == "adwmh.ahu.edu.cn",
@@ -496,23 +505,22 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
               let kind = body["kind"] as? String else { return }
 
         switch kind {
-        case "submitted":
+        case "submit":
+            guard !isSubmittingCampusCard else { return }
             errorMessage = nil
             isSubmittingCampusCard = true
             campusBindTimeoutTask?.cancel()
             campusBindTimeoutTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(15))
+                try? await Task.sleep(for: .seconds(25))
                 guard !Task.isCancelled, let self, !self.completed,
                       self.webView.url?.path == "/index/tologin" else { return }
                 self.isSubmittingCampusCard = false
-                self.errorMessage = "校方绑定请求尚未完成，请检查网络或验证码后重试"
+                self.errorMessage = "校方登录请求尚未完成，请检查网络后重试"
             }
-        case "networkError":
-            stopCampusBindFeedback()
-            let status = body["status"] as? Int ?? 0
-            errorMessage = status > 0
-                ? "校方绑定请求失败（\(status)），请重试"
-                : "校方绑定请求失败，请检查网络后重试"
+            let captcha = body["captcha"] as? String ?? ""
+            campusLoginTask = Task { [weak self] in
+                await self?.submitCampusCardLogin(credentials: credentials, captcha: captcha)
+            }
         default:
             break
         }
@@ -571,33 +579,34 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func configureCampusCardScripts() {
         let script = #"""
         (() => {
-          if (location.protocol !== 'https:' || location.hostname !== 'adwmh.ahu.edu.cn'
-              || location.pathname !== '/index/tologin') return;
-          const button = document.querySelector('#btnlogin');
-          if (button?.getAttribute('href')?.trim().toLowerCase() === 'javascript:') {
-            button.removeAttribute('href');
-          }
-          const report = (kind, status = 0) => {
-            window.webkit.messageHandlers.campusBindStatus.postMessage({kind, status, path: location.pathname});
-          };
+          const isLoginPage = () => location.protocol === 'https:'
+              && location.hostname === 'adwmh.ahu.edu.cn'
+              && location.pathname === '/index/tologin';
           document.addEventListener('click', event => {
-            if (event.target instanceof Element && event.target.closest('#btnlogin')) report('submitted');
-          }, true);
-          if (window.jQuery) {
-            window.jQuery(document).ajaxError((_event, response, settings) => {
-              try {
-                if (new URL(settings.url, location.href).pathname === '/index/user/account/bind') {
-                  report('networkError', response.status || 0);
-                }
-              } catch (_error) {}
+            if (!isLoginPage() || !(event.target instanceof Element)
+                || !event.target.closest('#btnlogin')) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const captcha = document.querySelector('#imgcode')?.value || '';
+            window.webkit.messageHandlers.campusServiceStatus.postMessage({
+              kind: 'submit', captcha, path: location.pathname
             });
-          }
+          }, true);
+          document.addEventListener('DOMContentLoaded', () => {
+            if (!isLoginPage()) return;
+            const button = document.querySelector('#btnlogin');
+            if (button) button.textContent = '登录校园服务';
+            const description = document.querySelector('.weui-cells__title.title');
+            if (description && description.textContent.includes('进行绑定')) {
+              description.textContent = '使用已保存的校园账号登录，请填写图形验证码';
+            }
+          }, {once: true});
         })();
         """#
         let controller = webView.configuration.userContentController
-        controller.add(self, name: Self.campusBindStatusHandler)
+        controller.add(self, name: Self.campusServiceStatusHandler)
         controller.addUserScript(
-            WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         )
     }
 
@@ -679,6 +688,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         if (!usernameField || !passwordField) return false;
         usernameField.value = username;
         passwordField.value = password;
+        usernameField.readOnly = true;
+        passwordField.readOnly = true;
         usernameField.dispatchEvent(new Event('input', {bubbles: true}));
         passwordField.dispatchEvent(new Event('input', {bubbles: true}));
         return true;
@@ -694,6 +705,39 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             completionHandler: nil
         )
         submittedCredentials.capture(credentials)
+    }
+
+    private func currentCampusCardCookies() async -> [CampusCookie] {
+        let values = await withCheckedContinuation { continuation in
+            webView.configuration.websiteDataStore.httpCookieStore.getAllCookies {
+                continuation.resume(returning: $0)
+            }
+        }
+        return CampusWebCookiePolicy.cookies(from: values, scope: .campusCard)
+    }
+
+    private func submitCampusCardLogin(credentials: LoginCredentials, captcha: String) async {
+        do {
+            let cookies = await currentCampusCardCookies()
+            guard !completed, !Task.isCancelled else { return }
+            let authenticatedCookies = try await cardLoginClient.login(
+                credentials: credentials,
+                captcha: captcha,
+                cookies: cookies
+            )
+            guard !completed, !Task.isCancelled else { return }
+            submittedCredentials.capture(credentials)
+            finish(returning: CampusWebAuthenticationResult(
+                credentials: credentials,
+                cookies: authenticatedCookies
+            ))
+        } catch {
+            guard !completed, !Task.isCancelled else { return }
+            stopCampusBindFeedback()
+            errorMessage = error is URLError
+                ? "校方登录请求失败，请检查网络后重试"
+                : error.localizedDescription
+        }
     }
 
     private func automateCampusCardLogin(_ credentials: LoginCredentials) async {
@@ -722,36 +766,19 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             }
             let code = try await captchaRecognizer.recognize(image)
             guard !completed else { return }
-            let submitScript = #"""
-            const usernameField = document.querySelector('#username');
-            const passwordField = document.querySelector('#pwd');
-            const captchaField = document.querySelector('#imgcode');
-            const loginButton = document.querySelector('#btnlogin');
-            if (!usernameField || !passwordField || !captchaField || !loginButton) return false;
-            usernameField.value = username;
-            passwordField.value = password;
-            captchaField.value = code;
-            for (const field of [usernameField, passwordField, captchaField]) {
-              field.dispatchEvent(new Event('input', {bubbles: true}));
-              field.dispatchEvent(new Event('change', {bubbles: true}));
-            }
-            loginButton.click();
-            return true;
-            """#
+            let cookies = await currentCampusCardCookies()
+            guard !completed, !Task.isCancelled else { return }
+            let authenticatedCookies = try await cardLoginClient.login(
+                credentials: credentials,
+                captcha: code,
+                cookies: cookies
+            )
+            guard !completed, !Task.isCancelled else { return }
             submittedCredentials.capture(credentials)
-            let submitted = try await webView.callAsyncJavaScript(
-                submitScript,
-                arguments: [
-                    "username": credentials.studentID,
-                    "password": credentials.password,
-                    "code": code
-                ],
-                in: nil,
-                in: .page
-            ) as? Bool
-            guard submitted == true else {
-                throw CampusWebAuthenticationError.interactionRequired
-            }
+            finish(returning: CampusWebAuthenticationResult(
+                credentials: credentials,
+                cookies: authenticatedCookies
+            ))
         } catch {
             guard !completed else { return }
             finish(throwing: CampusWebAuthenticationError.interactionRequired)
@@ -797,6 +824,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func finish(returning result: CampusWebAuthenticationResult) {
         guard !completed else { return }
         completed = true
+        campusLoginTask?.cancel()
+        campusLoginTask = nil
         stopCampusBindFeedback()
         dismissSchoolAlert()
         submittedCredentials.cancel()
@@ -811,6 +840,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func finish(throwing error: Error) {
         guard !completed else { return }
         completed = true
+        campusLoginTask?.cancel()
+        campusLoginTask = nil
         stopCampusBindFeedback()
         dismissSchoolAlert()
         submittedCredentials.cancel()
@@ -827,7 +858,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.captureHandler)
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.campusBindStatusHandler)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.campusServiceStatusHandler)
         webView.configuration.userContentController.removeAllUserScripts()
     }
 }
@@ -922,7 +953,7 @@ struct CampusWebLoginScreen: View {
                         .frame(maxWidth: .infinity)
                         .background(.regularMaterial)
                 } else if engine.isSubmittingCampusCard {
-                    ProgressView("正在提交校方绑定…")
+                    ProgressView("正在提交校园服务登录…")
                         .padding(12)
                         .frame(maxWidth: .infinity)
                         .background(.regularMaterial)
