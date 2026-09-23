@@ -59,6 +59,7 @@ final class AppShellUITests: XCTestCase {
             case "tools": XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
             case "settings":
                 XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 3))
+                XCTAssertTrue(app.buttons["settings.account-login"].exists)
                 XCTAssertTrue(app.buttons["settings.feedback"].waitForExistence(timeout: 3))
             default: XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 3))
             }
@@ -144,6 +145,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["preferences.privacy-consent"].exists)
         XCTAssertTrue(app.buttons["preferences.privacy-policy"].exists)
+        XCTAssertFalse(app.buttons["preferences.login"].exists)
         XCTAssertFalse(app.staticTexts["液态玻璃"].exists)
         XCTAssertFalse(app.buttons["preferences.liquid-glass"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["preferences.native-tab-bar"].exists)
@@ -309,9 +311,11 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.buttons["schedule.settings"].waitForExistence(timeout: 4))
         tabButton("settings", app: app).tap()
         XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["settings.account-login"].exists)
         app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.buttons["preferences.privacy-consent"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["preferences.privacy-policy"].exists)
+        XCTAssertFalse(app.buttons["preferences.login"].exists)
         XCTAssertFalse(app.buttons["preferences.cmb-card-recharge"].exists)
     }
 

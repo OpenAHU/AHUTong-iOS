@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var toastCenter: AppToastCenter
     @ObservedObject var onboardingModel: OnboardingViewModel
     @ObservedObject var appModel: AppModel
     @State private var showClearConfirmation = false
@@ -10,6 +11,7 @@ struct SettingsView: View {
     @State private var updateResult: AppUpdateResult?
     @State private var isCheckingUpdate = false
     @State private var feedbackMessage: String?
+    @State private var showsPrivacyConsent = false
 
     var body: some View {
         AndroidScreen {
@@ -17,6 +19,8 @@ struct SettingsView: View {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "设置", large: true)
                     appCard
+                    section("账户信息")
+                    accountCard
                     NavigationLink {
                         AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
                     } label: {
@@ -96,6 +100,18 @@ struct SettingsView: View {
         )) {
             Button("知道了", role: .cancel) { feedbackMessage = nil }
         } message: { Text(feedbackMessage ?? "") }
+        .sheet(isPresented: $showsPrivacyConsent) {
+            PrivacyConsentSheet(
+                accept: onboardingModel.consent.privacyDecision == .accepted ? nil : {
+                    Task {
+                        await onboardingModel.setPrivacyDecisionAndConfirm(.accepted)
+                        await appModel.prepareForRealLogin()
+                        showsPrivacyConsent = false
+                        toastCenter.show("已同意保存登录信息，请登录真实校园账号")
+                    }
+                }
+            )
+        }
     }
 
     private var appCard: some View {
@@ -117,6 +133,39 @@ struct SettingsView: View {
         .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("settings.app-card")
+    }
+
+    private var accountCard: some View {
+        let user: User? = switch appModel.sessionState {
+        case let .authenticated(user), let .experience(user): user
+        default: nil
+        }
+        return VStack(alignment: .leading, spacing: 28) {
+            Text(user?.name ?? "未登录").font(.title2)
+            Button {
+                if appModel.isExperienceMode {
+                    if onboardingModel.consent.privacyDecision == .accepted {
+                        Task { await appModel.prepareForRealLogin() }
+                    } else {
+                        showsPrivacyConsent = true
+                    }
+                } else {
+                    Task { await appModel.signOut() }
+                }
+            } label: {
+                Label(
+                    appModel.isExperienceMode ? "登录真实账号" : "重新登录",
+                    systemImage: "rectangle.portrait.and.arrow.forward"
+                )
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SettingsPressFeedbackStyle())
+            .accessibilityIdentifier("settings.account-login")
+        }
+        .padding(24)
+        .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .padding(.horizontal, 16)
     }
 
     private func section(_ text: String) -> some View {
@@ -296,30 +345,6 @@ private struct AndroidPreferencesView: View {
                         .padding(.horizontal, 24)
                         .padding(.vertical, 32)
 
-                    preferenceSection("账户信息") {
-                        Text(accountName)
-                            .font(.headline)
-                        Button {
-                            if appModel.isExperienceMode {
-                                if onboardingModel.consent.privacyDecision == .accepted {
-                                    Task { await appModel.prepareForRealLogin() }
-                                } else {
-                                    showsPrivacyConsent = true
-                                }
-                            } else {
-                                Task { await appModel.signOut() }
-                            }
-                        } label: {
-                            Label(
-                                appModel.isExperienceMode ? "登录真实账号" : "重新登录",
-                                systemImage: "rectangle.portrait.and.arrow.forward"
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(SettingsPressFeedbackStyle())
-                        .accessibilityIdentifier("preferences.login")
-                    }
-
                     preferenceSection("隐私与登录") {
                         preferenceRow(
                             title: "保存登录信息并自动续期",
@@ -436,13 +461,6 @@ private struct AndroidPreferencesView: View {
             )
         }
         .accessibilityIdentifier("preferences.screen")
-    }
-
-    private var accountName: String {
-        switch appModel.sessionState {
-        case let .authenticated(user), let .experience(user): user.name
-        default: "未登录"
-        }
     }
 
     private func changePrivacyConsent() {
