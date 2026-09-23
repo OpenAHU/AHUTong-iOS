@@ -77,6 +77,13 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
     case interactionRequired
     case invalidResponse
     case navigationFailed
+    case campusCardPageChanged
+    case campusCardCaptchaImageFailed
+    case campusCardOCRFailed
+    case campusCardSchoolSessionMissing
+    case campusCardCaptchaRejected
+    case campusCardLoginResponseInvalid
+    case campusCardSchoolRejected
 
     var errorDescription: String? {
         switch self {
@@ -90,6 +97,13 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
         case .interactionRequired: "校方登录需要您继续操作"
         case .invalidResponse: "校方登录页返回了无法识别的结果"
         case .navigationFailed: "校方登录页加载失败，请检查网络"
+        case .campusCardPageChanged: "校方登录页面结构或地址已变化"
+        case .campusCardCaptchaImageFailed: "未能从校方登录页获取验证码图片"
+        case .campusCardOCRFailed: "远端验证码识别接口失败或未返回四位结果"
+        case .campusCardSchoolSessionMissing: "校方验证码会话 Cookie 缺失或失效"
+        case .campusCardCaptchaRejected: "校方拒绝本次验证码（识别结果可能不正确）"
+        case .campusCardLoginResponseInvalid: "校方登录接口返回异常或网络失败"
+        case .campusCardSchoolRejected: "校方未接受自动登录（验证码或账号信息）"
         }
     }
 }
@@ -436,9 +450,12 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             prefillCampusCardLogin(credentials)
         case let .hiddenCampusCard(credentials):
             guard webView.url?.host?.lowercased() == "adwmh.ahu.edu.cn",
-                  webView.url?.path == "/index/tologin" else { return }
+                  webView.url?.path == "/index/tologin" else {
+                finish(throwing: CampusWebAuthenticationError.campusCardPageChanged)
+                return
+            }
             guard !attemptedAutomation else {
-                finish(throwing: CampusWebAuthenticationError.interactionRequired)
+                finish(throwing: CampusWebAuthenticationError.campusCardPageChanged)
                 return
             }
             attemptedAutomation = true
@@ -745,7 +762,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             guard webView.url?.scheme == "https",
                   webView.url?.host?.lowercased() == "adwmh.ahu.edu.cn",
                   webView.url?.path == "/index/tologin" else {
-                throw CampusWebAuthenticationError.interactionRequired
+                throw CampusWebAuthenticationError.campusCardPageChanged
             }
             let imageScript = #"""
             const response = await fetch('/remind/authcode?t=' + Date.now(), {
@@ -758,30 +775,59 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             for (const byte of bytes) binary += String.fromCharCode(byte);
             return btoa(binary);
             """#
-            guard let base64 = try await webView.callAsyncJavaScript(
-                imageScript, arguments: [:], in: nil, in: .page
-            ) as? String,
-                let image = Data(base64Encoded: base64) else {
-                throw CampusWebAuthenticationError.interactionRequired
+            let imageResult: Any?
+            do {
+                imageResult = try await webView.callAsyncJavaScript(
+                    imageScript, arguments: [:], in: nil, in: .page
+                )
+            } catch {
+                throw CampusWebAuthenticationError.campusCardCaptchaImageFailed
             }
-            let code = try await captchaRecognizer.recognize(image)
+            guard let base64 = imageResult as? String,
+                let image = Data(base64Encoded: base64) else {
+                throw CampusWebAuthenticationError.campusCardCaptchaImageFailed
+            }
+            let code: String
+            do {
+                code = try await captchaRecognizer.recognize(image)
+            } catch {
+                throw CampusWebAuthenticationError.campusCardOCRFailed
+            }
             guard !completed else { return }
             let cookies = await currentCampusCardCookies()
             guard !completed, !Task.isCancelled else { return }
-            let authenticatedCookies = try await cardLoginClient.login(
-                credentials: credentials,
-                captcha: code,
-                cookies: cookies
-            )
+            let authenticatedCookies: [CampusCookie]
+            do {
+                authenticatedCookies = try await cardLoginClient.login(
+                    credentials: credentials,
+                    captcha: code,
+                    cookies: cookies
+                )
+            } catch CampusCardLoginError.missingSchoolSession {
+                throw CampusWebAuthenticationError.campusCardSchoolSessionMissing
+            } catch CampusCardLoginError.invalidCaptcha {
+                throw CampusWebAuthenticationError.campusCardOCRFailed
+            } catch CampusCardLoginError.invalidResponse {
+                throw CampusWebAuthenticationError.campusCardLoginResponseInvalid
+            } catch CampusCardLoginError.rejected(let message) {
+                throw message.contains("验证码")
+                    ? CampusWebAuthenticationError.campusCardCaptchaRejected
+                    : CampusWebAuthenticationError.campusCardSchoolRejected
+            } catch {
+                throw CampusWebAuthenticationError.campusCardLoginResponseInvalid
+            }
             guard !completed, !Task.isCancelled else { return }
             submittedCredentials.capture(credentials)
             finish(returning: CampusWebAuthenticationResult(
                 credentials: credentials,
                 cookies: authenticatedCookies
             ))
+        } catch let error as CampusWebAuthenticationError {
+            guard !completed else { return }
+            finish(throwing: error)
         } catch {
             guard !completed else { return }
-            finish(throwing: CampusWebAuthenticationError.interactionRequired)
+            finish(throwing: CampusWebAuthenticationError.campusCardLoginResponseInvalid)
         }
     }
 

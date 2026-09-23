@@ -91,6 +91,23 @@ final class CampusCardInteractionTests: XCTestCase {
         XCTAssertEqual(refreshFlags, [false])
         XCTAssertEqual(model.balance, 42)
     }
+
+    func testTappingLoadedQRCodeForcesNewCodeAndRefreshesBalance() async {
+        let api = CampusCardInteractionAPI()
+        let suite = "campus-card-tap-refresh-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = CampusCardViewModel(api: api, userID: "test-user", defaults: defaults)
+
+        await model.loadQRCode(demo: false)
+        await model.refreshQRCodeAndBalance(demo: false)
+
+        let qrRequests = await api.qrRequestCount()
+        let balanceFlags = await api.balanceInteractionFlags()
+        XCTAssertEqual(model.qrState, .loaded("TEST-QR"))
+        XCTAssertEqual(qrRequests, 2)
+        XCTAssertEqual(balanceFlags, [false, false])
+    }
 }
 
 private actor CampusCardInteractionAPI: CampusCoreAPI {

@@ -40,8 +40,8 @@ struct CampusLostFoundRemote: LostFoundRemote {
         async let typesData = requestData(url: baseURL.appendingPathComponent("lostfound/type/all"))
         let campuses = try JSONDecoder().decode(ObjectEnvelope<[LostFoundCampus]>.self, from: await campusesData)
         let types = try JSONDecoder().decode(ObjectEnvelope<[LostFoundType]>.self, from: await typesData)
-        guard Self.success(campuses.code), Self.success(types.code) else {
-            throw CampusWebError.server(campuses.code == 0 ? types.msg : campuses.msg)
+        guard Self.readSuccess(campuses.code), Self.readSuccess(types.code) else {
+            throw CampusWebError.server(Self.readSuccess(campuses.code) ? types.msg : campuses.msg)
         }
         return LostFoundCatalog(campuses: campuses.object, types: types.object)
     }
@@ -56,7 +56,7 @@ struct CampusLostFoundRemote: LostFoundRemote {
             ObjectEnvelope<LostFoundPage>.self,
             from: await requestData(url: url)
         )
-        guard Self.success(envelope.code) else { throw CampusWebError.server(envelope.msg) }
+        guard Self.readSuccess(envelope.code) else { throw CampusWebError.server(envelope.msg) }
         return envelope.object
     }
 
@@ -90,7 +90,7 @@ struct CampusLostFoundRemote: LostFoundRemote {
             contentType: "application/json"
         )
         let response = try JSONDecoder().decode(MutationEnvelope.self, from: data)
-        guard Self.success(response.code) else { throw CampusWebError.server(response.msg ?? "发布失败") }
+        guard Self.mutationSuccess(response.code) else { throw CampusWebError.server(response.msg ?? "发布失败") }
         return LostFoundItem(
             id: UUID().uuidString,
             title: draft.title,
@@ -119,10 +119,11 @@ struct CampusLostFoundRemote: LostFoundRemote {
             contentType: "application/x-www-form-urlencoded"
         )
         let response = try JSONDecoder().decode(MutationEnvelope.self, from: data)
-        guard Self.success(response.code) else { throw CampusWebError.server(response.msg ?? "删除失败") }
+        guard Self.mutationSuccess(response.code) else { throw CampusWebError.server(response.msg ?? "删除失败") }
     }
 
-    private static func success(_ code: Int) -> Bool { code == 0 || code == 200 }
+    static func readSuccess(_ code: Int) -> Bool { code == 0 || code == 200 || code == 10_000 }
+    static func mutationSuccess(_ code: Int) -> Bool { code == 0 || code == 200 }
 
     private func requestData(
         url: URL,

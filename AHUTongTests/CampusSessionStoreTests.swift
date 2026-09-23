@@ -2,6 +2,12 @@ import XCTest
 @testable import AHUTong
 
 final class CampusSessionStoreTests: XCTestCase {
+    func testLegacyCookieDetectionDoesNotTreatOfflinePlaceholderAsNativeDump() {
+        XCTAssertTrue(CampusCookieSnapshotPolicy.isLegacyNativeDump(#"{"raw_cookie":"test-only"}"#))
+        XCTAssertFalse(CampusCookieSnapshotPolicy.isLegacyNativeDump("cached-cookie"))
+        XCTAssertFalse(CampusCookieSnapshotPolicy.isLegacyNativeDump("[]"))
+    }
+
     @MainActor
     func testRestoreMigratesLegacyNativeCookieDumpToFlatSnapshot() async throws {
         let secureStore = InMemorySecureStore()

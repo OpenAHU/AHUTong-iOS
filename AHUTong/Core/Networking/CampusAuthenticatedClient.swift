@@ -5,6 +5,7 @@ extension Notification.Name {
     static let campusReauthenticationRequired = Notification.Name("AHUTong.campusReauthenticationRequired")
     static let campusCardAuthenticationRequired = Notification.Name("AHUTong.campusCardAuthenticationRequired")
     static let campusCardSessionRestored = Notification.Name("AHUTong.campusCardSessionRestored")
+    static let campusCardAutomaticRefreshFailed = Notification.Name("AHUTong.campusCardAutomaticRefreshFailed")
 }
 
 enum CampusWebError: LocalizedError, Equatable, Sendable {

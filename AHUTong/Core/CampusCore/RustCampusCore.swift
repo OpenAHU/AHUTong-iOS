@@ -239,9 +239,17 @@ actor RustCampusCoreAPI: CampusCoreAPI {
 
     func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin: Bool) async throws {
         if scope == .campusCard {
-            if let snapshot = try? await sessionStore.load(),
-               CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: snapshot.cookiesJSON),
-               let credentials = try? await credentialStore.credentials(for: snapshot.user.studentID) {
+            let snapshot = try? await sessionStore.load()
+            let hasPriorLogin = snapshot.map {
+                CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: $0.cookiesJSON)
+            } ?? false
+            let credentials: LoginCredentials?
+            if let snapshot {
+                credentials = try? await credentialStore.credentials(for: snapshot.user.studentID)
+            } else {
+                credentials = nil
+            }
+            if let snapshot, hasPriorLogin, let credentials {
                 do {
                     let result = try await CampusWebAuthenticationService.shared.refreshCampusCard(
                         credentials: credentials
@@ -261,7 +269,22 @@ actor RustCampusCoreAPI: CampusCoreAPI {
                     return
                 } catch {
                     try? await initialize(cookiesJSON: snapshot.cookiesJSON)
+                    let reason: String
+                    if let webError = error as? CampusWebAuthenticationError {
+                        reason = webError.localizedDescription
+                    } else if error is CampusCoreError {
+                        reason = "自动登录后校方会话校验失败"
+                    } else {
+                        reason = "自动登录后 Cookie 保存或校验失败"
+                    }
+                    await postCampusCardDiagnostic(reason)
                 }
+            } else if snapshot == nil {
+                await postCampusCardDiagnostic("本机没有已保存的校园会话")
+            } else if !hasPriorLogin {
+                await postCampusCardDiagnostic("本机快照中没有可识别的校园卡 Cookie")
+            } else {
+                await postCampusCardDiagnostic("本机没有该账号的登录凭据")
             }
             guard allowsInteractiveLogin else { throw CampusCoreError.credentialsUnavailable }
             let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
@@ -405,6 +428,15 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     private func postNotification(_ name: Notification.Name) async {
         await MainActor.run {
             NotificationCenter.default.post(name: name, object: nil)
+        }
+    }
+
+    private func postCampusCardDiagnostic(_ reason: String) async {
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .campusCardAutomaticRefreshFailed,
+                object: reason
+            )
         }
     }
 

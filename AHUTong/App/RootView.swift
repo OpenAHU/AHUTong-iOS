@@ -103,6 +103,10 @@ struct RootView: View {
                 campusCardLogin = CampusCardLoginRequest(credentials: credentials)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .campusCardAutomaticRefreshFailed)) { notification in
+            guard let reason = notification.object as? String else { return }
+            toastCenter.show("[测试] 校园卡自动续期失败：\(reason)")
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
             Task { await rescheduleCourseRemindersIfNeeded() }
         }

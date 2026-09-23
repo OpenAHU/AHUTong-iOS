@@ -113,6 +113,11 @@ final class CampusCardViewModel: ObservableObject {
         await loadQRCode(demo: demo)
     }
 
+    func refreshQRCodeAndBalance(demo: Bool) async {
+        await loadQRCode(demo: demo, force: true)
+        if case .failed = qrState { await load(demo: demo, refresh: true) }
+    }
+
     private var cachedBalance: Double? {
         defaults.object(forKey: cacheKey) == nil ? nil : defaults.double(forKey: cacheKey)
     }
@@ -150,11 +155,11 @@ struct CampusCardPanel: View {
         .fullScreenCover(isPresented: $showsFullQRCode) {
             ZStack {
                 Color.black.opacity(0.82).ignoresSafeArea()
+                    .onTapGesture { showsFullQRCode = false }
                 qrImage(size: 320)
                     .padding(20)
                     .background(.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             }
-            .onTapGesture { showsFullQRCode = false }
             .onAppear {
                 previousBrightness = UIScreen.main.brightness
                 UIScreen.main.brightness = 1
@@ -250,14 +255,20 @@ struct CampusCardPanel: View {
     private func qrImage(size: CGFloat) -> some View {
         switch model.qrState {
         case let .loaded(payload):
-            PaymentQRCode(payload: payload)
-                .frame(width: size, height: size)
-                .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.gray, lineWidth: 1) }
+            Button {
+                Task { await model.refreshQRCodeAndBalance(demo: demo) }
+            } label: {
+                PaymentQRCode(payload: payload)
+                    .frame(width: size, height: size)
+                    .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.gray, lineWidth: 1) }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("campus-card.qr-refresh")
         case .loading:
             ProgressView().frame(width: size, height: size)
         case let .failed(message):
             Button {
-                Task { await model.loadQRCode(demo: demo, force: true) }
+                Task { await model.refreshQRCodeAndBalance(demo: demo) }
             } label: {
                 Text("加载失败\n\(message)\n点此重试")
                     .font(.caption2)
@@ -267,7 +278,7 @@ struct CampusCardPanel: View {
             .accessibilityIdentifier("campus-card.qr-retry")
         case .idle:
             Button("获取付款码") {
-                Task { await model.loadQRCode(demo: demo, force: true) }
+                Task { await model.refreshQRCodeAndBalance(demo: demo) }
             }
             .font(.caption)
             .frame(width: size, height: size)

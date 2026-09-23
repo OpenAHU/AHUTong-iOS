@@ -32,6 +32,17 @@ enum CampusCookieSnapshotPolicy {
     static func isFlat(_ cookiesJSON: String) -> Bool {
         (try? JSONDecoder().decode([CampusCookie].self, from: Data(cookiesJSON.utf8))) != nil
     }
+
+    static func isLegacyNativeDump(_ cookiesJSON: String) -> Bool {
+        let lines = cookiesJSON.split(whereSeparator: \.isNewline)
+        guard !lines.isEmpty else { return false }
+        return lines.allSatisfy { line in
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else {
+                return false
+            }
+            return object["raw_cookie"] is String
+        }
+    }
 }
 
 enum AppSessionState: Equatable {
@@ -111,9 +122,11 @@ final class AppModel: ObservableObject {
             }
             do {
                 try await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
-                if !CampusCookieSnapshotPolicy.isFlat(snapshot.cookiesJSON) {
+                if CampusCookieSnapshotPolicy.isLegacyNativeDump(snapshot.cookiesJSON) {
                     let flatCookies = try await campusAPI.cookiesFlat()
-                    guard CampusCookieSnapshotPolicy.isFlat(flatCookies) else {
+                    guard let decoded = try? JSONDecoder().decode(
+                        [CampusCookie].self, from: Data(flatCookies.utf8)
+                    ), !decoded.isEmpty else {
                         throw CampusCoreError.invalidResponse
                     }
                     try await sessionStore.save(CampusSessionSnapshot(
