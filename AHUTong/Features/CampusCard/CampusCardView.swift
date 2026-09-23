@@ -263,6 +263,7 @@ struct CampusCardPanel: View {
                     .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.gray, lineWidth: 1) }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("校园卡付款码，点按刷新")
             .accessibilityIdentifier("campus-card.qr-refresh")
         case .loading:
             ProgressView().frame(width: size, height: size)

@@ -37,10 +37,10 @@ final class AppShellUITests: XCTestCase {
         let campusCardBalance = app.buttons["campus-card.balance"]
         XCTAssertTrue(campusCardBalance.waitForExistence(timeout: 3))
         campusCardBalance.tap()
-        XCTAssertTrue(app.images["campus-card.qr-image"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].exists)
-        app.buttons["campus-card.qr-refresh"].tap()
-        XCTAssertTrue(app.images["campus-card.qr-image"].waitForExistence(timeout: 3))
+        let qrRefresh = app.buttons["campus-card.qr-refresh"]
+        XCTAssertTrue(qrRefresh.waitForExistence(timeout: 3))
+        qrRefresh.tap()
+        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 3))
         let campusCardQRPanel = app.otherElements["campus-card.qr-panel"]
         XCTAssertTrue(campusCardQRPanel.waitForExistence(timeout: 3))
         XCTAssertLessThan(campusCardQRPanel.frame.height, 300, "二维码面板应按内容收紧，而不是保留固定大高度")
