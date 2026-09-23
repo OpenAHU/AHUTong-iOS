@@ -783,11 +783,11 @@ enum ContributorsCatalog {
     ]
 
     static let developers = [
-        ContributorEntry(name: "高玉灿（20级）", description: "架构规划、页面设计、爬虫", kind: .developer(qq: "468766131")),
-        ContributorEntry(name: "谭哲昊（21级）", description: "架构规划、小组件", kind: .developer(qq: "330771794")),
-        ContributorEntry(name: "王学雷（22级）", description: "页面设计、交互设计、新技术探索", kind: .developer(qq: "257314409")),
-        ContributorEntry(name: "徐健灿（22级）", description: "爬虫、交互设计", kind: .developer(qq: "3148336396")),
-        ContributorEntry(name: "王    钰（22级）", description: "架构规划、爬虫", kind: .developer(qq: "605606366"))
+        ContributorEntry(name: "s1nk", description: "架构规划、页面设计、爬虫", kind: .developer(qq: "468766131")),
+        ContributorEntry(name: "😓😢😥😰", description: "架构规划、小组件", kind: .developer(qq: "330771794")),
+        ContributorEntry(name: "\u{200B}", description: "页面设计、交互设计、新技术探索", kind: .developer(qq: "257314409")),
+        ContributorEntry(name: "堂吉诃德", description: "爬虫、交互设计", kind: .developer(qq: "3148336396")),
+        ContributorEntry(name: "Yukon", description: "架构规划、爬虫", kind: .developer(qq: "605606366"))
     ]
 }
 

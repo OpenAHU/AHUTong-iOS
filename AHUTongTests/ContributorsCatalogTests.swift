@@ -6,8 +6,13 @@ final class ContributorsCatalogTests: XCTestCase {
         XCTAssertEqual(ContributorsCatalog.partners.map(\.name), ["Hello~"])
         XCTAssertEqual(
             ContributorsCatalog.developers.map(\.name),
-            ["高玉灿（20级）", "谭哲昊（21级）", "王学雷（22级）", "徐健灿（22级）", "王    钰（22级）"]
+            ["s1nk", "😓😢😥😰", "\u{200B}", "堂吉诃德", "Yukon"]
         )
+        XCTAssertEqual(
+            ContributorsCatalog.developers[2].name.unicodeScalars.map(\.value),
+            [0x200B]
+        )
+
         XCTAssertEqual(
             ContributorsCatalog.developers.compactMap(\.qq),
             ["468766131", "330771794", "257314409", "3148336396", "605606366"]

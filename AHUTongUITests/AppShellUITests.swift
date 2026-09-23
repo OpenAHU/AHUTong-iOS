@@ -130,7 +130,7 @@ final class AppShellUITests: XCTestCase {
         contributors.tap()
         XCTAssertTrue(app.descendants(matching: .any)["contributors.screen"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["加入我们"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["高玉灿（20级）"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["s1nk"].waitForExistence(timeout: 3))
         waitForRendering()
         capture("16-contributors", app: app)
 
