@@ -25,6 +25,7 @@ final class CampusCardViewModel: ObservableObject {
     private let api: any CampusCoreAPI
     private let cacheKey: String
     private let defaults: UserDefaults
+    private var latestBalanceRequestID: UUID?
 
     init(api: any CampusCoreAPI, userID: String, defaults: UserDefaults = .standard) {
         self.api = api
@@ -47,8 +48,8 @@ final class CampusCardViewModel: ObservableObject {
         }
     }
 
-    func load(demo: Bool, force: Bool = false) async {
-        if case .loaded = balanceState, !force { return }
+    func load(demo: Bool, refresh: Bool = false) async {
+        if case .loaded = balanceState, !refresh { return }
         if demo {
             switch DemoDataState.current {
             case .normal, .empty:
@@ -61,13 +62,17 @@ final class CampusCardViewModel: ObservableObject {
             }
             return
         }
+        let requestID = UUID()
+        latestBalanceRequestID = requestID
         let cached = cachedBalance
         balanceState = .loading(cached)
         do {
-            let value = try await api.cardBalance(allowsInteractiveLogin: force)
+            let value = try await api.cardBalance(allowsInteractiveLogin: false)
+            guard latestBalanceRequestID == requestID else { return }
             defaults.set(value, forKey: cacheKey)
             balanceState = .loaded(value)
         } catch {
+            guard latestBalanceRequestID == requestID else { return }
             balanceState = .failed(error.localizedDescription, cached)
         }
     }
@@ -90,15 +95,22 @@ final class CampusCardViewModel: ObservableObject {
             } else {
                 do {
                     payload = try await api.cardQRCode()
-                } catch CampusCoreError.credentialsUnavailable where force {
-                    try await api.refreshSession(scope: .campusCard)
+                } catch CampusCoreError.credentialsUnavailable {
+                    try await api.refreshSession(scope: .campusCard, allowsInteractiveLogin: force)
                     payload = try await api.cardQRCode()
                 }
             }
             qrState = .loaded(payload)
+            if !demo { await load(demo: false, refresh: true) }
         } catch {
             qrState = .failed(error.localizedDescription)
         }
+    }
+
+    func reloadQRCodeAfterAuthentication(demo: Bool) async {
+        if case .loading = qrState { return }
+        qrState = .idle
+        await loadQRCode(demo: demo)
     }
 
     private var cachedBalance: Double? {
@@ -129,6 +141,12 @@ struct CampusCardPanel: View {
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .task { await model.load(demo: demo) }
+        .onReceive(NotificationCenter.default.publisher(for: .campusCardSessionRestored)) { _ in
+            Task {
+                await model.load(demo: demo, refresh: true)
+                if showsQRCode { await model.reloadQRCodeAfterAuthentication(demo: demo) }
+            }
+        }
         .fullScreenCover(isPresented: $showsFullQRCode) {
             ZStack {
                 Color.black.opacity(0.82).ignoresSafeArea()
@@ -154,6 +172,11 @@ struct CampusCardPanel: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("校园卡余额").font(.headline.bold())
                     balanceText.font(.title2.bold()).lineLimit(1).minimumScaleFactor(0.72)
+                    if case .failed = model.balanceState {
+                        Text("余额刷新失败")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
@@ -209,9 +232,7 @@ struct CampusCardPanel: View {
                 .accessibilityIdentifier("campus-card.qr-panel")
                 .allowsHitTesting(false)
         }
-        .task {
-            if demo { await model.loadQRCode(demo: true) }
-        }
+        .task { await model.loadQRCode(demo: demo) }
     }
 
     @ViewBuilder

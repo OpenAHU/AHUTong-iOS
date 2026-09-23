@@ -7,10 +7,6 @@ private struct RustServerDescriptor: Decodable {
     let token: String?
 }
 
-private struct CookieDump: Decodable {
-    let cookies: String
-}
-
 private struct CampusCardTokenResponse: Decodable {
     let accessToken: String
 
@@ -88,6 +84,7 @@ protocol CampusCoreAPI: Sendable {
     func cardQRCode() async throws -> String
     func cardAccessToken() async throws -> String
     func refreshSession(scope: CampusSessionScope) async throws
+    func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin: Bool) async throws
     func validateSession(scope: CampusSessionScope) async throws
     func invalidateStoredSession() async
     func persistSessionCookies() async throws
@@ -104,6 +101,10 @@ extension CampusCoreAPI {
     }
     func refreshSession(scope: CampusSessionScope) async throws {
         throw CampusCoreError.credentialsUnavailable
+    }
+    func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin: Bool) async throws {
+        guard allowsInteractiveLogin else { throw CampusCoreError.credentialsUnavailable }
+        try await refreshSession(scope: scope)
     }
     func validateSession(scope: CampusSessionScope) async throws {
         switch scope {
@@ -149,8 +150,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func dumpCookies() async throws -> String {
-        let data = try await request(path: "/cookies/dump")
-        return try JSONDecoder().decode(CookieDump.self, from: data).cookies
+        try await cookiesFlat()
     }
 
     func cookiesFlat() async throws -> String {
@@ -234,6 +234,10 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func refreshSession(scope: CampusSessionScope) async throws {
+        try await refreshSession(scope: scope, allowsInteractiveLogin: true)
+    }
+
+    func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin: Bool) async throws {
         if scope == .campusCard {
             if let snapshot = try? await sessionStore.load(),
                CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: snapshot.cookiesJSON),
@@ -259,6 +263,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
                     try? await initialize(cookiesJSON: snapshot.cookiesJSON)
                 }
             }
+            guard allowsInteractiveLogin else { throw CampusCoreError.credentialsUnavailable }
             let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
             guard isActive else { throw CampusCoreError.credentialsUnavailable }
             do {

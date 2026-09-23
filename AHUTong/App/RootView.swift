@@ -120,6 +120,7 @@ struct RootView: View {
                         do {
                             try await appModel.completeCampusCardLogin(authentication)
                             await CampusInteractiveAuthenticationCoordinator.shared.succeed()
+                            NotificationCenter.default.post(name: .campusCardSessionRestored, object: nil)
                             toastCenter.show("校园卡登录已恢复")
                         } catch {
                             await CampusInteractiveAuthenticationCoordinator.shared.fail(

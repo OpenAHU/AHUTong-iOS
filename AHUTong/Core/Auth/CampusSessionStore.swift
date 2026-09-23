@@ -28,6 +28,12 @@ struct CampusSessionStore: Sendable {
     }
 }
 
+enum CampusCookieSnapshotPolicy {
+    static func isFlat(_ cookiesJSON: String) -> Bool {
+        (try? JSONDecoder().decode([CampusCookie].self, from: Data(cookiesJSON.utf8))) != nil
+    }
+}
+
 enum AppSessionState: Equatable {
     case loading
     case signedOut
@@ -105,6 +111,15 @@ final class AppModel: ObservableObject {
             }
             do {
                 try await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
+                if !CampusCookieSnapshotPolicy.isFlat(snapshot.cookiesJSON) {
+                    let flatCookies = try await campusAPI.cookiesFlat()
+                    guard CampusCookieSnapshotPolicy.isFlat(flatCookies) else {
+                        throw CampusCoreError.invalidResponse
+                    }
+                    try await sessionStore.save(CampusSessionSnapshot(
+                        user: snapshot.user, cookiesJSON: flatCookies
+                    ))
+                }
                 do {
                     _ = try await campusAPI.currentWeek()
                 } catch CampusCoreError.unauthorized {
@@ -181,10 +196,15 @@ final class AppModel: ObservableObject {
         guard let snapshot = try await sessionStore.load() else {
             throw CampusWebAuthenticationError.credentialsUnavailable
         }
-        let existing = (try? JSONDecoder().decode(
+        var existing = (try? JSONDecoder().decode(
             [CampusCookie].self,
             from: Data(snapshot.cookiesJSON.utf8)
         )) ?? []
+        if existing.isEmpty, !CampusCookieSnapshotPolicy.isFlat(snapshot.cookiesJSON),
+           let flatCookies = try? await campusAPI.cookiesFlat(),
+           let migrated = try? JSONDecoder().decode([CampusCookie].self, from: Data(flatCookies.utf8)) {
+            existing = migrated
+        }
         let merged = CampusCookieMerger.merge(existing: existing, incoming: result.cookies)
         let cookies = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
         try await campusAPI.initialize(cookiesJSON: cookies)

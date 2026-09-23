@@ -18,6 +18,23 @@ final class CampusCardInteractionTests: XCTestCase {
         XCTAssertEqual(model.balance, 42)
     }
 
+    func testBalanceCanRefreshSilentlyAfterCampusLogin() async {
+        let api = CampusCardInteractionAPI(failsFirstBalance: true)
+        let suite = "campus-card-interaction-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = CampusCardViewModel(api: api, userID: "test-user", defaults: defaults)
+
+        await model.load(demo: false)
+        XCTAssertNil(model.balance)
+
+        await model.load(demo: false, refresh: true)
+
+        XCTAssertEqual(model.balance, 42)
+        let flags = await api.balanceInteractionFlags()
+        XCTAssertEqual(flags, [false, false])
+    }
+
     func testFailedAutomaticQRCodeLoadDoesNotRepeatUntilUserRetries() async {
         let api = CampusCardInteractionAPI(failsQRCode: true)
         let suite = "campus-card-interaction-\(UUID().uuidString)"
@@ -55,18 +72,48 @@ final class CampusCardInteractionTests: XCTestCase {
         let explicitRefreshCount = await api.refreshCount()
         XCTAssertEqual(explicitRefreshCount, 1)
     }
+
+    func testExpandedQRCodeCanRenewSilentlyWithoutPresentingLogin() async {
+        let api = CampusCardInteractionAPI(
+            failsQRCode: true,
+            recoversAfterRefresh: true,
+            supportsSilentRefresh: true
+        )
+        let suite = "campus-card-interaction-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = CampusCardViewModel(api: api, userID: "test-user", defaults: defaults)
+
+        await model.loadQRCode(demo: false)
+
+        XCTAssertEqual(model.qrState, .loaded("TEST-QR"))
+        let refreshFlags = await api.refreshInteractionFlags()
+        XCTAssertEqual(refreshFlags, [false])
+        XCTAssertEqual(model.balance, 42)
+    }
 }
 
 private actor CampusCardInteractionAPI: CampusCoreAPI {
     private var balanceFlags: [Bool] = []
     private var qrCalls = 0
     private var refreshes = 0
+    private var refreshFlags: [Bool] = []
     private let failsQRCode: Bool
     private let recoversAfterRefresh: Bool
+    private let supportsSilentRefresh: Bool
+    private let failsFirstBalance: Bool
+    private var balanceCalls = 0
 
-    init(failsQRCode: Bool = false, recoversAfterRefresh: Bool = false) {
+    init(
+        failsQRCode: Bool = false,
+        recoversAfterRefresh: Bool = false,
+        supportsSilentRefresh: Bool = false,
+        failsFirstBalance: Bool = false
+    ) {
         self.failsQRCode = failsQRCode
         self.recoversAfterRefresh = recoversAfterRefresh
+        self.supportsSilentRefresh = supportsSilentRefresh
+        self.failsFirstBalance = failsFirstBalance
     }
 
     func initialize(cookiesJSON: String) {}
@@ -79,8 +126,12 @@ private actor CampusCardInteractionAPI: CampusCoreAPI {
         CampusGradeReport(grades: [], gradePointAverage: nil, rank: nil, studentProfiles: [])
     }
     func cardBalance() -> Double { 42 }
-    func cardBalance(allowsInteractiveLogin: Bool) -> Double {
+    func cardBalance(allowsInteractiveLogin: Bool) throws -> Double {
         balanceFlags.append(allowsInteractiveLogin)
+        balanceCalls += 1
+        if failsFirstBalance && balanceCalls == 1 {
+            throw CampusCoreError.credentialsUnavailable
+        }
         return 42
     }
     func cardQRCode() throws -> String {
@@ -96,7 +147,16 @@ private actor CampusCardInteractionAPI: CampusCoreAPI {
         if !recoversAfterRefresh { throw CampusCoreError.credentialsUnavailable }
     }
 
+    func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin: Bool) throws {
+        refreshFlags.append(allowsInteractiveLogin)
+        guard allowsInteractiveLogin || supportsSilentRefresh else {
+            throw CampusCoreError.credentialsUnavailable
+        }
+        try refreshSession(scope: scope)
+    }
+
     func balanceInteractionFlags() -> [Bool] { balanceFlags }
     func qrRequestCount() -> Int { qrCalls }
     func refreshCount() -> Int { refreshes }
+    func refreshInteractionFlags() -> [Bool] { refreshFlags }
 }

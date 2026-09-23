@@ -3,6 +3,38 @@ import XCTest
 
 final class CampusSessionStoreTests: XCTestCase {
     @MainActor
+    func testRestoreMigratesLegacyNativeCookieDumpToFlatSnapshot() async throws {
+        let secureStore = InMemorySecureStore()
+        let sessionStore = CampusSessionStore(secureStore: secureStore)
+        let user = User(name: "测试同学", studentID: "AB220001")
+        try await sessionStore.save(CampusSessionSnapshot(
+            user: user,
+            cookiesJSON: #"{"raw_cookie":"test-only"}"# + "\n"
+        ))
+        let cookie = CampusCookie(
+            name: "JSESSIONID", value: "test-only", domain: "adwmh.ahu.edu.cn",
+            path: "/", secure: true, httpOnly: true
+        )
+        let flat = String(decoding: try JSONEncoder().encode([cookie]), as: UTF8.self)
+        let suite = "legacy-cookie-migration-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(
+            campusAPI: CampusCoreAPIStub(flatCookies: flat),
+            sessionStore: sessionStore,
+            credentialStore: CredentialStore(secureStore: secureStore),
+            defaults: defaults
+        )
+
+        await model.restore(privacyDecision: .accepted)
+
+        let restored = try await sessionStore.load()
+        XCTAssertEqual(model.sessionState, .authenticated(user))
+        XCTAssertEqual(restored?.cookiesJSON, flat)
+        XCTAssertTrue(CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: restored?.cookiesJSON ?? ""))
+    }
+
+    @MainActor
     func testAcceptedPrivacyRestoresChosenExperienceAccountWithoutCredentials() async throws {
         let secureStore = InMemorySecureStore()
         let suite = "experience-skip-\(UUID().uuidString)"
@@ -318,15 +350,18 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     private var shouldRejectNextLogin = false
     private var performedLogins = 0
     private var nextDumpCookies: String?
+    private let flatCookies: String?
     private let sessionStore: CampusSessionStore?
     private let credentialStore: CredentialStore?
 
     init(
         sessionStore: CampusSessionStore? = nil,
-        credentialStore: CredentialStore? = nil
+        credentialStore: CredentialStore? = nil,
+        flatCookies: String? = nil
     ) {
         self.sessionStore = sessionStore
         self.credentialStore = credentialStore
+        self.flatCookies = flatCookies
     }
     func initialize(cookiesJSON: String) { cookies = cookiesJSON }
     func login(studentID: String, password: String) throws -> User {
@@ -339,7 +374,7 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
     }
     func dumpCookies() -> String { nextDumpCookies ?? "cookie-json" }
     func setDumpCookies(_ value: String) { nextDumpCookies = value }
-    func cookiesFlat() -> String { "[]" }
+    func cookiesFlat() -> String { flatCookies ?? "[]" }
     func schedule() -> [Course] { [] }
     func currentWeek() throws -> Int {
         if shouldFailNextValidationOffline {
