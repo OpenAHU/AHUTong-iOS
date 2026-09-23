@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 private struct RustServerDescriptor: Decodable {
     let ok: Bool
@@ -234,6 +235,32 @@ actor RustCampusCoreAPI: CampusCoreAPI {
 
     func refreshSession(scope: CampusSessionScope) async throws {
         if scope == .campusCard {
+            if let snapshot = try? await sessionStore.load(),
+               CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: snapshot.cookiesJSON),
+               let credentials = try? await credentialStore.credentials(for: snapshot.user.studentID) {
+                do {
+                    let result = try await CampusWebAuthenticationService.shared.refreshCampusCard(
+                        credentials: credentials
+                    )
+                    let existing = (try? JSONDecoder().decode(
+                        [CampusCookie].self,
+                        from: Data(snapshot.cookiesJSON.utf8)
+                    )) ?? []
+                    let merged = CampusCookieMerger.merge(existing: existing, incoming: result.cookies)
+                    let cookies = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
+                    try await initialize(cookiesJSON: cookies)
+                    try await validateSession(scope: .campusCard)
+                    let validatedCookies = try await dumpCookies()
+                    try await sessionStore.save(CampusSessionSnapshot(
+                        user: snapshot.user, cookiesJSON: validatedCookies
+                    ))
+                    return
+                } catch {
+                    try? await initialize(cookiesJSON: snapshot.cookiesJSON)
+                }
+            }
+            let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+            guard isActive else { throw CampusCoreError.credentialsUnavailable }
             do {
                 try await CampusInteractiveAuthenticationCoordinator.shared.requestCampusCardLogin()
                 return

@@ -3,6 +3,22 @@ import XCTest
 @testable import AHUTong
 
 final class CampusWebAuthenticationTests: XCTestCase {
+    func testCampusCardAutomaticLoginRequiresPreviouslySavedCampusCookie() throws {
+        let academicOnly = [CampusCookie(
+            name: "SESSION", value: "test-only", domain: "jw.ahu.edu.cn",
+            path: "/", secure: true, httpOnly: true
+        )]
+        let cardCookie = CampusCookie(
+            name: "JSESSIONID", value: "test-only", domain: ".adwmh.ahu.edu.cn",
+            path: "/", secure: true, httpOnly: true
+        )
+        let academicJSON = String(decoding: try JSONEncoder().encode(academicOnly), as: UTF8.self)
+        let authorizedJSON = String(decoding: try JSONEncoder().encode(academicOnly + [cardCookie]), as: UTF8.self)
+
+        XCTAssertFalse(CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: academicJSON))
+        XCTAssertTrue(CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: authorizedJSON))
+    }
+
     func testCredentialCaptureOnlyAcceptsMainFrameOnSchoolCASPage() {
         XCTAssertTrue(CampusCredentialCapturePolicy.isTrusted(
             scheme: "https", host: "one.ahu.edu.cn", path: "/cas/login", isMainFrame: true

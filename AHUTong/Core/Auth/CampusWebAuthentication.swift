@@ -16,6 +16,7 @@ struct CampusWebAuthenticationResult: Sendable {
 @MainActor
 protocol CampusWebAuthenticating: AnyObject {
     func refreshAcademic(credentials: LoginCredentials) async throws -> CampusWebAuthenticationResult
+    func refreshCampusCard(credentials: LoginCredentials) async throws -> CampusWebAuthenticationResult
 }
 
 enum CampusCookieMerger {
@@ -141,6 +142,18 @@ enum CampusCredentialCapturePolicy {
     }
 }
 
+enum CampusCardAuthorizationPolicy {
+    static func hasPriorLogin(cookiesJSON: String) -> Bool {
+        guard let cookies = try? JSONDecoder().decode([CampusCookie].self, from: Data(cookiesJSON.utf8)) else {
+            return false
+        }
+        return cookies.contains {
+            $0.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) == "adwmh.ahu.edu.cn"
+                && !$0.value.isEmpty
+        }
+    }
+}
+
 @MainActor
 final class SubmittedCredentialsCollector {
     private(set) var credentials: LoginCredentials?
@@ -217,18 +230,19 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         case visibleAcademic
         case hiddenAcademic(LoginCredentials)
         case visibleCampusCard(LoginCredentials)
+        case hiddenCampusCard(LoginCredentials)
 
         var scope: CampusSessionScope {
             switch self {
             case .visibleAcademic, .hiddenAcademic: .academic
-            case .visibleCampusCard: .campusCard
+            case .visibleCampusCard, .hiddenCampusCard: .campusCard
             }
         }
 
         var isVisible: Bool {
             switch self {
             case .visibleAcademic, .visibleCampusCard: true
-            case .hiddenAcademic: false
+            case .hiddenAcademic, .hiddenCampusCard: false
             }
         }
     }
@@ -239,6 +253,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
 
     private static let captureHandler = "campusCredentialCapture"
     private let mode: Mode
+    private let captchaRecognizer: any CampusCaptchaRecognizing
     private var continuation: CheckedContinuation<CampusWebAuthenticationResult, Error>?
     private var timeoutTask: Task<Void, Never>?
     private let submittedCredentials = SubmittedCredentialsCollector()
@@ -246,8 +261,9 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private var finishingSuccessfully = false
     private var completed = false
 
-    init(mode: Mode) {
+    init(mode: Mode, captchaRecognizer: any CampusCaptchaRecognizing = RemoteCampusCaptchaRecognizer()) {
         self.mode = mode
+        self.captchaRecognizer = captchaRecognizer
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.limitsNavigationsToAppBoundDomains = true
@@ -286,8 +302,9 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
             webView.load(request)
             if !mode.isVisible {
+                let timeout: Duration = if case .hiddenCampusCard = mode { .seconds(20) } else { .seconds(30) }
                 timeoutTask = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(30))
+                    try? await Task.sleep(for: timeout)
                     guard !Task.isCancelled else { return }
                     self?.finish(throwing: CampusWebAuthenticationError.timedOut)
                 }
@@ -350,6 +367,15 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             }
         case let .visibleCampusCard(credentials):
             prefillCampusCardLogin(credentials)
+        case let .hiddenCampusCard(credentials):
+            guard webView.url?.host?.lowercased() == "adwmh.ahu.edu.cn",
+                  webView.url?.path == "/index/tologin" else { return }
+            guard !attemptedAutomation else {
+                finish(throwing: CampusWebAuthenticationError.interactionRequired)
+                return
+            }
+            attemptedAutomation = true
+            Task { await automateCampusCardLogin(credentials) }
         case .visibleAcademic:
             break
         }
@@ -530,6 +556,68 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         submittedCredentials.capture(credentials)
     }
 
+    private func automateCampusCardLogin(_ credentials: LoginCredentials) async {
+        do {
+            guard webView.url?.scheme == "https",
+                  webView.url?.host?.lowercased() == "adwmh.ahu.edu.cn",
+                  webView.url?.path == "/index/tologin" else {
+                throw CampusWebAuthenticationError.interactionRequired
+            }
+            let imageScript = #"""
+            const response = await fetch('/remind/authcode?t=' + Date.now(), {
+              credentials: 'same-origin', cache: 'no-store', redirect: 'error'
+            });
+            if (!response.ok) return null;
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            if (bytes.length === 0 || bytes.length > 256000) return null;
+            let binary = '';
+            for (const byte of bytes) binary += String.fromCharCode(byte);
+            return btoa(binary);
+            """#
+            guard let base64 = try await webView.callAsyncJavaScript(
+                imageScript, arguments: [:], in: nil, in: .page
+            ) as? String,
+                let image = Data(base64Encoded: base64) else {
+                throw CampusWebAuthenticationError.interactionRequired
+            }
+            let code = try await captchaRecognizer.recognize(image)
+            guard !completed else { return }
+            let submitScript = #"""
+            const usernameField = document.querySelector('#username');
+            const passwordField = document.querySelector('#pwd');
+            const captchaField = document.querySelector('#imgcode');
+            const loginButton = document.querySelector('#btnlogin');
+            if (!usernameField || !passwordField || !captchaField || !loginButton) return false;
+            usernameField.value = username;
+            passwordField.value = password;
+            captchaField.value = code;
+            for (const field of [usernameField, passwordField, captchaField]) {
+              field.dispatchEvent(new Event('input', {bubbles: true}));
+              field.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+            loginButton.click();
+            return true;
+            """#
+            submittedCredentials.capture(credentials)
+            let submitted = try await webView.callAsyncJavaScript(
+                submitScript,
+                arguments: [
+                    "username": credentials.studentID,
+                    "password": credentials.password,
+                    "code": code
+                ],
+                in: nil,
+                in: .page
+            ) as? Bool
+            guard submitted == true else {
+                throw CampusWebAuthenticationError.interactionRequired
+            }
+        } catch {
+            guard !completed else { return }
+            finish(throwing: CampusWebAuthenticationError.interactionRequired)
+        }
+    }
+
     private func finishSuccessfully() async {
         guard !finishingSuccessfully, !completed else { return }
         finishingSuccessfully = true
@@ -604,10 +692,18 @@ final class CampusWebAuthenticationService: CampusWebAuthenticating {
     static let shared = CampusWebAuthenticationService()
 
     func refreshAcademic(credentials: LoginCredentials) async throws -> CampusWebAuthenticationResult {
+        try await refreshHidden(mode: .hiddenAcademic(credentials))
+    }
+
+    func refreshCampusCard(credentials: LoginCredentials) async throws -> CampusWebAuthenticationResult {
+        try await refreshHidden(mode: .hiddenCampusCard(credentials))
+    }
+
+    private func refreshHidden(mode: CampusWebLoginEngine.Mode) async throws -> CampusWebAuthenticationResult {
         guard UIApplication.shared.applicationState == .active else {
             throw CampusWebAuthenticationError.inactive
         }
-        let engine = CampusWebLoginEngine(mode: .hiddenAcademic(credentials))
+        let engine = CampusWebLoginEngine(mode: mode)
         guard let window = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap(\.windows)
