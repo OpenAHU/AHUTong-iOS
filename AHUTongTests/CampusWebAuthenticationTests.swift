@@ -3,6 +3,28 @@ import XCTest
 @testable import AHUTong
 
 final class CampusWebAuthenticationTests: XCTestCase {
+    func testCampusServiceDialogsOnlySurfaceFromTrustedMainFrame() {
+        XCTAssertEqual(
+            CampusWebDialogPolicy.message(
+                " 请输入正确的图形验证码 ", scheme: "https", host: "adwmh.ahu.edu.cn",
+                isMainFrame: true, scope: .campusCard
+            ),
+            "请输入正确的图形验证码"
+        )
+        XCTAssertNil(CampusWebDialogPolicy.message(
+            "test-only", scheme: "http", host: "adwmh.ahu.edu.cn",
+            isMainFrame: true, scope: .campusCard
+        ))
+        XCTAssertNil(CampusWebDialogPolicy.message(
+            "test-only", scheme: "https", host: "example.com",
+            isMainFrame: true, scope: .campusCard
+        ))
+        XCTAssertNil(CampusWebDialogPolicy.message(
+            "test-only", scheme: "https", host: "adwmh.ahu.edu.cn",
+            isMainFrame: false, scope: .campusCard
+        ))
+    }
+
     func testCampusCardAutomaticLoginRequiresPreviouslySavedCampusCookie() throws {
         let academicOnly = [CampusCookie(
             name: "SESSION", value: "test-only", domain: "jw.ahu.edu.cn",

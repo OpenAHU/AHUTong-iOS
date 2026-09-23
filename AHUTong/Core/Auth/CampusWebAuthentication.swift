@@ -133,6 +133,25 @@ enum CampusWebNavigationPolicy {
     }
 }
 
+enum CampusWebDialogPolicy {
+    static func message(
+        _ value: String,
+        scheme: String,
+        host: String,
+        isMainFrame: Bool,
+        scope: CampusSessionScope
+    ) -> String? {
+        guard isMainFrame,
+              let url = URL(string: "\(scheme)://\(host)/"),
+              CampusWebNavigationPolicy.isAllowed(url, scope: scope) else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(240))
+    }
+}
+
 enum CampusCredentialCapturePolicy {
     static func isTrusted(scheme: String, host: String, path: String, isMainFrame: Bool) -> Bool {
         isMainFrame
@@ -249,13 +268,18 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
 
     @Published private(set) var errorMessage: String?
     @Published private(set) var progress = 0.0
+    @Published private(set) var schoolAlertMessage: String?
+    @Published private(set) var isSubmittingCampusCard = false
     let webView: WKWebView
 
     private static let captureHandler = "campusCredentialCapture"
+    private static let campusBindStatusHandler = "campusBindStatus"
     private let mode: Mode
     private let captchaRecognizer: any CampusCaptchaRecognizing
     private var continuation: CheckedContinuation<CampusWebAuthenticationResult, Error>?
     private var timeoutTask: Task<Void, Never>?
+    private var campusBindTimeoutTask: Task<Void, Never>?
+    private var schoolAlertCompletion: (@MainActor @Sendable () -> Void)?
     private let submittedCredentials = SubmittedCredentialsCollector()
     private var attemptedAutomation = false
     private var finishingSuccessfully = false
@@ -280,6 +304,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
 
     deinit {
         timeoutTask?.cancel()
+        campusBindTimeoutTask?.cancel()
     }
 
     func start() async throws -> CampusWebAuthenticationResult {
@@ -314,6 +339,40 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
 
     func cancel() {
         finish(throwing: CampusWebAuthenticationError.cancelled)
+    }
+
+    func dismissSchoolAlert() {
+        schoolAlertMessage = nil
+        let completion = schoolAlertCompletion
+        schoolAlertCompletion = nil
+        completion?()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable () -> Void
+    ) {
+        guard let displayed = CampusWebDialogPolicy.message(
+            message,
+            scheme: frame.securityOrigin.protocol,
+            host: frame.securityOrigin.host,
+            isMainFrame: frame.isMainFrame,
+            scope: mode.scope
+        ) else {
+            completionHandler()
+            return
+        }
+        stopCampusBindFeedback()
+        if !mode.isVisible {
+            completionHandler()
+            finish(throwing: CampusWebAuthenticationError.interactionRequired)
+            return
+        }
+        dismissSchoolAlert()
+        schoolAlertCompletion = completionHandler
+        schoolAlertMessage = displayed
     }
 
     func webView(
@@ -353,6 +412,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         progress = 1
         guard !completed else { return }
         if CampusWebNavigationPolicy.isSuccess(webView.url, scope: mode.scope) {
+            stopCampusBindFeedback()
             Task { await finishSuccessfully() }
             return
         }
@@ -382,6 +442,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation?) {
+        stopCampusBindFeedback()
         progress = 0
         errorMessage = nil
     }
@@ -403,6 +464,10 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == Self.campusBindStatusHandler {
+            handleCampusBindStatus(message)
+            return
+        }
         guard message.name == Self.captureHandler,
               let body = message.body as? [String: Any],
               let path = body["path"] as? String,
@@ -421,7 +486,49 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         submittedCredentials.capture(LoginCredentials(studentID: canonicalID, password: password))
     }
 
+    private func handleCampusBindStatus(_ message: WKScriptMessage) {
+        guard case .visibleCampusCard = mode,
+              message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.protocol.lowercased() == "https",
+              message.frameInfo.securityOrigin.host.lowercased() == "adwmh.ahu.edu.cn",
+              let body = message.body as? [String: Any],
+              body["path"] as? String == "/index/tologin",
+              let kind = body["kind"] as? String else { return }
+
+        switch kind {
+        case "submitted":
+            errorMessage = nil
+            isSubmittingCampusCard = true
+            campusBindTimeoutTask?.cancel()
+            campusBindTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled, let self, !self.completed,
+                      self.webView.url?.path == "/index/tologin" else { return }
+                self.isSubmittingCampusCard = false
+                self.errorMessage = "校方绑定请求尚未完成，请检查网络或验证码后重试"
+            }
+        case "networkError":
+            stopCampusBindFeedback()
+            let status = body["status"] as? Int ?? 0
+            errorMessage = status > 0
+                ? "校方绑定请求失败（\(status)），请重试"
+                : "校方绑定请求失败，请检查网络后重试"
+        default:
+            break
+        }
+    }
+
+    private func stopCampusBindFeedback() {
+        campusBindTimeoutTask?.cancel()
+        campusBindTimeoutTask = nil
+        isSubmittingCampusCard = false
+    }
+
     private func configureScripts() {
+        if case .visibleCampusCard = mode {
+            configureCampusCardScripts()
+            return
+        }
         guard case .visibleAcademic = mode else { return }
         let script = #"""
         (() => {
@@ -458,6 +565,39 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         )
         controller.addUserScript(
             WKUserScript(source: styleScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        )
+    }
+
+    private func configureCampusCardScripts() {
+        let script = #"""
+        (() => {
+          if (location.protocol !== 'https:' || location.hostname !== 'adwmh.ahu.edu.cn'
+              || location.pathname !== '/index/tologin') return;
+          const button = document.querySelector('#btnlogin');
+          if (button?.getAttribute('href')?.trim().toLowerCase() === 'javascript:') {
+            button.removeAttribute('href');
+          }
+          const report = (kind, status = 0) => {
+            window.webkit.messageHandlers.campusBindStatus.postMessage({kind, status, path: location.pathname});
+          };
+          document.addEventListener('click', event => {
+            if (event.target instanceof Element && event.target.closest('#btnlogin')) report('submitted');
+          }, true);
+          if (window.jQuery) {
+            window.jQuery(document).ajaxError((_event, response, settings) => {
+              try {
+                if (new URL(settings.url, location.href).pathname === '/index/user/account/bind') {
+                  report('networkError', response.status || 0);
+                }
+              } catch (_error) {}
+            });
+          }
+        })();
+        """#
+        let controller = webView.configuration.userContentController
+        controller.add(self, name: Self.campusBindStatusHandler)
+        controller.addUserScript(
+            WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
     }
 
@@ -657,6 +797,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func finish(returning result: CampusWebAuthenticationResult) {
         guard !completed else { return }
         completed = true
+        stopCampusBindFeedback()
+        dismissSchoolAlert()
         submittedCredentials.cancel()
         timeoutTask?.cancel()
         timeoutTask = nil
@@ -669,6 +811,8 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func finish(throwing error: Error) {
         guard !completed else { return }
         completed = true
+        stopCampusBindFeedback()
+        dismissSchoolAlert()
         submittedCredentials.cancel()
         timeoutTask?.cancel()
         timeoutTask = nil
@@ -683,6 +827,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.captureHandler)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.campusBindStatusHandler)
         webView.configuration.userContentController.removeAllUserScripts()
     }
 }
@@ -776,8 +921,21 @@ struct CampusWebLoginScreen: View {
                         .padding(12)
                         .frame(maxWidth: .infinity)
                         .background(.regularMaterial)
+                } else if engine.isSubmittingCampusCard {
+                    ProgressView("正在提交校方绑定…")
+                        .padding(12)
+                        .frame(maxWidth: .infinity)
+                        .background(.regularMaterial)
                 }
             }
+        }
+        .alert("校园服务提示", isPresented: Binding(
+            get: { engine.schoolAlertMessage != nil },
+            set: { if !$0 { engine.dismissSchoolAlert() } }
+        )) {
+            Button("确定") { engine.dismissSchoolAlert() }
+        } message: {
+            Text(engine.schoolAlertMessage ?? "")
         }
         .task {
             do {
