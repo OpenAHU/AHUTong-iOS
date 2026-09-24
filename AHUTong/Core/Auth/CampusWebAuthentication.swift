@@ -79,7 +79,7 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
     case navigationFailed
     case campusCardPageChanged
     case campusCardCaptchaRequestFailed(CampusCardCaptchaFetchError)
-    case campusCardOCRFailed
+    case campusCardOCRFailed(CampusCaptchaRecognitionError)
     case campusCardSchoolSessionMissing
     case campusCardCaptchaRejected
     case campusCardLoginResponseInvalid
@@ -99,7 +99,7 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
         case .navigationFailed: "校方登录页加载失败，请检查网络"
         case .campusCardPageChanged: "校方登录页面结构或地址已变化"
         case let .campusCardCaptchaRequestFailed(reason): reason.localizedDescription
-        case .campusCardOCRFailed: "远端验证码识别接口失败或未返回四位结果"
+        case let .campusCardOCRFailed(reason): reason.localizedDescription
         case .campusCardSchoolSessionMissing: "校方验证码会话 Cookie 缺失或失效"
         case .campusCardCaptchaRejected: "校方拒绝本次验证码（识别结果可能不正确）"
         case .campusCardLoginResponseInvalid: "校方登录接口返回异常或网络失败"
@@ -351,7 +351,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
             webView.load(request)
             if !mode.isVisible {
-                let timeout: Duration = if case .hiddenCampusCard = mode { .seconds(20) } else { .seconds(30) }
+                let timeout: Duration = .seconds(30)
                 timeoutTask = Task { [weak self] in
                     try? await Task.sleep(for: timeout)
                     guard !Task.isCancelled else { return }
@@ -780,8 +780,10 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             let code: String
             do {
                 code = try await captchaRecognizer.recognize(captchaImage.data)
+            } catch let reason as CampusCaptchaRecognitionError {
+                throw CampusWebAuthenticationError.campusCardOCRFailed(reason)
             } catch {
-                throw CampusWebAuthenticationError.campusCardOCRFailed
+                throw CampusWebAuthenticationError.campusCardOCRFailed(.network)
             }
             guard !completed, !Task.isCancelled else { return }
             let authenticatedCookies: [CampusCookie]
@@ -794,7 +796,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             } catch CampusCardLoginError.missingSchoolSession {
                 throw CampusWebAuthenticationError.campusCardSchoolSessionMissing
             } catch CampusCardLoginError.invalidCaptcha {
-                throw CampusWebAuthenticationError.campusCardOCRFailed
+                throw CampusWebAuthenticationError.campusCardOCRFailed(.invalidCode)
             } catch CampusCardLoginError.invalidResponse {
                 throw CampusWebAuthenticationError.campusCardLoginResponseInvalid
             } catch CampusCardLoginError.rejected(let message) {
