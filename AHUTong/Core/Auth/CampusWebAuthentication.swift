@@ -78,7 +78,7 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
     case invalidResponse
     case navigationFailed
     case campusCardPageChanged
-    case campusCardCaptchaImageFailed
+    case campusCardCaptchaRequestFailed(CampusCardCaptchaFetchError)
     case campusCardOCRFailed
     case campusCardSchoolSessionMissing
     case campusCardCaptchaRejected
@@ -98,7 +98,7 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
         case .invalidResponse: "校方登录页返回了无法识别的结果"
         case .navigationFailed: "校方登录页加载失败，请检查网络"
         case .campusCardPageChanged: "校方登录页面结构或地址已变化"
-        case .campusCardCaptchaImageFailed: "未能从校方登录页获取验证码图片"
+        case let .campusCardCaptchaRequestFailed(reason): reason.localizedDescription
         case .campusCardOCRFailed: "远端验证码识别接口失败或未返回四位结果"
         case .campusCardSchoolSessionMissing: "校方验证码会话 Cookie 缺失或失效"
         case .campusCardCaptchaRejected: "校方拒绝本次验证码（识别结果可能不正确）"
@@ -289,6 +289,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private static let campusServiceStatusHandler = "campusServiceStatus"
     private let mode: Mode
     private let captchaRecognizer: any CampusCaptchaRecognizing
+    private let captchaClient: CampusCardCaptchaClient
     private let cardLoginClient: CampusCardLoginClient
     private var continuation: CheckedContinuation<CampusWebAuthenticationResult, Error>?
     private var timeoutTask: Task<Void, Never>?
@@ -303,10 +304,12 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     init(
         mode: Mode,
         captchaRecognizer: any CampusCaptchaRecognizing = RemoteCampusCaptchaRecognizer(),
+        captchaClient: CampusCardCaptchaClient = CampusCardCaptchaClient(),
         cardLoginClient: CampusCardLoginClient = CampusCardLoginClient()
     ) {
         self.mode = mode
         self.captchaRecognizer = captchaRecognizer
+        self.captchaClient = captchaClient
         self.cardLoginClient = cardLoginClient
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -764,44 +767,29 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
                   webView.url?.path == "/index/tologin" else {
                 throw CampusWebAuthenticationError.campusCardPageChanged
             }
-            let imageScript = #"""
-            const response = await fetch('/remind/authcode?t=' + Date.now(), {
-              credentials: 'same-origin', cache: 'no-store', redirect: 'error'
-            });
-            if (!response.ok) return null;
-            const bytes = new Uint8Array(await response.arrayBuffer());
-            if (bytes.length === 0 || bytes.length > 256000) return null;
-            let binary = '';
-            for (const byte of bytes) binary += String.fromCharCode(byte);
-            return btoa(binary);
-            """#
-            let imageResult: Any?
+            let cookies = await currentCampusCardCookies()
+            guard !completed, !Task.isCancelled else { return }
+            let captchaImage: CampusCardCaptchaImage
             do {
-                imageResult = try await webView.callAsyncJavaScript(
-                    imageScript, arguments: [:], in: nil, in: .page
-                )
+                captchaImage = try await captchaClient.fetch(cookies: cookies)
+            } catch let reason as CampusCardCaptchaFetchError {
+                throw CampusWebAuthenticationError.campusCardCaptchaRequestFailed(reason)
             } catch {
-                throw CampusWebAuthenticationError.campusCardCaptchaImageFailed
-            }
-            guard let base64 = imageResult as? String,
-                let image = Data(base64Encoded: base64) else {
-                throw CampusWebAuthenticationError.campusCardCaptchaImageFailed
+                throw CampusWebAuthenticationError.campusCardCaptchaRequestFailed(.network)
             }
             let code: String
             do {
-                code = try await captchaRecognizer.recognize(image)
+                code = try await captchaRecognizer.recognize(captchaImage.data)
             } catch {
                 throw CampusWebAuthenticationError.campusCardOCRFailed
             }
-            guard !completed else { return }
-            let cookies = await currentCampusCardCookies()
             guard !completed, !Task.isCancelled else { return }
             let authenticatedCookies: [CampusCookie]
             do {
                 authenticatedCookies = try await cardLoginClient.login(
                     credentials: credentials,
                     captcha: code,
-                    cookies: cookies
+                    cookies: captchaImage.cookies
                 )
             } catch CampusCardLoginError.missingSchoolSession {
                 throw CampusWebAuthenticationError.campusCardSchoolSessionMissing
