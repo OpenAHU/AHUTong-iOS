@@ -64,13 +64,17 @@ final class AgreementConsentStoreTests: XCTestCase {
         let disclaimer = AgreementDocument.disclaimer.body
 
         XCTAssertTrue(privacy.contains("ThisDeviceOnly"))
-        XCTAssertTrue(privacy.contains("App 可启动隐藏 WebView"))
+        XCTAssertTrue(privacy.contains("隐藏 WebView"))
         XCTAssertTrue(privacy.contains("远程验证码识别请求只包含"))
-        XCTAssertTrue(privacy.contains("首次登录需要图形验证码"))
+        XCTAssertTrue(privacy.contains("即使此前没有校园卡 Cookie"))
+        XCTAssertTrue(privacy.contains("从第一次连接起"))
+        XCTAssertTrue(privacy.contains("不再要求您为校园服务单独手动填写验证码"))
         XCTAssertTrue(privacy.contains("远程验证码识别接口"))
         XCTAssertTrue(privacy.contains("保存到本机文件"))
         XCTAssertTrue(privacy.contains("不附带学号、密码、Cookie、Token"))
         XCTAssertTrue(privacy.contains("安大通体验用户"))
+        XCTAssertFalse(privacy.contains("验证码必须由您在可见页面中手动填写"))
+        XCTAssertFalse(privacy.contains("App 会转为可见页面"))
         XCTAssertFalse(privacy.contains("不会将您的用户数据上传"))
         XCTAssertFalse(disclaimer.contains("不会收集、存储或泄露用户的任何个人信息"))
     }
@@ -78,11 +82,34 @@ final class AgreementConsentStoreTests: XCTestCase {
     func testPreviousPolicyVersionRequiresRenewedConsent() {
         let previous = AgreementConsent(
             acceptedDocumentIDs: Set(AgreementDocument.allCases.map(\.id)),
-            confirmedVersion: AgreementConsent.currentVersion - 1,
+            confirmedVersion: AgreementConsent.currentVersion,
             privacyDecision: .accepted,
             privacyPolicyVersion: AgreementConsent.currentPrivacyPolicyVersion - 1
         )
 
         XCTAssertFalse(previous.isComplete)
+    }
+
+    func testExistingAcceptanceMustBeConfirmedAgainForPrivacyV4() async throws {
+        let dataStore = InMemoryDataStore()
+        let previous = AgreementConsent(
+            acceptedDocumentIDs: Set(AgreementDocument.allCases.map(\.id)),
+            confirmedVersion: AgreementConsent.currentVersion - 1,
+            privacyDecision: .accepted,
+            privacyPolicyVersion: AgreementConsent.currentPrivacyPolicyVersion - 1
+        )
+        try await dataStore.set(
+            try JSONEncoder().encode(previous),
+            forKey: AgreementConsentStore.storageKey
+        )
+        let store = AgreementConsentStore(store: dataStore)
+
+        let loaded = try await store.load()
+        XCTAssertFalse(loaded.isComplete)
+        _ = try await store.setPrivacyDecision(.accepted)
+        let renewed = try await store.confirmRequiredDocuments()
+
+        XCTAssertTrue(renewed.isComplete)
+        XCTAssertEqual(renewed.privacyPolicyVersion, 4)
     }
 }

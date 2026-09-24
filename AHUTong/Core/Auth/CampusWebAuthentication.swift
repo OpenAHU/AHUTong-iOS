@@ -38,34 +38,6 @@ enum CampusCookieMerger {
     }
 }
 
-actor CampusInteractiveAuthenticationCoordinator {
-    static let shared = CampusInteractiveAuthenticationCoordinator()
-
-    private var continuation: CheckedContinuation<Void, Error>?
-
-    func requestCampusCardLogin() async throws {
-        if continuation != nil {
-            throw CampusWebAuthenticationError.interactionRequired
-        }
-        try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            Task { @MainActor in
-                NotificationCenter.default.post(name: .campusCardAuthenticationRequired, object: nil)
-            }
-        }
-    }
-
-    func succeed() {
-        continuation?.resume()
-        continuation = nil
-    }
-
-    func fail(_ error: CampusWebAuthenticationError) {
-        continuation?.resume(throwing: error)
-        continuation = nil
-    }
-}
-
 enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
     case cancelled
     case inactive
@@ -141,7 +113,8 @@ enum CampusWebNavigationPolicy {
             return url.host?.lowercased() == "jw.ahu.edu.cn"
                 && (url.path == "/student/home" || url.path.hasPrefix("/student/home/"))
         case .campusCard:
-            return false
+            return url.host?.lowercased() == "adwmh.ahu.edu.cn"
+                && url.path == "/index/user/success"
         }
     }
 }
@@ -174,15 +147,13 @@ enum CampusCredentialCapturePolicy {
     }
 }
 
-enum CampusCardAuthorizationPolicy {
-    static func hasPriorLogin(cookiesJSON: String) -> Bool {
-        guard let cookies = try? JSONDecoder().decode([CampusCookie].self, from: Data(cookiesJSON.utf8)) else {
-            return false
-        }
-        return cookies.contains {
-            $0.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) == "adwmh.ahu.edu.cn"
-                && !$0.value.isEmpty
-        }
+enum CampusCardAutomaticLoginPolicy {
+    static func canAttempt(
+        snapshot: CampusSessionSnapshot?,
+        credentials: LoginCredentials?,
+        isActive: Bool
+    ) -> Bool {
+        snapshot != nil && credentials != nil && isActive
     }
 }
 

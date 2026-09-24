@@ -202,11 +202,10 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         try await cardBalance(allowsInteractiveLogin: false)
     }
 
-    func cardBalance(allowsInteractiveLogin: Bool) async throws -> Double {
+    func cardBalance(allowsInteractiveLogin _: Bool) async throws -> Double {
         let balance = try cardParser.balance(from: try await authenticatedRequest(
             path: "/ycard/balance",
-            scope: .campusCard,
-            allowsInteractiveLogin: allowsInteractiveLogin
+            scope: .campusCard
         ))
         try? await persistSessionCookies()
         return balance
@@ -215,8 +214,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     func cardQRCode() async throws -> String {
         let payload = try cardParser.qrPayload(from: try await authenticatedRequest(
             path: "/ycard/qrcode",
-            scope: .campusCard,
-            allowsInteractiveLogin: false
+            scope: .campusCard
         ))
         try? await persistSessionCookies()
         return payload
@@ -237,63 +235,58 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         try await refreshSession(scope: scope, allowsInteractiveLogin: true)
     }
 
-    func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin: Bool) async throws {
+    func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin _: Bool) async throws {
         if scope == .campusCard {
             let snapshot = try? await sessionStore.load()
-            let hasPriorLogin = snapshot.map {
-                CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: $0.cookiesJSON)
-            } ?? false
             let credentials: LoginCredentials?
             if let snapshot {
                 credentials = try? await credentialStore.credentials(for: snapshot.user.studentID)
             } else {
                 credentials = nil
             }
-            if let snapshot, hasPriorLogin, let credentials {
-                do {
-                    let result = try await CampusWebAuthenticationService.shared.refreshCampusCard(
-                        credentials: credentials
-                    )
-                    let existing = (try? JSONDecoder().decode(
-                        [CampusCookie].self,
-                        from: Data(snapshot.cookiesJSON.utf8)
-                    )) ?? []
-                    let merged = CampusCookieMerger.merge(existing: existing, incoming: result.cookies)
-                    let cookies = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
-                    try await initialize(cookiesJSON: cookies)
-                    try await validateSession(scope: .campusCard)
-                    let validatedCookies = try await dumpCookies()
-                    try await sessionStore.save(CampusSessionSnapshot(
-                        user: snapshot.user, cookiesJSON: validatedCookies
-                    ))
-                    return
-                } catch {
-                    try? await initialize(cookiesJSON: snapshot.cookiesJSON)
-                    let reason: String
-                    if let webError = error as? CampusWebAuthenticationError {
-                        reason = webError.localizedDescription
-                    } else if error is CampusCoreError {
-                        reason = "自动登录后校方会话校验失败"
-                    } else {
-                        reason = "自动登录后 Cookie 保存或校验失败"
-                    }
-                    await postCampusCardDiagnostic(reason)
-                }
-            } else if snapshot == nil {
-                await postCampusCardDiagnostic("本机没有已保存的校园会话")
-            } else if !hasPriorLogin {
-                await postCampusCardDiagnostic("本机快照中没有可识别的校园卡 Cookie")
-            } else {
-                await postCampusCardDiagnostic("本机没有该账号的登录凭据")
-            }
-            guard allowsInteractiveLogin else { throw CampusCoreError.credentialsUnavailable }
             let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
-            guard isActive else { throw CampusCoreError.credentialsUnavailable }
+            guard CampusCardAutomaticLoginPolicy.canAttempt(
+                snapshot: snapshot, credentials: credentials, isActive: isActive
+            ), let snapshot, let credentials else {
+                let reason = if snapshot == nil {
+                    "本机没有已保存的校园会话，请先登录 App"
+                } else if credentials == nil {
+                    "本机没有该账号的登录凭据，请先登录 App"
+                } else {
+                    "请回到 App 前台后重试校园服务"
+                }
+                await postCampusCardDiagnostic(reason)
+                throw CampusCoreError.credentialsUnavailable
+            }
             do {
-                try await CampusInteractiveAuthenticationCoordinator.shared.requestCampusCardLogin()
+                let result = try await CampusWebAuthenticationService.shared.refreshCampusCard(
+                    credentials: credentials
+                )
+                let existing = (try? JSONDecoder().decode(
+                    [CampusCookie].self,
+                    from: Data(snapshot.cookiesJSON.utf8)
+                )) ?? []
+                let merged = CampusCookieMerger.merge(existing: existing, incoming: result.cookies)
+                let cookies = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
+                try await initialize(cookiesJSON: cookies)
+                try await validateSession(scope: .campusCard)
+                let validatedCookies = try await dumpCookies()
+                try await sessionStore.save(CampusSessionSnapshot(
+                    user: snapshot.user, cookiesJSON: validatedCookies
+                ))
                 return
             } catch {
-                throw CampusCoreError.credentialsUnavailable
+                try? await initialize(cookiesJSON: snapshot.cookiesJSON)
+                let reason: String
+                if let webError = error as? CampusWebAuthenticationError {
+                    reason = webError.localizedDescription
+                } else if error is CampusCoreError {
+                    reason = "自动登录后校方会话校验失败"
+                } else {
+                    reason = "自动登录后 Cookie 保存或校验失败"
+                }
+                await postCampusCardDiagnostic(reason)
+                throw error
             }
         }
         guard let snapshot = try await sessionStore.load(),
@@ -362,16 +355,12 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         method: String = "GET",
         body: Data? = nil,
         retryPolicy: CampusRequestRetryPolicy? = nil,
-        scope: CampusSessionScope = .academic,
-        allowsInteractiveLogin: Bool = false
+        scope: CampusSessionScope = .academic
     ) async throws -> Data {
         let retryPolicy = retryPolicy ?? .automatic(forHTTPMethod: method)
         do {
             return try await request(path: path, method: method, body: body)
         } catch CampusCoreError.unauthorized {
-            if scope == .campusCard, !allowsInteractiveLogin {
-                throw CampusCoreError.credentialsUnavailable
-            }
             try await refreshCoordinator.refresh(scope: scope) { [self] in
                 try await self.refreshSession(scope: scope)
             }
@@ -434,7 +423,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     private func postCampusCardDiagnostic(_ reason: String) async {
         await MainActor.run {
             NotificationCenter.default.post(
-                name: .campusCardAutomaticRefreshFailed,
+                name: .campusCardAutomaticLoginFailed,
                 object: reason
             )
         }

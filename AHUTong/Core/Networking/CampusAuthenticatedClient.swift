@@ -3,9 +3,7 @@ import Foundation
 extension Notification.Name {
     static let campusCredentialsRejected = Notification.Name("AHUTong.campusCredentialsRejected")
     static let campusReauthenticationRequired = Notification.Name("AHUTong.campusReauthenticationRequired")
-    static let campusCardAuthenticationRequired = Notification.Name("AHUTong.campusCardAuthenticationRequired")
-    static let campusCardSessionRestored = Notification.Name("AHUTong.campusCardSessionRestored")
-    static let campusCardAutomaticRefreshFailed = Notification.Name("AHUTong.campusCardAutomaticRefreshFailed")
+    static let campusCardAutomaticLoginFailed = Notification.Name("AHUTong.campusCardAutomaticLoginFailed")
 }
 
 enum CampusWebError: LocalizedError, Equatable, Sendable {

@@ -136,7 +136,7 @@ struct CampusLostFoundRemote: LostFoundRemote {
             method: method,
             body: body,
             contentType: contentType,
-            refreshesSessionOnUnauthorized: false
+            followsRedirects: false
         ).data
     }
 

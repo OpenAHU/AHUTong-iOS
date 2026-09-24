@@ -9,7 +9,6 @@ struct RootView: View {
     @StateObject private var grayGate = GrayFeatureGateModel()
     @StateObject private var toastCenter = AppToastCenter()
     @State private var restoredConsentKey = ""
-    @State private var campusCardLogin: CampusCardLoginRequest?
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -90,58 +89,15 @@ struct RootView: View {
             guard !AppRuntime.isDemoSession else { return }
             Task { await appModel.requireReauthentication() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .campusCardAuthenticationRequired)) { _ in
-            guard !AppRuntime.isDemoSession else { return }
-            Task {
-                guard let credentials = await appModel.currentCredentials() else {
-                    toastCenter.show("本机没有可用的校园账号凭据")
-                    await CampusInteractiveAuthenticationCoordinator.shared.fail(
-                        CampusWebAuthenticationError.credentialsUnavailable
-                    )
-                    return
-                }
-                campusCardLogin = CampusCardLoginRequest(credentials: credentials)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .campusCardAutomaticRefreshFailed)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: .campusCardAutomaticLoginFailed)) { notification in
             guard let reason = notification.object as? String else { return }
-            toastCenter.show("[测试] 校园卡自动续期失败：\(reason)")
+            toastCenter.show("校园服务自动登录失败：\(reason)")
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
             Task { await rescheduleCourseRemindersIfNeeded() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await rescheduleCourseRemindersIfNeeded() } }
-        }
-        .fullScreenCover(item: $campusCardLogin) { request in
-            CampusWebLoginScreen(
-                mode: .visibleCampusCard(request.credentials),
-                title: "校园服务登录"
-            ) { result in
-                switch result {
-                case let .success(authentication):
-                    Task {
-                        do {
-                            try await appModel.completeCampusCardLogin(authentication)
-                            await CampusInteractiveAuthenticationCoordinator.shared.succeed()
-                            NotificationCenter.default.post(name: .campusCardSessionRestored, object: nil)
-                            toastCenter.show("校园卡登录已恢复")
-                        } catch {
-                            await CampusInteractiveAuthenticationCoordinator.shared.fail(
-                                error as? CampusWebAuthenticationError ?? .invalidResponse
-                            )
-                            toastCenter.show(error.localizedDescription)
-                        }
-                    }
-                case let .failure(error):
-                    Task {
-                        await CampusInteractiveAuthenticationCoordinator.shared.fail(
-                            error as? CampusWebAuthenticationError ?? .navigationFailed
-                        )
-                    }
-                    toastCenter.show(error.localizedDescription)
-                }
-            }
         }
     }
 
@@ -224,11 +180,6 @@ struct RootView: View {
             // Foreground maintenance is best-effort; existing pending requests remain valid.
         }
     }
-}
-
-private struct CampusCardLoginRequest: Identifiable {
-    let id = UUID()
-    let credentials: LoginCredentials
 }
 
 enum CourseReminderMaintenancePolicy {

@@ -25,20 +25,29 @@ final class CampusWebAuthenticationTests: XCTestCase {
         ))
     }
 
-    func testCampusCardAutomaticLoginRequiresPreviouslySavedCampusCookie() throws {
+    func testFirstCampusCardLoginNeedsCredentialsButNotPriorCardCookie() throws {
         let academicOnly = [CampusCookie(
             name: "SESSION", value: "test-only", domain: "jw.ahu.edu.cn",
             path: "/", secure: true, httpOnly: true
         )]
-        let cardCookie = CampusCookie(
-            name: "JSESSIONID", value: "test-only", domain: ".adwmh.ahu.edu.cn",
-            path: "/", secure: true, httpOnly: true
-        )
         let academicJSON = String(decoding: try JSONEncoder().encode(academicOnly), as: UTF8.self)
-        let authorizedJSON = String(decoding: try JSONEncoder().encode(academicOnly + [cardCookie]), as: UTF8.self)
+        let snapshot = CampusSessionSnapshot(
+            user: User(name: "测试同学", studentID: "AB220001"), cookiesJSON: academicJSON
+        )
+        let credentials = LoginCredentials(studentID: "AB220001", password: "test-only")
 
-        XCTAssertFalse(CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: academicJSON))
-        XCTAssertTrue(CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: authorizedJSON))
+        XCTAssertTrue(CampusCardAutomaticLoginPolicy.canAttempt(
+            snapshot: snapshot, credentials: credentials, isActive: true
+        ))
+        XCTAssertFalse(CampusCardAutomaticLoginPolicy.canAttempt(
+            snapshot: snapshot, credentials: nil, isActive: true
+        ))
+        XCTAssertFalse(CampusCardAutomaticLoginPolicy.canAttempt(
+            snapshot: nil, credentials: credentials, isActive: true
+        ))
+        XCTAssertFalse(CampusCardAutomaticLoginPolicy.canAttempt(
+            snapshot: snapshot, credentials: credentials, isActive: false
+        ))
     }
 
     func testCredentialCaptureOnlyAcceptsMainFrameOnSchoolCASPage() {
@@ -98,7 +107,7 @@ final class CampusWebAuthenticationTests: XCTestCase {
             try XCTUnwrap(URL(string: "https://jw.ahu.edu.cn/student/home")),
             scope: .academic
         ))
-        XCTAssertFalse(CampusWebNavigationPolicy.isSuccess(
+        XCTAssertTrue(CampusWebNavigationPolicy.isSuccess(
             try XCTUnwrap(URL(string: "https://adwmh.ahu.edu.cn/index/user/success")),
             scope: .campusCard
         ))

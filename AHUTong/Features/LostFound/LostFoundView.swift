@@ -215,7 +215,7 @@ struct LostFoundView: View {
                         }
                         summary
                         if model.needsCampusLogin {
-                            Button("登录校园服务以继续") {
+                            Button("重试连接校园服务") {
                                 Task { await model.loginCampusService() }
                             }
                             .buttonStyle(.borderedProminent)

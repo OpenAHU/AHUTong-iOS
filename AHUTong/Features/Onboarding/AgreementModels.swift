@@ -56,8 +56,8 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
         case .privacy:
             """
             1. 在您同意后，安大通会从安徽大学官方登录页读取您主动输入的学号和密码，并使用仅本设备可用的 iOS ThisDeviceOnly Keychain 保存。校园系统 Cookie 同样只保存在本机 Keychain。
-            2. 学号、密码和 Cookie 仅用于登录 one.ahu.edu.cn、jw.ahu.edu.cn 及必要的 adwmh.ahu.edu.cn 校园服务。首次登录需要图形验证码的校园服务时，验证码必须由您在可见页面中手动填写。首次授权成功后，只要您未撤回同意，后续 Cookie 过期时 App 可启动隐藏 WebView，自动填入本机保存的账密，并将当次校方验证码图片发送到 openahu.org 的远程验证码识别接口，使用返回的识别文本帮助填入验证码，以恢复会话。
-            3. 远程验证码识别请求只包含当次验证码图片，不附带学号、密码、Cookie、Token 或其他校园业务数据。App 不将验证码图片或识别结果保存到本机文件、日志或诊断中；远程接口仅得将该数据用于本次验证码识别。识别失败、结果不可靠、出现设备验证或校方页面变化时，App 会转为可见页面，由您手动完成登录。
+            2. 正常情况下，您只需在首次使用 App 的安徽大学官方登录页手动输入账号、密码及页面要求的验证码。完成登录并同意保存凭据后，前台使用教务及校园服务时，即使此前没有校园卡 Cookie，App 也可使用本机 Keychain 凭据在隐藏 WebView 中建立或恢复 one.ahu.edu.cn、jw.ahu.edu.cn 和必要的 adwmh.ahu.edu.cn 校园会话。校园服务图形验证码从第一次连接起即可由 App 获取当次校方图片，发送到 openahu.org 的远程验证码识别接口，并将识别结果提交给校方；不再要求您为校园服务单独手动填写验证码。
+            3. 远程验证码识别请求只包含当次验证码图片，不附带学号、密码、Cookie、Token 或其他校园业务数据。App 不将验证码图片或识别结果保存到本机文件、日志或诊断中；远程接口仅得将该数据用于本次验证码识别。识别失败、结果不可靠、出现设备验证或校方页面变化时，App 会提示原因并允许稍后重试，不会自动弹出第二个登录页要求您手动填验证码；在校方要求额外验证且无法自动完成时，相关校园服务可能暂时不可用。
             4. 账号、密码、Token 和 Cookie 不会进入日志、诊断、剪贴板、iCloud 备份或开发者服务器，也不会发送给验证码识别接口、统计或广告服务。安大通不将这些凭据用于校园服务登录以外的用途。
             5. 登录、教务、校园卡、失物招领等请求会直接发送到安徽大学对应业务系统；天气查询会按您的授权向天气服务发送必要的位置或城市信息。
             6. 支付功能仅在您主动确认后通过学校 HTTPS 接口提交。校园卡六位密码只在当前操作的内存中短暂存在，完成后立即清除。
@@ -75,8 +75,8 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
 }
 
 struct AgreementConsent: Codable, Equatable, Sendable {
-    static let currentVersion = 3
-    static let currentPrivacyPolicyVersion = 3
+    static let currentVersion = 4
+    static let currentPrivacyPolicyVersion = 4
 
     var acceptedDocumentIDs: Set<String> = []
     var confirmedVersion: Int? = nil

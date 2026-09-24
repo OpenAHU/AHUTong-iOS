@@ -52,10 +52,12 @@ final class CampusCardInteractionTests: XCTestCase {
 
         XCTAssertEqual(automaticCount, 1)
         XCTAssertEqual(explicitRetryCount, 2)
-        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(refreshCount, 2)
+        let refreshFlags = await api.refreshInteractionFlags()
+        XCTAssertEqual(refreshFlags, [false, false])
     }
 
-    func testExplicitQRCodeLoadCanRestoreCampusCardSession() async {
+    func testFirstQRCodeLoadCanRestoreCampusCardSessionSilently() async {
         let api = CampusCardInteractionAPI(failsQRCode: true, recoversAfterRefresh: true)
         let suite = "campus-card-interaction-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -64,20 +66,16 @@ final class CampusCardInteractionTests: XCTestCase {
 
         await model.loadQRCode(demo: false)
         let automaticRefreshCount = await api.refreshCount()
-        XCTAssertEqual(automaticRefreshCount, 0)
-
-        await model.loadQRCode(demo: false, force: true)
-
         XCTAssertEqual(model.qrState, .loaded("TEST-QR"))
-        let explicitRefreshCount = await api.refreshCount()
-        XCTAssertEqual(explicitRefreshCount, 1)
+        XCTAssertEqual(automaticRefreshCount, 1)
+        let refreshFlags = await api.refreshInteractionFlags()
+        XCTAssertEqual(refreshFlags, [false])
     }
 
     func testExpandedQRCodeCanRenewSilentlyWithoutPresentingLogin() async {
         let api = CampusCardInteractionAPI(
             failsQRCode: true,
-            recoversAfterRefresh: true,
-            supportsSilentRefresh: true
+            recoversAfterRefresh: true
         )
         let suite = "campus-card-interaction-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -90,6 +88,20 @@ final class CampusCardInteractionTests: XCTestCase {
         let refreshFlags = await api.refreshInteractionFlags()
         XCTAssertEqual(refreshFlags, [false])
         XCTAssertEqual(model.balance, 42)
+    }
+
+    func testFirstBalanceLoadCanRestoreCampusCardSessionSilently() async {
+        let api = CampusCardInteractionAPI(recoversAfterRefresh: true, failsFirstBalance: true)
+        let suite = "campus-card-first-balance-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = CampusCardViewModel(api: api, userID: "test-user", defaults: defaults)
+
+        await model.load(demo: false)
+
+        XCTAssertEqual(model.balance, 42)
+        let refreshFlags = await api.refreshInteractionFlags()
+        XCTAssertEqual(refreshFlags, [false])
     }
 
     func testTappingLoadedQRCodeForcesNewCodeAndRefreshesBalance() async {
@@ -117,19 +129,16 @@ private actor CampusCardInteractionAPI: CampusCoreAPI {
     private var refreshFlags: [Bool] = []
     private let failsQRCode: Bool
     private let recoversAfterRefresh: Bool
-    private let supportsSilentRefresh: Bool
     private let failsFirstBalance: Bool
     private var balanceCalls = 0
 
     init(
         failsQRCode: Bool = false,
         recoversAfterRefresh: Bool = false,
-        supportsSilentRefresh: Bool = false,
         failsFirstBalance: Bool = false
     ) {
         self.failsQRCode = failsQRCode
         self.recoversAfterRefresh = recoversAfterRefresh
-        self.supportsSilentRefresh = supportsSilentRefresh
         self.failsFirstBalance = failsFirstBalance
     }
 
@@ -147,14 +156,14 @@ private actor CampusCardInteractionAPI: CampusCoreAPI {
         balanceFlags.append(allowsInteractiveLogin)
         balanceCalls += 1
         if failsFirstBalance && balanceCalls == 1 {
-            throw CampusCoreError.credentialsUnavailable
+            try refreshSession(scope: .campusCard, allowsInteractiveLogin: false)
         }
         return 42
     }
     func cardQRCode() throws -> String {
         qrCalls += 1
         if failsQRCode && (!recoversAfterRefresh || refreshes == 0) {
-            throw CampusCoreError.credentialsUnavailable
+            try refreshSession(scope: .campusCard, allowsInteractiveLogin: false)
         }
         return "TEST-QR"
     }
@@ -166,9 +175,6 @@ private actor CampusCardInteractionAPI: CampusCoreAPI {
 
     func refreshSession(scope: CampusSessionScope, allowsInteractiveLogin: Bool) throws {
         refreshFlags.append(allowsInteractiveLogin)
-        guard allowsInteractiveLogin || supportsSilentRefresh else {
-            throw CampusCoreError.credentialsUnavailable
-        }
         try refreshSession(scope: scope)
     }
 

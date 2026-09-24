@@ -46,6 +46,25 @@ final class CampusCardLoginClientTests: XCTestCase {
         }
     }
 
+    func testParentDomainSchoolCookieCanCarryFirstCampusLogin() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CampusCardLoginTestURLProtocol.self]
+        let client = CampusCardLoginClient(session: URLSession(configuration: configuration))
+        let cookie = CampusCookie(
+            name: "SESSION", value: "first-test-only", domain: ".ahu.edu.cn",
+            path: "/", secure: true, httpOnly: true
+        )
+
+        _ = try await client.login(
+            credentials: LoginCredentials(studentID: "AB220001", password: "test-only"),
+            captcha: "1234",
+            cookies: [cookie]
+        )
+
+        let captured = try XCTUnwrap(CampusCardLoginTestURLProtocol.lastRequest.value)
+        XCTAssertEqual(captured.value(forHTTPHeaderField: "Cookie"), "SESSION=first-test-only")
+    }
+
     func testSchoolRejectionDoesNotProduceAuthenticatedCookies() async {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [CampusCardRejectedURLProtocol.self]

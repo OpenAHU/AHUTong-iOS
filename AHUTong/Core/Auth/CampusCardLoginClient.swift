@@ -35,9 +35,7 @@ struct CampusCardLoginClient: Sendable {
             throw CampusCardLoginError.invalidCaptcha
         }
         let schoolCookies = cookies.filter { $0.matches(Self.endpoint) && !$0.value.isEmpty }
-        guard schoolCookies.contains(where: {
-            $0.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) == "adwmh.ahu.edu.cn"
-        }) else {
+        guard !schoolCookies.isEmpty else {
             throw CampusCardLoginError.missingSchoolSession
         }
 

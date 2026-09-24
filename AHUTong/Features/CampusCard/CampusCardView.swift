@@ -93,24 +93,13 @@ final class CampusCardViewModel: ObservableObject {
             if demo {
                 payload = "AHUTONG-DEMO-PAYMENT-CODE"
             } else {
-                do {
-                    payload = try await api.cardQRCode()
-                } catch CampusCoreError.credentialsUnavailable {
-                    try await api.refreshSession(scope: .campusCard, allowsInteractiveLogin: force)
-                    payload = try await api.cardQRCode()
-                }
+                payload = try await api.cardQRCode()
             }
             qrState = .loaded(payload)
             if !demo { await load(demo: false, refresh: true) }
         } catch {
             qrState = .failed(error.localizedDescription)
         }
-    }
-
-    func reloadQRCodeAfterAuthentication(demo: Bool) async {
-        if case .loading = qrState { return }
-        qrState = .idle
-        await loadQRCode(demo: demo)
     }
 
     func refreshQRCodeAndBalance(demo: Bool) async {
@@ -146,12 +135,6 @@ struct CampusCardPanel: View {
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .task { await model.load(demo: demo) }
-        .onReceive(NotificationCenter.default.publisher(for: .campusCardSessionRestored)) { _ in
-            Task {
-                await model.load(demo: demo, refresh: true)
-                if showsQRCode { await model.reloadQRCodeAfterAuthentication(demo: demo) }
-            }
-        }
         .fullScreenCover(isPresented: $showsFullQRCode) {
             ZStack {
                 Color.black.opacity(0.82).ignoresSafeArea()

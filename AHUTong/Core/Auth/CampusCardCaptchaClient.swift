@@ -34,12 +34,6 @@ struct CampusCardCaptchaClient: Sendable {
 
     func fetch(cookies: [CampusCookie]) async throws -> CampusCardCaptchaImage {
         let schoolCookies = cookies.filter { $0.matches(Self.endpoint) && !$0.value.isEmpty }
-        guard schoolCookies.contains(where: {
-            $0.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-                == "adwmh.ahu.edu.cn"
-        }) else {
-            throw CampusCardCaptchaFetchError.missingSchoolSession
-        }
 
         var request = URLRequest(url: Self.endpoint, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         request.httpMethod = "GET"
@@ -47,10 +41,12 @@ struct CampusCardCaptchaClient: Sendable {
         request.timeoutInterval = 10
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-        request.setValue(
-            schoolCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; "),
-            forHTTPHeaderField: "Cookie"
-        )
+        if !schoolCookies.isEmpty {
+            request.setValue(
+                schoolCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; "),
+                forHTTPHeaderField: "Cookie"
+            )
+        }
 
         let data: Data
         let response: URLResponse
@@ -81,9 +77,13 @@ struct CampusCardCaptchaClient: Sendable {
         }
         let received = HTTPCookie.cookies(withResponseHeaderFields: fields, for: Self.endpoint)
         let accepted = CampusWebCookiePolicy.cookies(from: received, scope: .campusCard)
+        let merged = CampusCookieMerger.merge(existing: schoolCookies, incoming: accepted)
+        guard !merged.filter({ $0.matches(Self.endpoint) && !$0.value.isEmpty }).isEmpty else {
+            throw CampusCardCaptchaFetchError.missingSchoolSession
+        }
         return CampusCardCaptchaImage(
             data: data,
-            cookies: CampusCookieMerger.merge(existing: schoolCookies, incoming: accepted)
+            cookies: merged
         )
     }
 

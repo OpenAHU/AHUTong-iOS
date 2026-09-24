@@ -18,9 +18,15 @@ final class CampusCardCaptchaClientTests: XCTestCase {
         XCTAssertFalse(image.cookies.contains { $0.name == "EXTERNAL" })
     }
 
-    func testMissingSchoolSessionStopsBeforeRequest() async {
+    func testFirstCampusLoginEstablishesSessionWithoutSavedCookie() async throws {
+        let image = try await makeClient().fetch(cookies: [])
+
+        XCTAssertEqual(image.cookies.first { $0.name == "JSESSIONID" }?.value, "first-session")
+    }
+
+    func testMissingSchoolSessionAfterCaptchaResponseFailsClosed() async {
         do {
-            _ = try await makeClient().fetch(cookies: [])
+            _ = try await makeClient(using: CampusCardNoSessionFixtureProtocol.self).fetch(cookies: [])
             XCTFail("Expected missing school session")
         } catch {
             XCTAssertEqual(error as? CampusCardCaptchaFetchError, .missingSchoolSession)
@@ -61,9 +67,9 @@ final class CampusCardCaptchaClientTests: XCTestCase {
         )
     }
 
-    private func makeClient() -> CampusCardCaptchaClient {
+    private func makeClient(using fixture: AnyClass = CampusCardCaptchaFixtureProtocol.self) -> CampusCardCaptchaClient {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [CampusCardCaptchaFixtureProtocol.self]
+        configuration.protocolClasses = [fixture]
         configuration.httpShouldSetCookies = false
         configuration.httpCookieAcceptPolicy = .never
         return CampusCardCaptchaClient(session: URLSession(
@@ -74,7 +80,8 @@ final class CampusCardCaptchaClientTests: XCTestCase {
     }
 }
 
-private final class CampusCardCaptchaFixtureProtocol: URLProtocol, @unchecked Sendable {
+private class CampusCardCaptchaFixtureProtocol: URLProtocol, @unchecked Sendable {
+    class var providesAnonymousSession: Bool { true }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
@@ -83,7 +90,6 @@ private final class CampusCardCaptchaFixtureProtocol: URLProtocol, @unchecked Se
         let cookieHeader = request.value(forHTTPHeaderField: "Cookie") ?? ""
         let isValidRequest = request.httpMethod == "GET"
             && url == CampusCardCaptchaClient.endpoint
-            && cookieHeader.contains("JSESSIONID=")
             && !cookieHeader.contains("EXTERNAL=")
         let status: Int
         let data: Data
@@ -103,7 +109,13 @@ private final class CampusCardCaptchaFixtureProtocol: URLProtocol, @unchecked Se
             data = Data("<html>login</html>".utf8)
         } else {
             status = 200
-            fields["Set-Cookie"] = "CAPTCHA=fixture-session; Path=/; Secure; HttpOnly"
+            if cookieHeader.isEmpty {
+                if Self.providesAnonymousSession {
+                    fields["Set-Cookie"] = "JSESSIONID=first-session; Path=/; Secure; HttpOnly"
+                }
+            } else {
+                fields["Set-Cookie"] = "CAPTCHA=fixture-session; Path=/; Secure; HttpOnly"
+            }
             data = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0xFF, 0xD9])
         }
         let response = HTTPURLResponse(
@@ -115,6 +127,10 @@ private final class CampusCardCaptchaFixtureProtocol: URLProtocol, @unchecked Se
     }
 
     override func stopLoading() {}
+}
+
+private final class CampusCardNoSessionFixtureProtocol: CampusCardCaptchaFixtureProtocol, @unchecked Sendable {
+    override class var providesAnonymousSession: Bool { false }
 }
 
 private final class CampusCardCaptchaTestRedirectBlocker: NSObject, URLSessionTaskDelegate, @unchecked Sendable {

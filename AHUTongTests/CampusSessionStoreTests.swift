@@ -37,7 +37,7 @@ final class CampusSessionStoreTests: XCTestCase {
         let restored = try await sessionStore.load()
         XCTAssertEqual(model.sessionState, .authenticated(user))
         XCTAssertEqual(restored?.cookiesJSON, flat)
-        XCTAssertTrue(CampusCardAuthorizationPolicy.hasPriorLogin(cookiesJSON: restored?.cookiesJSON ?? ""))
+        XCTAssertTrue(CampusCookieSnapshotPolicy.isFlat(restored?.cookiesJSON ?? ""))
     }
 
     @MainActor
