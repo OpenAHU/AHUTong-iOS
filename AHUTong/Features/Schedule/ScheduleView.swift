@@ -65,6 +65,7 @@ enum ScheduleOverviewLayout {
 final class ScheduleViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<[Course]> = .idle
     @Published private(set) var currentWeek = 1
+    @Published private(set) var currentWeekWarning: String?
     @Published private(set) var source: ScheduleSnapshotSource?
 
     private let currentRepository: ScheduleRepository
@@ -99,6 +100,7 @@ final class ScheduleViewModel: ObservableObject {
     func load(demo: Bool = false, previewNext: Bool = false) async {
         if demo {
             currentWeek = 1
+            currentWeekWarning = nil
             switch DemoDataState.current {
             case .normal:
                 let fallback = previewNext ? Self.demoNextSemesterCourses : Self.demoCourses
@@ -130,7 +132,8 @@ final class ScheduleViewModel: ObservableObject {
                 semester: previewNext ? semester.next : semester
             )
             try Task.checkCancellation()
-            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? 1)
+            await updateCurrentWeek(previewNext: previewNext)
+            try Task.checkCancellation()
             source = result.source
             state = .loaded(result.courses)
             try? await experienceStore.save(
@@ -162,7 +165,8 @@ final class ScheduleViewModel: ObservableObject {
             try Task.checkCancellation()
             source = result.source
             state = .loaded(result.courses)
-            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? currentWeek)
+            await updateCurrentWeek(previewNext: previewNext)
+            try Task.checkCancellation()
             try? await experienceStore.save(
                 courses: result.courses,
                 semester: previewNext ? semester.next : semester,
@@ -192,6 +196,7 @@ final class ScheduleViewModel: ObservableObject {
 
     private func loadExperience(previewNext: Bool) async {
         state = .loading
+        currentWeekWarning = nil
         let snapshot = await experienceStore.snapshot()
         let target = previewNext ? semester.next : semester
         let courses = snapshot.coursesBySemester[target.rawValue] ?? []
@@ -200,6 +205,25 @@ final class ScheduleViewModel: ObservableObject {
         state = courses.isEmpty ? .empty : .loaded(courses)
         if !previewNext {
             await updateSystemIntegrations(courses: courses)
+        }
+    }
+
+    private func updateCurrentWeek(previewNext: Bool) async {
+        guard !previewNext else {
+            currentWeek = 1
+            currentWeekWarning = nil
+            return
+        }
+        do {
+            let week = try await api.currentWeek()
+            guard !Task.isCancelled else { return }
+            currentWeek = week
+            currentWeekWarning = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            currentWeekWarning = "教学周暂时不可用，已保留第 \(currentWeek) 周"
         }
     }
 
@@ -286,6 +310,13 @@ struct ScheduleView: View {
         AndroidScreen {
             ScrollView(.vertical) {
                 VStack(spacing: 8) {
+                    if let warning = model.currentWeekWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("schedule.current-week.warning")
+                    }
                     controls
                     content
                 }
@@ -478,12 +509,11 @@ struct ScheduleView: View {
             HStack(spacing: spacing) {
                 Color.clear.frame(width: timeWidth, height: 64)
                 ForEach(Array(weekdays.enumerated()), id: \.offset) { index, weekday in
-                    VStack(spacing: 2) {
-                        Text(weekday).font(.caption.bold())
-                        Text(dateLabel(dayIndex: index, week: week)).font(.caption2).foregroundStyle(.secondary)
-                    }
+                    Text(weekday)
+                        .font(.caption.bold())
                     .frame(width: dayWidth, height: 64)
                     .background(index == currentWeekdayIndex && week == model.currentWeek ? AndroidParityPalette.primaryContainer(colorScheme) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityIdentifier("schedule.weekday.\(index + 1)")
                 }
             }
             ForEach(Array(times.enumerated()), id: \.offset) { index, time in
@@ -623,21 +653,6 @@ struct ScheduleView: View {
 
     private var currentWeekdayIndex: Int {
         demo || previewNextSemester ? -1 : (Calendar.current.component(.weekday, from: Date()) + 5) % 7
-    }
-
-    private func dateLabel(dayIndex: Int, week: Int) -> String {
-        let calendar = Calendar(identifier: .gregorian)
-        let date: Date
-        if demo {
-            let semesterStart = calendar.date(from: DateComponents(year: 2026, month: 7, day: 13)) ?? Date()
-            date = calendar.date(byAdding: .day, value: (week - 1) * 7 + dayIndex, to: semesterStart) ?? semesterStart
-        } else {
-            let weekday = calendar.component(.weekday, from: Date())
-            let mondayOffset = -((weekday + 5) % 7) + (week - model.currentWeek) * 7
-            date = calendar.date(byAdding: .day, value: mondayOffset + dayIndex, to: Date()) ?? Date()
-        }
-        let components = calendar.dateComponents([.month, .day], from: date)
-        return String(format: "%02d-%02d", components.month ?? 0, components.day ?? 0)
     }
 
     private var demo: Bool { AppRuntime.isDemoSession }

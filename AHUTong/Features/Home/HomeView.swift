@@ -185,7 +185,7 @@ final class HomeViewModel: ObservableObject {
             async let week = api.currentWeek()
             let result = try await snapshot
             courses = result.courses
-            currentWeek = (try? await week) ?? 1
+            currentWeek = (try? await week) ?? currentWeek
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
