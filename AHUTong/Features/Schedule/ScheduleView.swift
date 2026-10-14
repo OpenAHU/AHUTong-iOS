@@ -65,11 +65,16 @@ enum ScheduleOverviewLayout {
 final class ScheduleViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<[Course]> = .idle
     @Published private(set) var currentWeek = 1
+    @Published private(set) var referenceDate = Date()
+    @Published private(set) var currentWeekIsKnown = false
     @Published private(set) var source: ScheduleSnapshotSource?
 
     private let currentRepository: ScheduleRepository
     private let nextRepository: ScheduleRepository
-    private let api: any CampusCoreAPI
+    private let weekRepository: ScheduleWeekRepository
+    private let now: @Sendable () -> Date
+    private var isPreviewingNext = false
+    private var requestID = UUID()
     private let semester: Semester
     private let accessMode: ScheduleAccessMode
     private let experienceStore: ExperienceScheduleStore
@@ -78,12 +83,13 @@ final class ScheduleViewModel: ObservableObject {
         api: any CampusCoreAPI,
         userID: String,
         accessMode: ScheduleAccessMode = .authenticated,
-        experienceStore: ExperienceScheduleStore = ExperienceScheduleStore()
+        experienceStore: ExperienceScheduleStore = ExperienceScheduleStore(),
+        store: any DataStore = AppPersistence.migratingDefaults(),
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
-        self.api = api
+        self.now = now
         self.accessMode = accessMode
         self.experienceStore = experienceStore
-        let store = AppPersistence.migratingDefaults()
         let scopedStore = UserScopedStore(store: store, userID: userID)
         currentRepository = ScheduleRepository(
             remote: RustScheduleRemoteDataSource(api: api),
@@ -93,11 +99,16 @@ final class ScheduleViewModel: ObservableObject {
             remote: RustScheduleRemoteDataSource(api: api, scope: .next),
             cache: scopedStore
         )
-        semester = Semester.current()
+        semester = Semester.current(date: now(), calendar: ScheduleCalendar.campus)
+        weekRepository = ScheduleWeekRepository(api: api, cache: scopedStore, semester: semester, now: now)
     }
 
     func load(demo: Bool = false, previewNext: Bool = false) async {
+        requestID = UUID()
+        isPreviewingNext = previewNext
+        referenceDate = demo ? DemoDataState.referenceDate : now()
         if demo {
+            currentWeekIsKnown = true
             currentWeek = 1
             switch DemoDataState.current {
             case .normal:
@@ -124,58 +135,85 @@ final class ScheduleViewModel: ObservableObject {
             await loadExperience(previewNext: previewNext)
             return
         }
+        await loadAuthenticated(previewNext: previewNext, policy: .cacheFirst)
+    }
+
+    func refresh(previewNext: Bool = false) async {
+        requestID = UUID()
+        isPreviewingNext = previewNext
+        if AppRuntime.isDemoSession {
+            await load(demo: true, previewNext: previewNext)
+        } else if accessMode == .experience {
+            await loadExperience(previewNext: previewNext)
+        } else {
+            await loadAuthenticated(previewNext: previewNext, policy: .refresh)
+        }
+    }
+
+    private func loadAuthenticated(previewNext: Bool, policy: ScheduleLoadPolicy) async {
+        let id = requestID
         state = .loading
+        if previewNext {
+            currentWeekIsKnown = false
+            currentWeek = 1
+            referenceDate = now()
+        } else {
+            let cached = await weekRepository.cached()
+            guard requestID == id, !Task.isCancelled else { return }
+            apply(cached)
+        }
         do {
             let result = try await repository(previewNext: previewNext).load(
-                semester: previewNext ? semester.next : semester
+                semester: previewNext ? semester.next : semester, policy: policy
             )
-            try Task.checkCancellation()
-            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? 1)
+            guard requestID == id, !Task.isCancelled else { return }
             source = result.source
-            state = .loaded(result.courses)
+            state = result.courses.isEmpty ? .empty : .loaded(result.courses)
+            // Cached courses are visible while the week request is still in flight.
+            if !previewNext, let position = try? await weekRepository.refresh() {
+                guard requestID == id, !Task.isCancelled else { return }
+                apply(position)
+            }
+            guard requestID == id, !Task.isCancelled else { return }
+            // Without a valid week anchor, keep the courses visible but do not
+            // publish a made-up week to experience mode, widgets or reminders.
+            guard previewNext || currentWeekIsKnown else { return }
             try? await experienceStore.save(
                 courses: result.courses,
                 semester: previewNext ? semester.next : semester,
                 currentWeek: currentWeek,
                 updatesCurrentWeek: !previewNext
             )
-            if !previewNext { await updateSystemIntegrations(courses: result.courses) }
+            if !previewNext {
+                await updateSystemIntegrations(courses: result.courses, referenceDate: referenceDate)
+            }
         } catch is CancellationError {
             return
         } catch {
+            guard requestID == id, !Task.isCancelled else { return }
             state = .failed(AppErrorState(message: error.localizedDescription))
             if !previewNext { await publishWidget(.unavailable(.expired)) }
         }
     }
 
-    func refresh(previewNext: Bool = false) async {
-        if accessMode == .experience {
-            await loadExperience(previewNext: previewNext)
-            return
-        }
-        state = .loading
-        do {
-            let result = try await repository(previewNext: previewNext).load(
-                semester: previewNext ? semester.next : semester,
-                policy: .refresh
-            )
-            try Task.checkCancellation()
-            source = result.source
-            state = .loaded(result.courses)
-            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? currentWeek)
-            try? await experienceStore.save(
-                courses: result.courses,
-                semester: previewNext ? semester.next : semester,
-                currentWeek: currentWeek,
-                updatesCurrentWeek: !previewNext
-            )
-            if !previewNext { await updateSystemIntegrations(courses: result.courses) }
-        } catch is CancellationError {
-            return
-        } catch {
-            state = .failed(AppErrorState(message: error.localizedDescription))
-            if !previewNext { await publishWidget(.unavailable(.expired)) }
-        }
+    private func apply(_ position: ScheduleWeekSnapshot) {
+        currentWeekIsKnown = !position.isFallback
+        currentWeek = position.week
+        referenceDate = position.referenceDate
+    }
+
+    func advanceDate() {
+        guard !AppRuntime.isDemoSession, !isPreviewingNext else { return }
+        apply(ScheduleWeekSnapshot(week: currentWeek, referenceDate: referenceDate,
+                                   isFallback: !currentWeekIsKnown).resolved(at: now()))
+    }
+
+    func date(weekday: Int, week: Int) -> Date? {
+        // The next semester's start date is unknown; do not label it with this semester's dates.
+        guard !isPreviewingNext, currentWeekIsKnown else { return nil }
+        return ScheduleCalendar.date(
+            week: week, weekday: weekday, currentWeek: currentWeek, referenceDate: referenceDate
+        )
     }
 
     func importExperienceSchedule(_ data: Data) async throws -> Semester {
@@ -191,15 +229,20 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     private func loadExperience(previewNext: Bool) async {
+        let id = requestID
+        isPreviewingNext = previewNext
         state = .loading
         let snapshot = await experienceStore.snapshot()
+        guard requestID == id, !Task.isCancelled else { return }
         let target = previewNext ? semester.next : semester
         let courses = snapshot.coursesBySemester[target.rawValue] ?? []
-        currentWeek = previewNext ? 1 : snapshot.resolvedCurrentWeek()
+        referenceDate = now()
+        currentWeekIsKnown = !previewNext && snapshot.updatedAt != .distantPast
+        currentWeek = previewNext ? 1 : snapshot.resolvedCurrentWeek(at: referenceDate)
         source = .cache
         state = courses.isEmpty ? .empty : .loaded(courses)
         if !previewNext {
-            await updateSystemIntegrations(courses: courses)
+            await updateSystemIntegrations(courses: courses, referenceDate: referenceDate)
         }
     }
 
@@ -242,6 +285,7 @@ final class ScheduleViewModel: ObservableObject {
 }
 
 struct ScheduleView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: ScheduleViewModel
     @State private var selectedWeek = 1
@@ -294,9 +338,17 @@ struct ScheduleView: View {
             .scrollIndicators(.hidden)
         }
         .task(id: previewNextSemester) {
+            selectedWeek = 1
             await model.load(demo: AppRuntime.isDemoSession, previewNext: previewNextSemester)
-            guard !Task.isCancelled else { return }
-            selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
+        }
+        .onChange(of: model.currentWeek) { oldWeek, newWeek in
+            if selectedWeek == oldWeek { selectedWeek = ScheduleWeekNavigation.clamped(newWeek) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.advanceDate() }
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
+            model.advanceDate()
         }
         .sheet(item: $selectedCourse) { course in CourseDetailView(course: course) }
         .sheet(isPresented: $showSettings) {
@@ -481,6 +533,7 @@ struct ScheduleView: View {
                     VStack(spacing: 2) {
                         Text(weekday).font(.caption.bold())
                         Text(dateLabel(dayIndex: index, week: week)).font(.caption2).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("schedule.date.week.\(week).day.\(index + 1)")
                     }
                     .frame(width: dayWidth, height: 64)
                     .background(index == currentWeekdayIndex && week == model.currentWeek ? AndroidParityPalette.primaryContainer(colorScheme) : .clear, in: RoundedRectangle(cornerRadius: 8))
@@ -622,21 +675,12 @@ struct ScheduleView: View {
     }
 
     private var currentWeekdayIndex: Int {
-        demo || previewNextSemester ? -1 : (Calendar.current.component(.weekday, from: Date()) + 5) % 7
+        demo || previewNextSemester || !model.currentWeekIsKnown ? -1 : (ScheduleCalendar.campus.component(.weekday, from: model.referenceDate) + 5) % 7
     }
 
     private func dateLabel(dayIndex: Int, week: Int) -> String {
-        let calendar = Calendar(identifier: .gregorian)
-        let date: Date
-        if demo {
-            let semesterStart = calendar.date(from: DateComponents(year: 2026, month: 7, day: 13)) ?? Date()
-            date = calendar.date(byAdding: .day, value: (week - 1) * 7 + dayIndex, to: semesterStart) ?? semesterStart
-        } else {
-            let weekday = calendar.component(.weekday, from: Date())
-            let mondayOffset = -((weekday + 5) % 7) + (week - model.currentWeek) * 7
-            date = calendar.date(byAdding: .day, value: mondayOffset + dayIndex, to: Date()) ?? Date()
-        }
-        let components = calendar.dateComponents([.month, .day], from: date)
+        guard let date = model.date(weekday: dayIndex + 1, week: week) else { return "—" }
+        let components = ScheduleCalendar.campus.dateComponents([.month, .day], from: date)
         return String(format: "%02d-%02d", components.month ?? 0, components.day ?? 0)
     }
 

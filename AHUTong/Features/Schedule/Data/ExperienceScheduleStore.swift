@@ -15,11 +15,9 @@ struct ExperienceScheduleSnapshot: Codable, Equatable, Sendable {
     var updatedAt = Date.distantPast
     var coursesBySemester: [String: [Course]] = [:]
 
-    func resolvedCurrentWeek(at date: Date = Date(), calendar: Calendar = .current) -> Int {
+    func resolvedCurrentWeek(at date: Date = Date(), calendar: Calendar = ScheduleCalendar.campus) -> Int {
         guard updatedAt != .distantPast else { return min(max(currentWeek, 1), 20) }
-        let sourceStart = calendar.dateInterval(of: .weekOfYear, for: updatedAt)?.start ?? updatedAt
-        let targetStart = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
-        let offset = calendar.dateComponents([.weekOfYear], from: sourceStart, to: targetStart).weekOfYear ?? 0
+        let offset = ScheduleCalendar.weekOffset(from: updatedAt, to: date, calendar: calendar)
         return min(max(currentWeek + offset, 1), 20)
     }
 }
@@ -80,10 +78,11 @@ struct ExperienceScheduleStore: Sendable {
         var value = await snapshot()
         if updatesCurrentWeek {
             value.currentWeek = min(max(currentWeek, 1), 20)
-        } else {
+            value.updatedAt = Date()
+        } else if value.updatedAt != .distantPast {
             value.currentWeek = value.resolvedCurrentWeek()
+            value.updatedAt = Date()
         }
-        value.updatedAt = Date()
         value.coursesBySemester[semester.rawValue] = normalized
         try await persist(value)
     }

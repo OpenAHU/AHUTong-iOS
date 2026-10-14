@@ -51,11 +51,9 @@ struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
         Self(status: status, currentWeek: 1, updatedAt: updatedAt, courses: [], allCourses: [])
     }
 
-    func resolved(at date: Date, calendar: Calendar = .current) -> Self {
+    func resolved(at date: Date, calendar: Calendar = ScheduleCalendar.campus) -> Self {
         guard status == .ready || status == .empty else { return self }
-        let sourceStart = calendar.dateInterval(of: .weekOfYear, for: updatedAt)?.start ?? updatedAt
-        let targetStart = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
-        let offset = calendar.dateComponents([.weekOfYear], from: sourceStart, to: targetStart).weekOfYear ?? 0
+        let offset = ScheduleCalendar.weekOffset(from: updatedAt, to: date, calendar: calendar)
         let week = max(1, min(20, currentWeek + offset))
         let source = allCourses ?? courses
         let active = source.filter { ($0.weekIndexes ?? [currentWeek]).contains(week) }

@@ -38,19 +38,21 @@ enum DemoDataState: String {
             .first(where: { $0.hasPrefix(prefix) })
             .map { String($0.dropFirst(prefix.count)) }
         if let value, let state = Self(rawValue: value) { return state }
-        return Self(rawValue: UserDefaults.standard.string(forKey: DebugRuntimeSettings.scenarioKey) ?? "") ?? .normal
+        return .normal
     }
 
     static var referenceDate: Date {
-        let stored = UserDefaults.standard.double(forKey: DebugRuntimeSettings.timeKey)
-        return stored > 0 ? Date(timeIntervalSince1970: stored) : Date(timeIntervalSince1970: 1_784_023_200)
+        Date(timeIntervalSince1970: 1_784_023_200)
     }
 }
 
 enum AppRuntime {
     static var isDemoSession: Bool {
+        #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--demo-session")
-            || UserDefaults.standard.bool(forKey: DebugRuntimeSettings.mockEnabledKey)
+        #else
+        false
+        #endif
     }
 }
 
@@ -70,7 +72,7 @@ enum DebugRuntimeSettings {
         if let argument = arguments.first(where: { $0.hasPrefix(prefix) }) {
             return String(argument.dropFirst(prefix.count))
         }
-        return UserDefaults.standard.string(forKey: endpointKeyPrefix + endpoint) ?? "{}"
+        return "{}"
     }
 
     static func setEndpointJSON(_ value: String, endpoint: String) throws {

@@ -8,13 +8,13 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 用户只在 App 初次登录手动输入一次：无历史 ADWMH Cookie 时也静默建立校园服务会话；余额与失物招领只读请求自动续期，失败仅提示重试，不弹第二登录页 |
-| 下一步 | 物理 iPhone 用授权账号验证清缓存重登后首次 ADWMH 隐藏登录、网络失败重试、余额/失物招领及隐私 v4 再确认 |
+| 当前焦点 | 修复弱网开屏长等待、教学周字段误读和课表日期错位；申请制 Ad Hoc 网页分发方案已整理到发布安装清单 |
+| 下一步 | 在授权账号真机验证弱网冷启动、10 月当前周日期、Widget 同步；用一台新登记设备试通 UDID 收集与 Ad Hoc Safari 安装 |
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
 | 严格完成定义 | 16 / 25（64.0%）；AUTH-02、CARD-01、CONTENT-01 的首次无感校园服务登录仍待 macOS 和授权账号真机验证，PREF-01 及 PAY-01～05 保留各自验证边界 |
-| 当前分支 | `codex/ios-authorization-prep` |
-| 最近更新 | 2026-09-24 |
+| 当前分支 | `codex/ios-startup-schedule-fixes` |
+| 最近更新 | 2026-10-14 |
 
 ## 1. 目标与边界
 
@@ -269,12 +269,12 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab` | 2026-07-16 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏；冷启动本地会话就绪即进入首页，网络校验不阻塞开屏；最终 UI smoke 见 E-20261014-01。 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待真机验证 | 隐私 v4 同意后以官方可见 WebView 首登，也可点“暂不登录”进入体验账户并跨启动保持；账密/Cookie 只入 ThisDeviceOnly Keychain；教务过期时前台隐藏 WebView single-flight 续期。ADWMH 首次与后续均在前台隐藏 WebView 建立校方会话，即使没有历史 Cookie 也以同域原生 GET 获取验证码并接收新会话 Cookie，只将图片发往 `https://openahu.org/ocr/captcha` 识别并用同一 `/user/login` 续期，失败提示重试，不打开第二登录页。Keychain 会话快照统一使用 SDK 的扁平 Cookie 列表，仅在识别为原生 NDJSON 且转换非空时迁移旧 Cookie 存档，离线缓存不被空数组覆盖；写请求不重放；隐藏续期失败暂显示脱敏阶段 Toast | `CampusCardLoginClientTests` 覆盖登录字段与失败响应，`CampusSessionStoreTests` 新增旧快照迁移；373 个单元测试已通过，旧快照离线保护见 `E-20260924-01`；最终 macOS CI `35901490865` 全绿，取图修复与 OCR 诊断见 `E-20260924-02`、`E-20260924-03`；隐私 v4 与首次校园服务隐藏登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机仍待验证 | 2026-09-24 |
-| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | 真实账户保留 cache-first/refresh/stale-cache，并同步不含学号的体验课表副本；体验账户绝不请求 CampusCoreAPI，可导入最大 1 MB/500 门课程的 v1 JSON，只接受当前/下学期并原子覆盖；Widget 继续读取本地快照 | `ExperienceScheduleStoreTests`、拒绝隐私 UI 路径与原课表回归待 macOS CI | 2026-09-22 |
-| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周左右分页、真实日期、单双周、重叠课程、总览、下学期、课程详情和全状态完整；新增 Android 3.2.0 同款地点缩写、周次范围及总览可读文本 | 原功能证据见 `E-20260714-01`、`E-20260717-04`、`E-20260717-06`；`ScheduleTextFormatter` 与全量回归见 `E-20260726-01` | 2026-07-26 |
-| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、编辑工具库、已放工具过滤和账号隔离持久化完整；紧凑天气点击只进入天气，不与课程入口冲突 | `HomeWidgetLayoutTests`、确定性紧凑天气 UI 专项及既有双端证据全部通过，见 `E-20260726-01` | 2026-07-26 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待真机验证 | 隐私 v4 同意后以官方可见 WebView 首登，也可点“暂不登录”进入体验账户并跨启动保持；账密/Cookie 只入 ThisDeviceOnly Keychain；教务过期时前台隐藏 WebView single-flight 续期。ADWMH 首次与后续均在前台隐藏 WebView 建立校方会话，即使没有历史 Cookie 也以同域原生 GET 获取验证码并接收新会话 Cookie，只将图片发往 `https://openahu.org/ocr/captcha` 识别并用同一 `/user/login` 续期，失败提示重试，不打开第二登录页。Keychain 会话快照统一使用 SDK 的扁平 Cookie 列表，仅在识别为原生 NDJSON 且转换非空时迁移旧 Cookie 存档，离线缓存不被空数组覆盖；写请求不重放；隐藏续期失败暂显示脱敏阶段 Toast；本地 Cookie 初始化后先开放缓存身份，再完成网络校验；退出、重新登录和体验切换使旧校验失效，避免异步恢复旧身份。 | `CampusCardLoginClientTests` 覆盖登录字段与失败响应，`CampusSessionStoreTests` 新增旧快照迁移；373 个单元测试已通过，旧快照离线保护见 `E-20260924-01`；最终 macOS CI `35901490865` 全绿，取图修复与 OCR 诊断见 `E-20260924-02`、`E-20260924-03`；隐私 v4 与首次校园服务隐藏登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机仍待验证；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
+| SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | 真实账户保留 cache-first/refresh/stale-cache，并同步不含学号的体验课表副本；体验账户绝不请求 CampusCoreAPI，可导入最大 1 MB/500 门课程的 v1 JSON，只接受当前/下学期并原子覆盖；Widget 继续读取本地快照；只解析明确的教学周字段，拒绝学期 ID/布尔值/无效数字；按账号和学期保存周数与日期锚点，离线按周一推进。 | `ExperienceScheduleStoreTests`、拒绝隐私 UI 路径与原课表回归待 macOS CI；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
+| SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 20 周左右分页、真实日期、单双周、重叠课程、总览、下学期、课程详情和全状态完整；新增 Android 3.2.0 同款地点缩写、周次范围及总览可读文本；日期使用同一校园日历和周数锚点；周日不提前换周，回到前台自动推进日期；未知周数/下学期起始日期显示占位而不伪造日期；旧请求不覆盖下学期预览。 | 原功能证据见 `E-20260714-01`、`E-20260717-04`、`E-20260717-06`；`ScheduleTextFormatter` 与全量回归见 `E-20260726-01`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
+| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、编辑工具库、已放工具过滤和账号隔离持久化完整；紧凑天气点击只进入天气，不与课程入口冲突；首页复用账号隔离的教学周缓存，网络失败不回退为第 1 周；当前周未知时不将第 1 周课程误作今日课程。 | `HomeWidgetLayoutTests`、确定性紧凑天气 UI 专项及既有双端证据全部通过，见 `E-20260726-01`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | SDK 成绩/学籍/排名、筛选/搜索与账号隔离缓存完整；教务系统返回受限的 `gradeDetail` 时只展示清理 HTML 后的服务端文本，不再跳转教评；单学籍失败不遮蔽其他学籍 | gradeDetail-only 解析、HTML 清理、单学籍隔离和 Demo 学期回归保留；教评跳转于 2026-09-22 移除 | 2026-09-22 |
 | ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和全状态均已实现；按 Android 3.2.0 折叠已结束考试、缩短地点并重做详情卡与加载/空状态 | 原解析修复见 `E-20260717-05`；新增显示状态与全状态 UI 复验见 `E-20260726-01` | 2026-07-26 |
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 已完成 | 真实楼栋 GET 与空闲列表 POST 契约、校区/楼栋多选、节次、日期范围、查询结果和加载/空/错状态完整；页面标题、紫色查询按钮、12 间确定性结果和卡片密度与 Android 对齐 | `FreeClassroomTests` 4 项及双端正常/加载/空/错误截图在 `E-20260715-01` 通过；Commits `d8516f2`、`1c0f950` | 2026-07-15 |
@@ -391,6 +391,17 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | iOS 真机 | Keychain、定位、通知、WidgetKit、ActivityKit、相册/文件、第三方跳转、后台与支付 |
 
 每次验证都在对应功能行记录实际命令、Xcode/iOS 版本、设备或 Simulator、结果和证据路径；不要只写“已测试”。
+
+### E-20261014-01：弱网启动与课表日期回归
+
+- 基线：AIO `59e9ed1` detached；iOS 远端 main `449300f`；worktree `ios-startup-schedule-fixes`，功能分支 `codex/ios-startup-schedule-fixes`。
+- 已确认缺陷：冷启动等待 `/schedule/current-week` / 续期后才退出开屏；周数解析扫描任意数字，可能把学期 ID 作为教学周；离线快照随地区设置在周日换周；删除 Debug 页面后仍保留会生效的演示开关与固定时钟；下学期日期用当前学期推算。
+- 修复：本地会话就绪即开放页面，网络认证结果仍按原策略处理，且不能在退出后恢复旧用户；严格周字段解析；账号/学期隔离的周数锚点缓存；共享周一/公历/校园时区计算；旧演示与灰度偏好清理，Release 禁用演示会话；未知周次不向 Widget/体验课表/提醒发布第 1 周假数据。
+- 本机工具链：Xcode 27.0（27A266a）、XcodeGen 2.46.0、iOS 26.5 iPhone 17 Pro Simulator。
+- 验证：401 个单元测试、2 个 UI smoke 全部通过；关键用例覆盖请求持续挂起、退出竞态、10 月真实周日期、离线周数、账号/学期隔离、周日/跨年边界、未知日期及下学期旧响应。自动化未连接真实支付服务。
+- 证据：`build/startup-schedule/Final-verified.xcresult` 和 `build/startup-schedule/final-verified-test.log`（忽略的本机产物）；最终模拟器命令使用 `ENABLE_DEBUG_DYLIB=NO` 绕过本机 Xcode 27 Debug dylib 签名错误。首轮测试 actor 隔离编译错误、一次本地签名缓存错误均已修复后重跑；不将失败候选计作验证通过。
+- 设备产物：Release / iphoneos 无签名构建成功，`build/startup-schedule/AHUTong-unsigned.ipa` 为 6,771,479 bytes，SHA-256 `c5472d91aa1ca3db5b7fe647540e6d2f8ca66df597e0775ce0a59fbbf4456717`。App 与 Widget 均为 arm64、版本 1.0.0（1）、最低 iOS 17；ZIP 完整性通过，均无代码签名和 embedded.mobileprovision。日志及校验见 `device-build.log`、`ipa-verification.json` 与同目录 SHA-256 文件。
+- 真机边界：未持有用户校园账号，实际教务响应与物理设备的弱网/Widget 安装仍需验收；不据此增加严格完成数。付费 Ad Hoc 分发尚未登记真实设备或生成签名包。
 
 ## 12. 风险与阻断项
 
@@ -578,3 +589,4 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 2026-09-24 | CARD-007 / AUTH-019 | 真机 Toast 明确失败于获取校方验证码图片；隐藏 WebView 继续建立同域会话，图片改为带该会话 Cookie 的原生 GET，禁止跟随重定向并合并响应 Cookie，再将图片送远端 OCR。失败 Toast 细分为缺少会话、网络、重定向、HTTP 状态和非图片 | Android `develop` 的 `/remind/authcode` 原生 GET 契约；URLProtocol 本地取图与 Cookie 测试、`git diff --check`；macOS CI `35956666651` 384 单测、10 UI 全绿；真机已进入远端 OCR，最终自动续期仍待验证 | iOS `f250654` |
 | 2026-09-24 | CARD-008 / AUTH-020 | #121 真机反馈显示验证码图片已成功获取，故障转移到远端 OCR；按图片格式选择 multipart MIME，JPEG 对齐 Android `image/jpg`，OCR 等待从 10 秒增至 20 秒、隐藏总超时为 30 秒，并细分安全错误 Toast | Android `develop` `AhuTong` 的 HTTPS `/ocr/captcha`、`result` 字段与 `image/jpg` 上传；URLProtocol 本地 OCR 失败分类测试；最终 CI `35956666651` 384 单测、10 UI 全绿；#122 真机曾遇临时网络失败，随后 Safari 已恢复，用户确认无需继续修复 | iOS `b2009ef` |
 | 2026-09-24 | CARD-009 / AUTH-021 | 用户明确将“一次手动输入”限定为 App 官方首次登录；取消校园服务首次需历史 Cookie/手填验证码的门槛，前台隐藏 WebView 从首次 ADWMH 请求起使用 Keychain 凭据、同域取图及远端 OCR，失败提示重试而不弹第二登录页。隐私政策升级 v4 并要求重新确认，读请求最多重试一次，写请求不自动重放 | 无 Cookie 建立验证码会话、纯策略、首屏余额/付款码、失物招领和隐私版本测试；CI `35959882196` 388 单测、10 UI 全绿，IPA #123 与 Archive 成功；授权真机待验证 | iOS `0daa63f` |
+| 2026-10-14 | AUTH-022 / SCH-007 / HOME-004 | 修复网络校验阻塞开屏、周数字段误读、地区设置换周、演示偏好残留及下学期日期伪推算；保留按账号/学期隔离的离线周锚点，旧校验和旧课表请求不能覆盖新状态；补充申请制 Ad Hoc OTA 分发方案与第三方应用授权边界 | 本机 Xcode 27：401 单测 + 2 UI 全绿，见 `E-20261014-01`；授权真机待验收 | 本分支 |
