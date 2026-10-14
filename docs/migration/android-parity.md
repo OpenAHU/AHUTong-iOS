@@ -8,8 +8,8 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 修复弱网开屏长等待、教学周字段误读和课表日期错位；申请制 Ad Hoc 网页分发方案已整理到发布安装清单 |
-| 下一步 | 在授权账号真机验证弱网冷启动、10 月当前周日期、Widget 同步；用一台新登记设备试通 UDID 收集与 Ad Hoc Safari 安装 |
+| 当前焦点 | 修复弱网开屏、课表日期与付款码优先加载；本机预览后推送并打包，申请制 Ad Hoc 分发方案已整理 |
+| 下一步 | 在授权账号真机验证弱网冷启动、付款码预取/续期与课表日期；用一台新登记设备试通 UDID 收集与 Ad Hoc Safari 安装 |
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
 | 严格完成定义 | 16 / 25（64.0%）；AUTH-02、CARD-01、CONTENT-01 的首次无感校园服务登录仍待 macOS 和授权账号真机验证，PREF-01 及 PAY-01～05 保留各自验证边界 |
@@ -279,7 +279,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和全状态均已实现；按 Android 3.2.0 折叠已结束考试、缩短地点并重做详情卡与加载/空状态 | 原解析修复见 `E-20260717-05`；新增显示状态与全状态 UI 复验见 `E-20260726-01` | 2026-07-26 |
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 已完成 | 真实楼栋 GET 与空闲列表 POST 契约、校区/楼栋多选、节次、日期范围、查询结果和加载/空/错状态完整；页面标题、紫色查询按钮、12 间确定性结果和卡片密度与 Android 对齐 | `FreeClassroomTests` 4 项及双端正常/加载/空/错误截图在 `E-20260715-01` 通过；Commits `d8516f2`、`1c0f950` | 2026-07-15 |
 | ACA-04 | 教学评价 | `main/Evaluation.kt`、`EvaluationViewModel.kt`、`EvaluationRepository.kt` | — | 不在当前 iOS 范围 | 已移除 | 首页、工具页和成绩页无入口；不包含教评模型、视图、本地预设、Token/Cookie 引导或问卷提交网络链路 | 源码与隐私数据映射静态检查；macOS/Xcode 回归待运行 | 2026-09-22 |
-| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 待真机验证 | 首页余额静默读取；展开二维码面板自动静默读取，首次无 ADWMH Cookie 或后续过期时均使用隐藏 WebView + OCR，不弹登录页。失败状态主动重试仍只走隐藏认证；隐藏认证成功及二维码恢复后立即静默刷新余额，避免旧失败状态继续显示 `¥ --`，较早请求不得覆盖新结果；内联和全屏二维码点按强制重新取码并刷新余额 | `CampusCardInteractionTests` 新增自动隐藏续期和登录后余额刷新的状态测试；二维码点击及隐藏续期阶段诊断见 `E-20260924-01`；macOS UI 复验见 CI `35901490865`，验证码取图修复见 `E-20260924-02`；首次无 Cookie 静默登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机待验证 | 2026-09-24 |
+| CARD-01 | 校园卡余额与付款码 | `home/CampusCard.kt`、`AHURepository.kt`、`TokenManager.kt` | `Features/CampusCard/` | P4 / AUTH-02 | 待真机验证 | 首页余额静默读取；展开二维码面板自动静默读取，首次无 ADWMH Cookie 或后续过期时均使用隐藏 WebView + OCR，不弹登录页。失败状态主动重试仍只走隐藏认证；隐藏认证成功及二维码恢复后立即静默刷新余额，避免旧失败状态继续显示 `¥ --`，较早请求不得覆盖新结果；内联和全屏二维码点按强制重新取码并刷新余额；首页先预取付款码再刷新余额，慢余额请求让位且旧结果不能覆盖新状态；续期使用二维码接口验证，预取码只在内存保留 30 秒，离开页面/后台清理，显示期间按有效年龄重新获取。 | `CampusCardInteractionTests` 新增自动隐藏续期和登录后余额刷新的状态测试；二维码点击及隐藏续期阶段诊断见 `E-20260924-01`；macOS UI 复验见 CI `35901490865`，验证码取图修复见 `E-20260924-02`；首次无 Cookie 静默登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机待验证；付款码优先加载及推送前本机预览见 `E-20261014-02`，410 单测 + 3 UI 全绿 | 2026-10-14 |
 | PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 真实加载卡账户；银行卡按 Android `CardBalanceRequest`、`CardPayRequest` 和 ViewModel 的字段/签名规则建单、解析 `orderid`、最终提交并刷新余额。支付宝保留固定白名单小程序路径，不向剪贴板复制身份或支付信息。学校官方页面兜底已删除 | `PaymentReadOnlyDataSourceTests`、`PaymentTests`、`YCardProductionPaymentGatewayTests` 覆盖请求、固定签名向量、成功/拒绝/未知、恢复和去重；macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权银行卡小额真机验收 | 2026-08-01 |
 | PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 支持 `feeitemid=409/430` 的账户查询与 `paystep=0` 建单；解析 `orderid` 后按 Android 当前协议执行安全键盘映射，再以 `paystep=2` 提交并刷新所选浴室余额。六位原始密码只短暂位于内存并在提交/退出后清空 | URLProtocol 测试分别覆盖 409/430 完整流程、字段白名单、映射、成功与刷新；共享状态机覆盖拒绝、超时、未知、恢复和重复点击。macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权浴室账户小额真机验收 | 2026-08-01 |
 | PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 保持 `feeitemid=488` level 0→4 级联和余额查询；按 Android 兼容签名建单，每个订单单独获取动态安全键盘材料，映射后签名提交并刷新当前房间余额。拒绝或未知结果不伪造余额刷新 | URLProtocol/固定向量测试覆盖签名、每订单动态材料、最终提交、成功刷新、拒绝、超时、未知、跨启动恢复和去重；macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权房间小额真机验收 | 2026-08-01 |
@@ -402,6 +402,16 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 - 证据：`build/startup-schedule/Final-verified.xcresult` 和 `build/startup-schedule/final-verified-test.log`（忽略的本机产物）；最终模拟器命令使用 `ENABLE_DEBUG_DYLIB=NO` 绕过本机 Xcode 27 Debug dylib 签名错误。首轮测试 actor 隔离编译错误、一次本地签名缓存错误均已修复后重跑；不将失败候选计作验证通过。
 - 设备产物：Release / iphoneos 无签名构建成功，`build/startup-schedule/AHUTong-unsigned.ipa` 为 6,771,479 bytes，SHA-256 `c5472d91aa1ca3db5b7fe647540e6d2f8ca66df597e0775ce0a59fbbf4456717`。App 与 Widget 均为 arm64、版本 1.0.0（1）、最低 iOS 17；ZIP 完整性通过，均无代码签名和 embedded.mobileprovision。日志及校验见 `device-build.log`、`ipa-verification.json` 与同目录 SHA-256 文件。
 - 真机边界：未持有用户校园账号，实际教务响应与物理设备的弱网/Widget 安装仍需验收；不据此增加严格完成数。付费 Ad Hoc 分发尚未登记真实设备或生成签名包。
+
+### E-20261014-02：付款码优先加载与本机预览
+
+- 首页先预取二维码，返回后立即显示，再读取余额；已有慢余额请求会被取消，迟到响应不能覆盖新余额。预取与点开并发时仅发一份二维码请求，失败不自动循环登录。
+- 校园卡隐藏续期使用二维码接口校验会话，余额接口变慢不会阻塞付款码。预取码不落盘，只允许短暂复用 30 秒；显示期间检查年龄重新获取，进入后台或离开首页清理并取消请求，放大付款码时保留当前显示。
+- 最终本机验证：Xcode 27 / iOS 26.5 iPhone 17 Pro Simulator，410 单元测试与 3 UI smoke 全部通过。新增 9 个单测覆盖请求顺序、挂起余额、旧余额覆盖、并发、过期、后台迟到响应、失败降级及真实 API 校验路径；新增 UI smoke 验证 10 秒余额延迟期间付款码已显示且可放大。自动化只使用 Mock/URLProtocol，未连接真实支付服务。
+- 推送前预览：`build/startup-schedule/card-preview-final/payment-code-before-slow-balance.png` 已导出并在本机打开检查；使用演示账户、测试二维码与固定日期，余额仍显示加载态时付款码正常显示，面板高度小于 300pt。
+- 证据：`build/startup-schedule/Card-priority-final.xcresult` 与 `card-priority-final-test.log`；首轮测试清理代码的 tuple 访问编译错误已修复并重跑，失败候选不计入成功结果。此前 408 单测 + 3 UI 与随后 410 单测候选也通过，最终证据以本节全量结果为准。
+- 设备构建：本机 Release / iphoneos 无签名构建通过，日志为 `build/startup-schedule/qr-priority-device-build.log`；本机预览和构建检查后推送，随后打包 `AHUTong-unsigned-qr-priority.ipa`，产物元数据及 SHA-256 记录在忽略的 `qr-ipa-verification.json` 中。
+- 授权校园账号、真实网络和签名后物理 iPhone 的扫码付款仍待人工验收；模拟器演示二维码仅用于渲染与请求顺序验证。
 
 ## 12. 风险与阻断项
 
@@ -590,3 +600,4 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 2026-09-24 | CARD-008 / AUTH-020 | #121 真机反馈显示验证码图片已成功获取，故障转移到远端 OCR；按图片格式选择 multipart MIME，JPEG 对齐 Android `image/jpg`，OCR 等待从 10 秒增至 20 秒、隐藏总超时为 30 秒，并细分安全错误 Toast | Android `develop` `AhuTong` 的 HTTPS `/ocr/captcha`、`result` 字段与 `image/jpg` 上传；URLProtocol 本地 OCR 失败分类测试；最终 CI `35956666651` 384 单测、10 UI 全绿；#122 真机曾遇临时网络失败，随后 Safari 已恢复，用户确认无需继续修复 | iOS `b2009ef` |
 | 2026-09-24 | CARD-009 / AUTH-021 | 用户明确将“一次手动输入”限定为 App 官方首次登录；取消校园服务首次需历史 Cookie/手填验证码的门槛，前台隐藏 WebView 从首次 ADWMH 请求起使用 Keychain 凭据、同域取图及远端 OCR，失败提示重试而不弹第二登录页。隐私政策升级 v4 并要求重新确认，读请求最多重试一次，写请求不自动重放 | 无 Cookie 建立验证码会话、纯策略、首屏余额/付款码、失物招领和隐私版本测试；CI `35959882196` 388 单测、10 UI 全绿，IPA #123 与 Archive 成功；授权真机待验证 | iOS `0daa63f` |
 | 2026-10-14 | AUTH-022 / SCH-007 / HOME-004 | 修复网络校验阻塞开屏、周数字段误读、地区设置换周、演示偏好残留及下学期日期伪推算；保留按账号/学期隔离的离线周锚点，旧校验和旧课表请求不能覆盖新状态；补充申请制 Ad Hoc OTA 分发方案与第三方应用授权边界 | 本机 Xcode 27：401 单测 + 2 UI 全绿，见 `E-20261014-01`；授权真机待验收 | 本分支 |
+| 2026-10-14 | CARD-010 | 弱网首页优先预取付款码并取消慢余额请求；续期不等待余额验证；补齐内存年龄、后台清理和旧响应保护，按本机预览后推送/打包的顺序交付 | 最终本机 410 单测 + 3 UI 全绿，预览与边界见 `E-20261014-02` | 本分支 |

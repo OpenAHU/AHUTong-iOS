@@ -327,7 +327,8 @@ actor RustCampusCoreAPI: CampusCoreAPI {
             let data = try await request(path: "/schedule/current-week")
             _ = try TeachingWeekParser.parse(data)
         case .campusCard:
-            _ = try cardParser.balance(from: try await request(path: "/ycard/balance"))
+            // A slow balance endpoint must not gate the payment code after renewal.
+            _ = try cardParser.qrPayload(from: try await request(path: "/ycard/qrcode"))
         }
     }
 
