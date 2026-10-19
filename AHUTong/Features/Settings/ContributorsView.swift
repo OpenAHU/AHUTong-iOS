@@ -58,7 +58,6 @@ struct ContributorsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @State private var rows = ContributorRows.shuffled(using: ContributorsCatalog.developers)
-    @State private var selected: ContributorEntry?
     @State private var informationMessage: String?
 
     var body: some View {
@@ -73,28 +72,13 @@ struct ContributorsView: View {
                     VStack(spacing: 12) {
                         ForEach(rows.indices, id: \.self) { row in
                             ContributorAvatarRow(
-                                entries: rows[row], row: row, selectedID: selected?.id,
-                                select: { selected = $0 }, open: open
+                                entries: rows[row], row: row, open: open
                             )
                         }
                     }
-                    if let selected {
-                        AndroidCard {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(selected.name).font(.title2.bold())
-                                Text(selected.description).font(.body)
-                                Text("QQ：\(selected.qq ?? "")").font(.callout).foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(24)
-                        }
-                        .padding(.horizontal, 16)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("contributors.detail")
-                    } else {
-                        Text("每一份贡献，都让校园生活更轻松。")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                            .padding(.horizontal, 24)
-                    }
+                    Text("每一份贡献，都让校园生活更轻松。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .padding(.horizontal, 24)
                     Text("加入我们").font(.title3.bold()).padding(.horizontal, 24)
                     ForEach(ContributorsCatalog.partners) { entry in
                         Button { informationMessage = "请联系任意一位小伙伴" } label: {
@@ -136,11 +120,9 @@ private struct ContributorAvatarRow: View {
     @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .body) private var avatarSize: CGFloat = 72
     @State private var clock = ContributorMarqueeClock()
-    @State private var manuallyPaused = false
+    @State private var selectedCellID: String?
     let entries: [ContributorEntry]
     let row: Int
-    let selectedID: String?
-    let select: (ContributorEntry) -> Void
     let open: (ContributorEntry) -> Void
 
     private var cellWidth: CGFloat { avatarSize + 24 }
@@ -152,7 +134,7 @@ private struct ContributorAvatarRow: View {
             if staticBrowsing {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 16) {
-                        ForEach(entries) { avatar($0) }
+                        ForEach(entries) { avatar($0, copy: 0) }
                     }.padding(.horizontal, 24)
                 }
             } else if !entries.isEmpty {
@@ -163,7 +145,7 @@ private struct ContributorAvatarRow: View {
                         HStack(alignment: .top, spacing: 16) {
                             ForEach(0..<copies, id: \.self) { copy in
                                 ForEach(entries) { entry in
-                                    avatar(entry)
+                                    avatar(entry, copy: copy)
                                 }
                             }
                         }
@@ -175,29 +157,26 @@ private struct ContributorAvatarRow: View {
                 .frame(height: avatarSize + 56)
                 .clipped()
             }
-            if manuallyPaused && !staticBrowsing {
-                Button {
-                    manuallyPaused = false
-                    updatePlayback()
-                } label: { Label("继续滚动", systemImage: "play.fill").font(.caption) }
-                    .buttonStyle(SettingsPressFeedbackStyle())
-                    .accessibilityIdentifier("contributors.resume.\(row)")
-            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("contributors.row.\(row)")
         .accessibilityValue(staticBrowsing ? "手动浏览" : (clock.isPaused ? "已暂停" : (row == 0 ? "向左滚动" : "向右滚动")))
         .onChange(of: scenePhase) { _, _ in updatePlayback() }
         .onChange(of: staticBrowsing) { _, _ in updatePlayback() }
+        .onChange(of: selectedCellID) { _, _ in updatePlayback() }
+        .sensoryFeedback(.selection, trigger: selectedCellID)
         .onAppear { updatePlayback() }
         .onDisappear { clock.setPaused(true) }
     }
 
-    private func avatar(_ entry: ContributorEntry) -> some View {
-        Button {
-            manuallyPaused = true
-            updatePlayback()
-            select(entry)
+    private func avatar(_ entry: ContributorEntry, copy: Int) -> some View {
+        let cellID = "\(copy)-\(entry.id)"
+        let isPresented = Binding(
+            get: { selectedCellID == cellID },
+            set: { if !$0 && selectedCellID == cellID { selectedCellID = nil } }
+        )
+        return Button {
+            selectedCellID = cellID
         } label: {
             VStack(spacing: 8) {
                 AsyncImage(url: entry.avatarURL) { phase in
@@ -211,14 +190,25 @@ private struct ContributorAvatarRow: View {
                     }
                 }
                 .frame(width: avatarSize, height: avatarSize).clipShape(Circle())
-                .overlay { Circle().strokeBorder(selectedID == entry.id ? AndroidParityPalette.brand : .clear, lineWidth: 3) }
+                .overlay { Circle().strokeBorder(selectedCellID == cellID ? AndroidParityPalette.brand : .clear, lineWidth: 3) }
                 Text(entry.name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
             }
             .frame(width: cellWidth)
             .contentShape(Rectangle())
         }
         .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
-        .simultaneousGesture(TapGesture(count: 2).onEnded { open(entry) })
+        .highPriorityGesture(
+            TapGesture(count: 2).exclusively(before: TapGesture()).onEnded { gesture in
+                switch gesture {
+                case .first: open(entry)
+                case .second: selectedCellID = cellID
+                }
+            }
+        )
+        .popover(isPresented: isPresented, arrowEdge: .top) {
+            ContributorDetailPopover(entry: entry)
+                .presentationCompactAdaptation(.popover)
+        }
         .accessibilityLabel(entry.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "QQ \(entry.qq ?? "")" : entry.name)
         .accessibilityHint(voiceOver ? "激活查看贡献，也可使用打开 QQ 操作" : "轻点查看贡献，双击打开 QQ")
         .accessibilityIdentifier("contributors.avatar.\(entry.qq ?? entry.id)")
@@ -226,6 +216,34 @@ private struct ContributorAvatarRow: View {
     }
 
     private func updatePlayback() {
-        clock.setPaused(manuallyPaused || staticBrowsing || scenePhase != .active)
+        clock.setPaused(selectedCellID != nil || staticBrowsing || scenePhase != .active)
+    }
+}
+
+private struct ContributorDetailPopover: View {
+    @Environment(\.dismiss) private var dismiss
+    let entry: ContributorEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                Text(entry.name).font(.title3.bold())
+                Spacer(minLength: 0)
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.body.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 22))
+                .accessibilityLabel("关闭")
+                .accessibilityIdentifier("contributors.detail.close")
+            }
+            Text(entry.description).font(.body).fixedSize(horizontal: false, vertical: true)
+            Text("QQ：\(entry.qq ?? "")").font(.callout).foregroundStyle(.secondary)
+        }
+        .padding(24)
+        .frame(idealWidth: 300, maxWidth: 320, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("contributors.detail")
     }
 }

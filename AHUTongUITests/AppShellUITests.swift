@@ -409,13 +409,19 @@ final class AppShellUITests: XCTestCase {
         }
 
         openPhoneBook()
-        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        leftEdge.press(
-            forDuration: 0.05,
-            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)),
-            withVelocity: .fast,
-            thenHoldForDuration: 0
-        )
+        // Use a deliberate edge drag rather than a 50 ms flick on loaded CI
+        // simulators. Both attempts must still exercise the native gesture;
+        // never substitute the back button for this assertion.
+        let window = app.windows.firstMatch
+        for y in [0.5, 0.7] where !app.buttons["tools.phone-book"].exists {
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: y)).press(
+                forDuration: 0.15,
+                thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: y)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.1
+            )
+            _ = app.buttons["tools.phone-book"].waitForExistence(timeout: 3)
+        }
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 4))
         XCTAssertTrue(tabButton("tools", app: app).waitForExistence(timeout: 3))
 
@@ -631,6 +637,7 @@ final class AppShellUITests: XCTestCase {
     @MainActor
     private func launchDemo(_ app: XCUIApplication) {
         app.terminate()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
         app.launchArguments = ["--demo-consent", "--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
@@ -755,10 +762,20 @@ final class AppShellUITests: XCTestCase {
     private func choose(_ option: String, from identifier: String, app: XCUIApplication) {
         let menu = app.buttons[identifier]
         XCTAssertTrue(menu.waitForExistence(timeout: 3))
+        expectation(
+            for: NSPredicate(format: "enabled == true AND hittable == true"),
+            evaluatedWith: menu
+        )
+        waitForExpectations(timeout: 8)
         menu.tap()
         let choice = app.buttons[option]
         XCTAssertTrue(choice.waitForExistence(timeout: 3))
         choice.tap()
+        expectation(
+            for: NSPredicate(format: "label CONTAINS %@", option),
+            evaluatedWith: menu
+        )
+        waitForExpectations(timeout: 5)
     }
 
     @MainActor
@@ -768,7 +785,10 @@ final class AppShellUITests: XCTestCase {
             for: NSPredicate(format: "label CONTAINS %@", "支付成功"),
             evaluatedWith: state
         )
-        waitForExpectations(timeout: 4)
+        // The CI recording shows the submitted Mock order still processing
+        // after four seconds. Keep the server-confirmed success assertion and
+        // allow durable payment-state writes to finish on the hosted disk.
+        waitForExpectations(timeout: 15)
     }
 
     private func waitForRendering() {

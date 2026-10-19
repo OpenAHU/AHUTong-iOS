@@ -16,6 +16,11 @@ final class ShortcutUITests: XCTestCase {
         let entry = app.buttons["preferences.shortcuts"]
         if !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 4))
+        let privacySection = app.otherElements["preferences.privacy-section"]
+        XCTAssertTrue(privacySection.exists)
+        XCTAssertEqual(entry.frame.minX, privacySection.frame.minX, accuracy: 1)
+        XCTAssertEqual(entry.frame.width, privacySection.frame.width, accuracy: 1)
+        attachScreenshot(app, "preferences-shortcuts-card-alignment")
         entry.press(forDuration: 0.5)
         XCTAssertTrue(app.staticTexts["先允许 Siri 调用"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["shortcuts.siri-settings"].exists)

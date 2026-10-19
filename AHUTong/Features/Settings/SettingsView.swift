@@ -440,15 +440,26 @@ private struct AndroidPreferencesView: View {
                         .buttonStyle(SettingsPressFeedbackStyle())
                         .accessibilityIdentifier("preferences.privacy-policy")
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("preferences.privacy-section")
 
                     NavigationLink {
                         ShortcutsGuideView().androidDetailScreen()
                     } label: {
-                        AndroidSettingRow(label: "Siri 与快捷指令", systemImage: "square.stack.3d.up")
-                            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                        preferenceSection("Siri 与快捷指令") {
+                            HStack(spacing: 12) {
+                                Text("语音打开校园码，查询课表")
+                                    .font(.subheadline)
+                                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 8)
+                        }
                     }
-                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
-                    .padding(.horizontal, 16)
+                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
                     .accessibilityIdentifier("preferences.shortcuts")
 
                     if !appModel.isExperienceMode {

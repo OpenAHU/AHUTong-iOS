@@ -65,7 +65,7 @@ final class ExperiencePolishUITests: XCTestCase {
         XCTAssertEqual(balance.frame.height, collapsedHeight, accuracy: 1)
     }
 
-    func testDeveloperSelectionPausesOnlyItsRowAndShowsContributions() {
+    func testDeveloperPopoverDismissalResumesItsRowAndDoubleTapOpensQQ() {
         let app = launch()
         app.tabBars.buttons["设置"].tap()
         let entry = app.buttons["settings.contributors"]
@@ -76,15 +76,23 @@ final class ExperiencePolishUITests: XCTestCase {
         let avatar = row.buttons.allElementsBoundByIndex.first { $0.isHittable }
         XCTAssertNotNil(avatar)
         avatar?.tap()
-        XCTAssertTrue(app.buttons["contributors.resume.0"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.otherElements["contributors.detail"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["contributors.detail.close"].exists)
+        XCTAssertEqual(row.value as? String, "已暂停")
+        XCTAssertEqual(app.otherElements["contributors.row.1"].value as? String, "向右滚动")
+        XCTAssertFalse(app.buttons["contributors.resume.0"].exists)
         XCTAssertFalse(app.buttons["contributors.resume.1"].exists)
-        XCTAssertTrue(app.otherElements["contributors.detail"].exists)
-        capture(app, "contributors-selected")
-        avatar?.doubleTap()
+        capture(app, "contributors-native-popover")
+        app.buttons["contributors.detail.close"].tap()
+        XCTAssertTrue(app.otherElements["contributors.detail"].waitForNonExistence(timeout: 4))
+        expectation(for: NSPredicate(format: "value == %@", "向左滚动"), evaluatedWith: row)
+        waitForExpectations(timeout: 4)
+        XCTAssertEqual(app.otherElements["contributors.row.1"].value as? String, "向右滚动")
+        let currentAvatar = row.buttons.allElementsBoundByIndex.first { $0.isHittable }
+        XCTAssertNotNil(currentAvatar)
+        currentAvatar?.doubleTap()
         XCTAssertTrue(app.alerts["打开 QQ"].waitForExistence(timeout: 4))
         app.alerts.buttons["知道了"].tap()
-        app.buttons["contributors.resume.0"].tap()
-        XCTAssertFalse(app.buttons["contributors.resume.0"].exists)
         capture(app, "contributors-two-rows")
     }
 
