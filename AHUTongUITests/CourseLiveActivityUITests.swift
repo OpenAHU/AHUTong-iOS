@@ -13,14 +13,14 @@ final class CourseLiveActivityUITests: XCTestCase {
         XCTAssertTrue(settingsTab.waitForExistence(timeout: 10))
         settingsTab.tap()
         app.buttons["settings.preferences"].tap()
-        let reminder = app.buttons["preferences.course-reminders"]
+        let reminder = app.switches["preferences.course-reminders"]
         XCTAssertTrue(reminder.waitForExistence(timeout: 5))
-        if reminder.value as? String == "开启" {
-            reminder.tap()
-            waitForValue("关闭", element: reminder)
+        if reminder.value as? String == "1" {
+            reminder.tapNativeSwitch()
+            waitForValue("0", element: reminder)
         }
         app.swipeUp()
-        let liveActivity = app.buttons["preferences.island-reminder"]
+        let liveActivity = app.switches["preferences.island-reminder"]
         if !liveActivity.isHittable { app.swipeUp() }
         XCTAssertTrue(liveActivity.waitForExistence(timeout: 3))
         XCTAssertTrue(liveActivity.label.contains("课程倒计时岛卡"))
@@ -28,14 +28,14 @@ final class CourseLiveActivityUITests: XCTestCase {
         beforeToggle.name = "live-activity-preference-before-toggle"
         beforeToggle.lifetime = .keepAlways
         add(beforeToggle)
-        if liveActivity.value as? String == "开启" {
-            liveActivity.tap()
-            waitForValue("关闭", element: liveActivity)
+        if liveActivity.value as? String == "1" {
+            liveActivity.tapNativeSwitch()
+            waitForValue("0", element: liveActivity)
         }
-        liveActivity.tap()
-        waitForValue("开启", element: liveActivity)
-        XCTAssertEqual(liveActivity.value as? String, "开启")
-        XCTAssertEqual(reminder.value as? String, "关闭")
+        liveActivity.tapNativeSwitch()
+        waitForValue("1", element: liveActivity)
+        XCTAssertEqual(liveActivity.value as? String, "1")
+        XCTAssertEqual(reminder.value as? String, "0")
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "live-activity-independent-preference"
         attachment.lifetime = .keepAlways

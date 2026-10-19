@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 struct HomeWidgetSpec: Identifiable, Codable, Equatable, Sendable {
     let id: String
@@ -161,6 +162,8 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var referenceDate = Date()
     private var currentWeekIsKnown = false
+    private var isLoading = false
+    private var lastRefresh: Date?
 
     private let repository: ScheduleRepository
     private let shortcutStore: ScheduleShortcutStore
@@ -185,7 +188,10 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
-    func load(demo: Bool) async {
+    func load(demo: Bool, refresh: Bool = false) async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
         if demo {
             currentWeekIsKnown = true
             courses = DemoDataState.current == .normal ? ScheduleViewModel.demoCourses : []
@@ -199,13 +205,18 @@ final class HomeViewModel: ObservableObject {
         currentWeek = cached.week
         referenceDate = cached.referenceDate
         do {
-            let result = try await repository.load(semester: semester)
+            let result = try await repository.load(semester: semester, policy: refresh ? .refresh : .cacheFirst)
             courses = result.courses
-            errorMessage = nil
+            errorMessage = result.source == .staleCache ? "刷新失败，显示上次同步的课表" : nil
+            lastRefresh = now()
             if let position = try? await weekRepository.refresh() {
                 currentWeekIsKnown = true
                 currentWeek = position.week
                 referenceDate = position.referenceDate
+            }
+            if currentWeekIsKnown {
+                try? await ScheduleWidgetSnapshotStore.shared.save(.make(courses: result.courses, currentWeek: currentWeek, updatedAt: referenceDate))
+                WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
             }
             try? await shortcutStore.record(
                 courses: result.courses, semester: semester,
@@ -215,6 +226,12 @@ final class HomeViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func refreshOnEntry(demo: Bool) async {
+        advanceDate()
+        if let lastRefresh, now().timeIntervalSince(lastRefresh) < 60 { return }
+        await load(demo: demo, refresh: true)
     }
 
     var todayCourses: [Course] {
@@ -302,6 +319,12 @@ struct HomeView: View {
                     }
                     .padding(.bottom, isEditing ? 420 : 16)
                 }
+                .refreshable {
+                    async let schedule: Void = model.load(demo: AppRuntime.isDemoSession, refresh: true)
+                    async let weather: Void = weatherModel.refresh()
+                    _ = await (schedule, weather)
+                    NotificationCenter.default.post(name: .homeRefreshRequested, object: nil)
+                }
                 .scrollIndicators(.hidden)
                 .onLongPressGesture { if homeEditEnabled { isEditing = true } }
                 .overlay(alignment: .bottom) {
@@ -331,12 +354,13 @@ struct HomeView: View {
             Task { try? await layoutStore.save(newValue) }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { model.advanceDate() }
+            if phase == .active { Task { await model.refreshOnEntry(demo: AppRuntime.isDemoSession) } }
         }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
             model.advanceDate()
         }
         .onAppear {
+            Task { await model.refreshOnEntry(demo: AppRuntime.isDemoSession) }
             if requestEdit && homeEditEnabled {
                 isEditing = true
                 requestEdit = false

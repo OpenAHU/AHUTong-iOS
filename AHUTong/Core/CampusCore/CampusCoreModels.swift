@@ -163,7 +163,7 @@ struct CampusCardResponseParser: Sendable {
 
     func qrPayload(from data: Data) throws -> String {
         let object = try responseObject(from: data)
-        guard let payload = object as? String, !payload.isEmpty else {
+        guard let payload = object as? String, !payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw CampusCoreError.invalidResponse
         }
         return payload

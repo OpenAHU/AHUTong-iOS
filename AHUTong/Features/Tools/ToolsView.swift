@@ -31,7 +31,8 @@ struct ToolsView: View {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "小工具") {
                         if homeEditEnabled {
-                            AndroidIconButton(systemName: "pencil", accessibilityLabel: "编辑首页", action: onEditHome)
+                            NativeHeaderIconButton(systemName: "pencil", accessibilityLabel: "编辑首页", action: onEditHome)
+                                .accessibilityIdentifier("tools.edit-home")
                         }
                     }
 
@@ -62,6 +63,7 @@ struct ToolsView: View {
                         Label("长按 iPhone 主屏幕空白处", systemImage: "hand.tap")
                         Label("点击左上角“编辑”或“+”", systemImage: "plus.circle")
                         Label("搜索“安大通课表”，选择尺寸并添加", systemImage: "rectangle.grid.2x2")
+                        Label("长按已添加的课表，选“编辑小组件”调整深浅色", systemImage: "circle.lefthalf.filled")
                         if ScheduleWidgetSnapshotStore.sharedContainerURL == nil {
                             Label("当前安装无法同步课表，请安装支持小组件的签名版本。", systemImage: "exclamationmark.triangle")
                                 .font(.footnote)
@@ -96,6 +98,8 @@ struct ToolsView: View {
             switch tool.id {
             case "bathroom": BathroomPaymentView(appModel: appModel).androidDetailScreen()
             case "electricity": ElectricityPaymentView(appModel: appModel).androidDetailScreen()
+            case "program-completion": ProgramCompletionView(appModel: appModel).modifier(NativeServiceDetailModifier())
+            case "card-billing": CardBillingView(appModel: appModel).modifier(NativeServiceDetailModifier())
             case "grade": GradeView(appModel: appModel).androidDetailScreen()
             case "exam": ExamView(appModel: appModel).androidDetailScreen()
             case "network-recharge": NetworkRechargeView(appModel: appModel).androidDetailScreen()
@@ -167,6 +171,8 @@ struct AndroidToolItem: Identifiable {
         AndroidToolItem(id: "lost-found", title: "失物招领", systemImage: AndroidParitySymbol.lostAndFoundBag, tint: Color(red: 25 / 255, green: 118 / 255, blue: 210 / 255)),
         AndroidToolItem(id: "weather", title: "天气", systemImage: "sun.max.fill", tint: AndroidParityPalette.warning),
         AndroidToolItem(id: "study-repository", title: "学习资料", systemImage: "doc.on.doc", tint: Color(red: 141 / 255, green: 110 / 255, blue: 99 / 255)),
+        AndroidToolItem(id: "program-completion", title: "培养方案", systemImage: "graduationcap", tint: .indigo),
+        AndroidToolItem(id: "card-billing", title: "校园卡账单", systemImage: "list.bullet.rectangle", tint: .teal),
         AndroidToolItem(id: "network-recharge", title: "网费充值", systemImage: "network", tint: Color(red: 30 / 255, green: 136 / 255, blue: 229 / 255))
     ]
 
@@ -248,5 +254,14 @@ private struct AndroidToolPlaceholder: View {
                 Spacer()
             }
         }
+    }
+}
+
+private struct NativeServiceDetailModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.navigationBarTitleDisplayMode(.inline)
+            .toolbar(.visible, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
+            .background(NativeNavigationGestureBridge())
     }
 }

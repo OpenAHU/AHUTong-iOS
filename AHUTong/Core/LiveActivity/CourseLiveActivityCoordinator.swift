@@ -146,6 +146,8 @@ actor CourseLiveActivityCoordinator {
         self.manager = manager
     }
 
+    func activitiesEnabled() async -> Bool { await manager.activitiesEnabled() }
+
     /// Returns the accepted preference, even when no eligible course exists yet.
     func setEnabled(
         _ enabled: Bool,

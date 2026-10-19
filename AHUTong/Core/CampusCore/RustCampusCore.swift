@@ -129,9 +129,11 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     ) async throws -> CampusWebAuthenticationResult
     private let gradeParser = CampusGradeParser()
     private let cardParser = CampusCardResponseParser()
+    private let qrClient: CampusCardQRCodeClient
 
     init(
         server: RustLocalServer = .shared,
+        qrClient: CampusCardQRCodeClient = CampusCardQRCodeClient(),
         session: URLSession = .shared,
         sessionStore: CampusSessionStore = CampusSessionStore(),
         credentialStore: CredentialStore = CredentialStore(),
@@ -147,6 +149,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
             }
         }
     ) {
+        self.qrClient = qrClient
         self.server = server
         self.session = session
         self.sessionStore = sessionStore
@@ -225,12 +228,39 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     }
 
     func cardQRCode() async throws -> String {
-        let payload = try cardParser.qrPayload(from: try await authenticatedRequest(
-            path: "/ycard/qrcode",
-            scope: .campusCard
-        ))
-        try? await persistSessionCookies()
+        guard let snapshot = try await sessionStore.load() else { throw CampusCoreError.credentialsUnavailable }
+        let payload = try await CampusCardQRRecovery.payload {
+            try await self.firstPartyQRCode(expectedUser: snapshot.user)
+        } fallback: {
+            guard (try await self.sessionStore.load())?.user == snapshot.user else { throw CancellationError() }
+            let payload = try self.cardParser.qrPayload(from: await self.request(path: "/ycard/qrcode", timeout: 12))
+            try? await self.persistSessionCookies()
+            return payload
+        } refresh: {
+            try Task.checkCancellation()
+            guard (try await self.sessionStore.load())?.user == snapshot.user else { throw CancellationError() }
+            try await self.refreshCoordinator.refresh(scope: .campusCard) { [self] in
+                try await self.refreshSession(scope: .campusCard)
+            }
+        }
+        try Task.checkCancellation()
+        guard (try await sessionStore.load())?.user == snapshot.user else { throw CancellationError() }
         return payload
+    }
+
+    private func firstPartyQRCode(expectedUser: User) async throws -> String {
+        try Task.checkCancellation()
+        let snapshot = try await sessionStore.load()
+        guard snapshot?.user == expectedUser else { throw CancellationError() }
+        // Read the Keychain snapshot directly so an unavailable local server does
+        // not prevent an otherwise valid first-party session from displaying a code.
+        let cookies: String
+        if let snapshot, CampusCookieSnapshotPolicy.isFlat(snapshot.cookiesJSON) {
+            cookies = snapshot.cookiesJSON
+        } else {
+            cookies = try await cookiesFlat()
+        }
+        return try await qrClient.payload(cookiesJSON: cookies)
     }
 
     func cardAccessToken() async throws -> String {
@@ -385,11 +415,12 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         method: String = "GET",
         body: Data? = nil,
         retryPolicy: CampusRequestRetryPolicy? = nil,
-        scope: CampusSessionScope = .academic
+        scope: CampusSessionScope = .academic,
+        timeout: TimeInterval = 60
     ) async throws -> Data {
         let retryPolicy = retryPolicy ?? .automatic(forHTTPMethod: method)
         do {
-            let data = try await request(path: path, method: method, body: body)
+            let data = try await request(path: path, method: method, body: body, timeout: timeout)
             try? await persistSessionCookies()
             return data
         } catch CampusCoreError.unauthorized {
@@ -400,7 +431,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
                 throw CampusCoreError.unauthorized
             }
             do {
-                let data = try await request(path: path, method: method, body: body)
+                let data = try await request(path: path, method: method, body: body, timeout: timeout)
                 try? await persistSessionCookies()
                 return data
             } catch CampusCoreError.unauthorized {
@@ -411,7 +442,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         }
     }
 
-    private func request(path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+    private func request(path: String, method: String = "GET", body: Data? = nil, timeout: TimeInterval = 60) async throws -> Data {
         let service = try await server.start()
         let pieces = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
         var components = URLComponents(
@@ -421,6 +452,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         if pieces.count == 2 { components?.percentEncodedQuery = String(pieces[1]) }
         guard let endpoint = components?.url else { throw CampusCoreError.invalidResponse }
         var request = URLRequest(url: endpoint)
+        request.timeoutInterval = timeout
         request.httpMethod = method
         request.httpBody = body
         request.setValue(service.token, forHTTPHeaderField: "X-AHUTONG-TOKEN")

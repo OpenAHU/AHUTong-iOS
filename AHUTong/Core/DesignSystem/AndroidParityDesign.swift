@@ -34,7 +34,6 @@ enum AndroidParityPalette {
     static var systemTheme: Color { selectedTheme }
     static var primaryTone90: Color { selectedTheme.opacity(0.18) }
     static var primaryTone80: Color { selectedTheme.opacity(0.3) }
-    static let liquidToggle = Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255)
     static let folder = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)
     static let success = Color(red: 76 / 255, green: 175 / 255, blue: 80 / 255)
     static let warning = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)

@@ -435,7 +435,7 @@ struct ScheduleView: View {
                     }
                 }
             }
-            HStack(spacing: 0) {
+            NativeHeaderActionGroup {
                 scheduleAction("location", "回到当前周") {
                     if previewNextSemester {
                         previewNextSemester = false
@@ -448,8 +448,6 @@ struct ScheduleView: View {
                 scheduleAction("gearshape", "课表设置", identifier: "schedule.settings") { showSettings = true }
                 scheduleAction("arrow.clockwise", "刷新课表", identifier: "schedule.refresh") { Task { await model.refresh(previewNext: previewNextSemester) } }
             }
-            .padding(2)
-            .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
             .padding(.trailing, 8)
         }
     }
@@ -489,9 +487,7 @@ struct ScheduleView: View {
         identifier: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: 20)).frame(width: 38, height: 38) }
-            .buttonStyle(.plain)
-            .accessibilityLabel(label)
+        NativeHeaderIconButton(systemName: icon, accessibilityLabel: label, grouped: true, action: action)
             .accessibilityIdentifier(identifier ?? "schedule.action.\(label)")
     }
 
@@ -742,145 +738,141 @@ struct ScheduleView: View {
 
 private struct ScheduleSettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showAllCourses: Bool
     @Binding var previewNextSemester: Bool
     let isExperienceMode: Bool
     let importAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("课表设置")
-                    .font(.title2.bold())
-                Spacer()
-                Button("完成") { dismiss() }
-                    .font(.headline)
-                    .accessibilityIdentifier("schedule.settings.done")
-            }
-
-            settingToggle(
-                title: "总览课表",
-                description: "显示全部周次的课程，重叠课程会平分同一块时间区域",
-                identifier: "schedule.settings.overview",
-                isOn: $showAllCourses
-            )
-            settingToggle(
-                title: "预览下学期课表",
-                description: "切换到教务系统中的下学期课表",
-                identifier: "schedule.settings.next-semester",
-                isOn: $previewNextSemester
-            )
-            if isExperienceMode {
-                Button(action: importAction) {
-                    Label("导入课表 JSON", systemImage: "square.and.arrow.down")
-                        .font(.body.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    settingToggle(title: "总览课表", description: "显示全部周次的课程，重叠课程会平分同一块时间区域",
+                                  identifier: "schedule.settings.overview", isOn: $showAllCourses)
+                    settingToggle(title: "预览下学期课表", description: "切换到教务系统中的下学期课表",
+                                  identifier: "schedule.settings.next-semester", isOn: $previewNextSemester)
+                    if isExperienceMode {
+                        Button("导入课表 JSON", systemImage: "square.and.arrow.down", action: importAction)
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("schedule.settings.import")
+                    }
                 }
-                .buttonStyle(ScheduleSettingPressStyle())
-                .accessibilityIdentifier("schedule.settings.import")
+                .padding(24)
             }
-            Spacer(minLength: 0)
+            .navigationTitle("课表设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                        .accessibilityIdentifier("schedule.settings.done")
+                }
+            }
+            // Keep the system sheet surface visible. iOS 26 supplies Liquid Glass
+            // for partial-height sheets; painting an opaque background hides it.
+            .background(Color.clear)
         }
-        .padding(24)
-        .background(AndroidParityPalette.raisedSurface(colorScheme))
-        .presentationDetents([.height(isExperienceMode ? 370 : 310)])
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(isExperienceMode ? 370 : 310), .large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(32)
     }
 
-    private func settingToggle(
-        title: String,
-        description: String,
-        identifier: String,
-        isOn: Binding<Bool>
-    ) -> some View {
-        Button { isOn.wrappedValue.toggle() } label: {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.body.bold())
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Toggle("", isOn: isOn)
-                    .labelsHidden()
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+    private func settingToggle(title: String, description: String, identifier: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.bold())
+                Text(description).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(ScheduleSettingPressStyle())
-        .padding(.vertical, 10)
         .accessibilityIdentifier(identifier)
-        .accessibilityValue(isOn.wrappedValue ? "开启" : "关闭")
-    }
-}
-
-private struct ScheduleSettingPressStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
-            .opacity(configuration.isPressed ? 0.78 : 1)
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0))
-                    .allowsHitTesting(false)
-            }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
-            .sensoryFeedback(.impact(weight: .light, intensity: 0.55), trigger: configuration.isPressed) { oldValue, newValue in
-                !oldValue && newValue
-            }
+        .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
     }
 }
 
 private struct CourseDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var contentHeight: CGFloat = 240
     let course: Course
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 24) {
-                HStack {
-                    Text(course.name).font(.title2.bold())
-                    Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                    Text(course.name)
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
                     Button("完成") { dismiss() }
+                        .fixedSize()
+                        .frame(minHeight: 44)
                 }
-                Text(scheduleDescription).font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("周\(weekdayName) · 第\(course.startPeriod)–\(course.endPeriod)节")
+                        .font(.headline)
+                    Text("第\(weekDescription)周")
+                        .font(.subheadline)
+                        .accessibilityIdentifier("schedule.course-detail.weeks")
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                Divider()
+                metadata
             }
-            .padding(24)
-            Divider().frame(height: 2)
-            HStack(spacing: 0) {
-                detail("location", course.location)
-                Divider().frame(width: 2)
-                detail("person.crop.circle", course.teacher)
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                ceil(geometry.size.height)
+            } action: { height in
+                contentHeight = height
             }
         }
-        .background(AndroidParityPalette.raisedSurface(colorScheme))
-        .presentationDetents([.height(300)])
-        .presentationCornerRadius(32)
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(max(180, contentHeight)), .large])
+        .presentationDragIndicator(.visible)
         .accessibilityIdentifier("schedule.course-detail")
     }
 
-    private func detail(_ icon: String, _ text: String) -> some View {
-        HStack(spacing: 8) { Image(systemName: icon); Text(text).font(.headline).lineLimit(2) }
-            .frame(maxWidth: .infinity, minHeight: 72)
-            .padding(.horizontal, 16)
+    @ViewBuilder
+    private var metadata: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) { metadataFields }
+        } else {
+            HStack(alignment: .top, spacing: 20) { metadataFields }
+        }
     }
 
-    private var scheduleDescription: String {
+    @ViewBuilder
+    private var metadataFields: some View {
+        detail("location", course.location, label: "地点", identifier: "location")
+        detail("person.crop.circle", course.teacher, label: "授课老师", identifier: "teacher")
+    }
+
+    private func detail(_ icon: String, _ text: String, label: String, identifier: String) -> some View {
+        Label {
+            Text(text.isEmpty ? "未提供" : text)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: icon).foregroundStyle(.secondary)
+        }
+        .font(.body)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel("\(label)：\(text.isEmpty ? "未提供" : text)")
+        .accessibilityIdentifier("schedule.course-detail.\(identifier)")
+    }
+
+    private var weekdayName: String {
         let names = [1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "日"]
+        return names[course.weekday] ?? "未知"
+    }
+
+    private var weekDescription: String {
         let weeks = course.activeWeeks
-        let weekText = weeks == Array(course.startWeek...course.endWeek)
-            ? "\(course.startWeek) - \(course.endWeek)"
-            : weeks.map(String.init).joined(separator: "、")
-        return "第\(weekText)周的周\(names[course.weekday] ?? "")，第 \(course.startPeriod)-\(course.endPeriod) 节课"
+        guard let first = weeks.first, let last = weeks.last else { return "未知" }
+        if first == last { return String(first) }
+        if zip(weeks, weeks.dropFirst()).allSatisfy({ $1 - $0 == 1 }) {
+            return "\(first)–\(last)"
+        }
+        return weeks.map(String.init).joined(separator: "、")
     }
 }

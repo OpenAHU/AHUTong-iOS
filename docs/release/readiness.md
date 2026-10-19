@@ -2,7 +2,7 @@
 
 ## CI 产物
 
-- `iOS CI`：在 iPhone 13 Pro Simulator 上构建、运行单元/UI 测试并导出 UI 证据。
+- `iOS CI`：在独立 iPhone 17 Pro Simulator 上构建、运行单元/UI 测试并导出 UI 证据。
 - `Build unsigned IPA`：生成不含证书和描述文件的 `AHUTong-unsigned.ipa`，供本机重新签名。
 - `Release readiness archive`：生成未签名 `.xcarchive`，校验 App/Widget 的隐私清单、Bundle 结构和敏感材料扫描结果。
 - 本轮支付重审的最终代码产物见 `E-20260801-02`：CI `30706286051`、未签名 IPA `30706286050`、Release Archive `30706286068` 均通过；真机扣款仍只允许人工执行。

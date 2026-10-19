@@ -19,3 +19,6 @@ xcuserdata/
 *.cer
 *.key
 *.xcconfig.local
+
+# Python artifact-verification test caches
+__pycache__/

@@ -229,23 +229,6 @@ private struct AndroidAgreementButton: View {
     }
 }
 
-struct AgreementDetailView: View {
-    let document: AgreementDocument
-
-    var body: some View {
-        AndroidScreen {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    AndroidHeader(title: document.title, large: true)
-                    AgreementDocumentBodyView(document: document)
-                        .padding(.horizontal, 24)
-                }
-            }
-        }
-        .androidDetailScreen()
-    }
-}
-
 private struct AgreementDocumentBodyView: View {
     @Environment(\.openURL) private var openURL
     let document: AgreementDocument

@@ -100,6 +100,14 @@ actor CourseReminderCoordinator {
         self.planner = planner
     }
 
+    func requestPermissionIfNeeded() async throws -> Bool {
+        switch await scheduler.authorization() {
+        case .authorized: return true
+        case .notDetermined: return try await scheduler.requestAuthorization()
+        case .denied: return false
+        }
+    }
+
     func setEnabled(
         _ enabled: Bool,
         courses: [Course],
@@ -111,14 +119,7 @@ actor CourseReminderCoordinator {
             try await scheduler.replaceCourseReminders(with: [])
             return false
         }
-        let status = await scheduler.authorization()
-        let granted: Bool
-        switch status {
-        case .authorized: granted = true
-        case .notDetermined: granted = try await scheduler.requestAuthorization()
-        case .denied: granted = false
-        }
-        guard granted else { return false }
+        guard try await requestPermissionIfNeeded() else { return false }
         try await scheduler.replaceCourseReminders(
             with: planner.requests(courses: courses, currentWeek: currentWeek, now: now, calendar: calendar)
         )

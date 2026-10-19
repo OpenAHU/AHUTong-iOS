@@ -146,7 +146,7 @@ final class AppShellUITests: XCTestCase {
         tabButton("settings", app: app).tap()
         app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["preferences.privacy-consent"].exists)
+        XCTAssertTrue(app.switches["preferences.privacy-consent"].exists)
         XCTAssertTrue(app.buttons["preferences.privacy-policy"].exists)
         XCTAssertFalse(app.buttons["preferences.login"].exists)
         XCTAssertFalse(app.staticTexts["液态玻璃"].exists)
@@ -229,19 +229,19 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(demoCourse.waitForExistence(timeout: 3))
 
         app.buttons["schedule.settings"].tap()
-        let overview = app.buttons["schedule.settings.overview"]
+        let overview = app.switches["schedule.settings.overview"]
         XCTAssertTrue(overview.waitForExistence(timeout: 3))
-        overview.tap()
-        expectation(for: NSPredicate(format: "value == %@", "开启"), evaluatedWith: overview)
+        overview.tapNativeSwitch()
+        expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: overview)
         waitForExpectations(timeout: 3)
         app.buttons["schedule.settings.done"].tap()
         XCTAssertTrue(app.buttons["schedule.course.demo-5"].waitForExistence(timeout: 4))
 
         app.buttons["schedule.settings"].tap()
-        let nextSemester = app.buttons["schedule.settings.next-semester"]
+        let nextSemester = app.switches["schedule.settings.next-semester"]
         XCTAssertTrue(nextSemester.waitForExistence(timeout: 3))
-        nextSemester.tap()
-        expectation(for: NSPredicate(format: "value == %@", "开启"), evaluatedWith: nextSemester)
+        nextSemester.tapNativeSwitch()
+        expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: nextSemester)
         waitForExpectations(timeout: 3)
         app.buttons["schedule.settings.done"].tap()
         XCTAssertTrue(app.buttons["schedule.course.demo-next-1"].waitForExistence(timeout: 5))
@@ -280,12 +280,17 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         tabButton("settings", app: app).tap()
         app.buttons["settings.preferences"].tap()
-        let reminder = app.buttons["preferences.course-reminders"]
+        let reminder = app.switches["preferences.course-reminders"]
         XCTAssertTrue(reminder.waitForExistence(timeout: 4))
-        reminder.tap()
-        expectation(for: NSPredicate(format: "value == %@", "开启"), evaluatedWith: reminder)
+        if reminder.value as? String == "1" {
+            reminder.tapNativeSwitch()
+            expectation(for: NSPredicate(format: "value == %@", "0"), evaluatedWith: reminder)
+            waitForExpectations(timeout: 3)
+        }
+        reminder.tapNativeSwitch()
+        expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: reminder)
         waitForExpectations(timeout: 3)
-        XCTAssertEqual(reminder.value as? String, "开启")
+        XCTAssertEqual(reminder.value as? String, "1")
         waitForRendering()
         capture("23-course-reminder-enabled", app: app)
     }
@@ -316,10 +321,10 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["settings.account-login"].exists)
         app.buttons["settings.preferences"].tap()
-        XCTAssertTrue(app.buttons["preferences.privacy-consent"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.switches["preferences.privacy-consent"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["preferences.privacy-policy"].exists)
         XCTAssertFalse(app.buttons["preferences.login"].exists)
-        XCTAssertFalse(app.buttons["preferences.cmb-card-recharge"].exists)
+        XCTAssertFalse(app.switches["preferences.cmb-card-recharge"].exists)
     }
 
     @MainActor
@@ -574,11 +579,11 @@ final class AppShellUITests: XCTestCase {
         launchDemo(app)
         tabButton("settings", app: app).tap()
         app.buttons["settings.preferences"].tap()
-        let preference = app.buttons["preferences.cmb-card-recharge"]
+        let preference = app.switches["preferences.cmb-card-recharge"]
         XCTAssertTrue(preference.waitForExistence(timeout: 4))
         let initialValue = preference.value as? String
-        let changedValue = initialValue == "开启" ? "关闭" : "开启"
-        preference.tap()
+        let changedValue = initialValue == "1" ? "0" : "1"
+        preference.tapNativeSwitch()
         expectation(
             for: NSPredicate(format: "value == %@", changedValue),
             evaluatedWith: preference
@@ -586,9 +591,9 @@ final class AppShellUITests: XCTestCase {
         waitForExpectations(timeout: 3)
         waitForRendering()
         capture("36-cmb-preference", app: app)
-        preference.tap()
+        preference.tapNativeSwitch()
         expectation(
-            for: NSPredicate(format: "value == %@", initialValue ?? "关闭"),
+            for: NSPredicate(format: "value == %@", initialValue ?? "0"),
             evaluatedWith: preference
         )
         waitForExpectations(timeout: 3)
@@ -649,11 +654,11 @@ final class AppShellUITests: XCTestCase {
         let preferences = app.buttons["settings.preferences"]
         XCTAssertTrue(preferences.waitForExistence(timeout: 4))
         preferences.tap()
-        let preference = app.buttons["preferences.cmb-card-recharge"]
+        let preference = app.switches["preferences.cmb-card-recharge"]
         XCTAssertTrue(preference.waitForExistence(timeout: 4))
-        let expectedValue = enabled ? "开启" : "关闭"
+        let expectedValue = enabled ? "1" : "0"
         if preference.value as? String != expectedValue {
-            preference.tap()
+            preference.tapNativeSwitch()
             expectation(
                 for: NSPredicate(format: "value == %@", expectedValue),
                 evaluatedWith: preference

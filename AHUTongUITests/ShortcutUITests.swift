@@ -16,12 +16,16 @@ final class ShortcutUITests: XCTestCase {
         let entry = app.buttons["preferences.shortcuts"]
         if !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 4))
-        let privacySection = app.otherElements["preferences.privacy-section"]
-        XCTAssertTrue(privacySection.exists)
-        XCTAssertEqual(entry.frame.minX, privacySection.frame.minX, accuracy: 1)
-        XCTAssertEqual(entry.frame.width, privacySection.frame.width, accuracy: 1)
+        // A native Form section exposes separate header/row/footer nodes.
+        // Compare the actual containing cells, not an old custom-card container.
+        let shortcutCell = app.cells.containing(.button, identifier: "preferences.shortcuts").firstMatch
+        let privacyCell = app.cells.containing(.switch, identifier: "preferences.privacy-consent").firstMatch
+        XCTAssertTrue(shortcutCell.exists)
+        XCTAssertTrue(privacyCell.exists)
+        XCTAssertEqual(shortcutCell.frame.minX, privacyCell.frame.minX, accuracy: 1)
+        XCTAssertEqual(shortcutCell.frame.width, privacyCell.frame.width, accuracy: 1)
         attachScreenshot(app, "preferences-shortcuts-card-alignment")
-        entry.press(forDuration: 0.5)
+        entry.tap()
         XCTAssertTrue(app.staticTexts["先允许 Siri 调用"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["shortcuts.siri-settings"].exists)
         XCTAssertTrue(app.buttons["shortcuts.open"].label.contains("安大通"))

@@ -36,7 +36,7 @@ final class SettingsExperienceUITests: XCTestCase {
         // A long press gives the Simulator recording time to show the press
         // highlight and scale before the NavigationLink activates on release.
         app.buttons["settings.preferences"].press(forDuration: 3)
-        XCTAssertTrue(app.buttons["preferences.privacy-consent"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.switches["preferences.privacy-consent"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["settings.account-login"].exists)
         XCTAssertFalse(app.buttons["preferences.login"].exists)
         XCTAssertFalse(app.buttons["preferences.liquid-glass"].exists)
@@ -76,6 +76,31 @@ final class SettingsExperienceUITests: XCTestCase {
     }
 
     @MainActor
+    func testNativeNotificationToggleRespondsBeforeAsyncUpdateFinishes() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+        app.launchArguments = ["--demo-consent", "--demo-session", "--demo-slow-notification-update"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
+        app.tabBars.buttons["设置"].tap()
+        app.buttons["settings.preferences"].tap()
+        let toggle = app.switches["preferences.course-reminders"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 4))
+        if toggle.value as? String == "1" {
+            toggle.tapNativeSwitch()
+            expectation(for: NSPredicate(format: "enabled == true AND value == %@", "0"), evaluatedWith: toggle)
+            waitForExpectations(timeout: 6)
+        }
+        toggle.tapNativeSwitch()
+        XCTAssertEqual(toggle.value as? String, "1", "系统开关应立即反馈，不能等异步准备完成才变色")
+        XCTAssertFalse(toggle.isEnabled, "准备过程中阻止重复提交")
+        capture("native-notification-update-pending", app)
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: toggle)
+        waitForExpectations(timeout: 6)
+        XCTAssertEqual(toggle.value as? String, "1")
+    }
+
+    @MainActor
     func testPressFeedbackWithSystemReduceMotion() {
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         var reduceMotion = openMotionSettings(settings)
@@ -103,7 +128,7 @@ final class SettingsExperienceUITests: XCTestCase {
             let marker = enabled ? "UX_PRESS_REDUCED" : "UX_PRESS_NORMAL"
             FileHandle.standardError.write(Data("\(marker)\n".utf8))
             app.buttons["settings.preferences"].press(forDuration: 6)
-            XCTAssertTrue(app.buttons["preferences.privacy-consent"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.switches["preferences.privacy-consent"].waitForExistence(timeout: 3))
         }
     }
 
@@ -135,7 +160,7 @@ final class SettingsExperienceUITests: XCTestCase {
         let target = enabled ? "1" : "0"
         if control.value as? String != target {
             let toggle = control.switches.firstMatch
-            if toggle.exists { toggle.tap() } else { control.tap() }
+            if toggle.exists { toggle.tapNativeSwitch() } else { control.tap() }
         }
         expectation(for: NSPredicate(format: "value == %@", target), evaluatedWith: control)
         waitForExpectations(timeout: 3)
