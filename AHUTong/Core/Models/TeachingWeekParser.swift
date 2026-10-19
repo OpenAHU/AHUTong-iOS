@@ -20,7 +20,7 @@ enum TeachingWeekParser {
            (1...20).contains(number) { return number }
         guard let dictionary = value as? [String: Any] else { return nil }
         // Never mistake a semester ID, status code or unrelated numeric field for a week.
-        for key in ["weekIndex", "week", "currentWeek", "teachWeek", "currentTeachWeek", "data", "result"] {
+        for key in ["weekIndex", "week", "currentWeek", "teachWeek", "currentTeachWeek", "data", "object", "result"] {
             if let nested = dictionary[key], let result = week(in: nested) { return result }
         }
         return nil

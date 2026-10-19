@@ -78,6 +78,7 @@ final class ScheduleViewModel: ObservableObject {
     private let semester: Semester
     private let accessMode: ScheduleAccessMode
     private let experienceStore: ExperienceScheduleStore
+    private let shortcutStore: ScheduleShortcutStore
 
     init(
         api: any CampusCoreAPI,
@@ -87,6 +88,7 @@ final class ScheduleViewModel: ObservableObject {
         store: any DataStore = AppPersistence.migratingDefaults(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        shortcutStore = ScheduleShortcutStore(userID: userID, dataStore: store)
         self.now = now
         self.accessMode = accessMode
         self.experienceStore = experienceStore
@@ -185,6 +187,11 @@ final class ScheduleViewModel: ObservableObject {
                 updatesCurrentWeek: !previewNext
             )
             if !previewNext {
+                try? await shortcutStore.record(
+                    courses: result.courses, semester: semester,
+                    currentWeek: currentWeekIsKnown ? currentWeek : nil,
+                    source: result.source, at: referenceDate
+                )
                 await updateSystemIntegrations(courses: result.courses, referenceDate: referenceDate)
             }
         } catch is CancellationError {

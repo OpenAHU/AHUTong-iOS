@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 @main
@@ -8,6 +9,7 @@ struct AHUTongApp: App {
     #endif
     init() {
         RetiredPreferenceCleaner.clean()
+        AHUTongShortcuts.updateAppShortcutParameters()
     }
 
     var body: some Scene {
