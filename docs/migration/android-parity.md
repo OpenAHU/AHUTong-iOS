@@ -8,7 +8,7 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 按用户七项顺序维护：审查 PR、登录/过期恢复、成绩考试、通知/APNs、缴费、UI/UX 和重签小组件；见本轮维护记录 |
+| 当前焦点 | 按用户七项顺序维护：审查 PR、登录/过期恢复、成绩考试、通知/APNs、缴费、UI/UX 和重签小组件；已补充原生导航、设置入口、按压反馈与简洁文案的本机复核，见 E-20261019-02 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
@@ -272,7 +272,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏；冷启动本地会话就绪即进入首页，网络校验不阻塞开屏；最终 UI smoke 见 E-20261014-01。 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏；冷启动本地会话就绪即进入首页，网络校验不阻塞开屏；最终 UI smoke 见 E-20261014-01。 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 原生四标签、顺序/选中语义及无玻璃偏好入口复核见 `E-20261019-02` | 2026-10-19 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
 | AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待真机验证 | 隐私 v4 同意后以官方可见 WebView 首登，也可点“暂不登录”进入体验账户并跨启动保持；账密/Cookie 只入 ThisDeviceOnly Keychain；教务过期时前台隐藏 WebView single-flight 续期。ADWMH 首次与后续均在前台隐藏 WebView 建立校方会话，即使没有历史 Cookie 也以同域原生 GET 获取验证码并接收新会话 Cookie，只将图片发往 `https://openahu.org/ocr/captcha` 识别并用同一 `/user/login` 续期，失败提示重试，不打开第二登录页。Keychain 会话快照统一使用 SDK 的扁平 Cookie 列表，仅在识别为原生 NDJSON 且转换非空时迁移旧 Cookie 存档，离线缓存不被空数组覆盖；写请求不重放；隐藏续期失败暂显示脱敏阶段 Toast；本地 Cookie 初始化后先开放缓存身份，再完成网络校验；退出、重新登录和体验切换使旧校验失效，避免异步恢复旧身份；临时隐藏续期失败及重复过期不再清理凭据，首次校验和业务读取保存轮换 Cookie，换账号隔离旧 Cookie | `CampusCardLoginClientTests` 覆盖登录字段与失败响应，`CampusSessionStoreTests` 新增旧快照迁移；373 个单元测试已通过，旧快照离线保护见 `E-20260924-01`；最终 macOS CI `35901490865` 全绿，取图修复与 OCR 诊断见 `E-20260924-02`、`E-20260924-03`；隐私 v4 与首次校园服务隐藏登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机仍待验证；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | 真实账户保留 cache-first/refresh/stale-cache，并同步不含学号的体验课表副本；体验账户绝不请求 CampusCoreAPI，可导入最大 1 MB/500 门课程的 v1 JSON，只接受当前/下学期并原子覆盖；Widget 继续读取本地快照；只解析明确的教学周字段，拒绝学期 ID/布尔值/无效数字；按账号和学期保存周数与日期锚点，离线按周一推进。 | `ExperienceScheduleStoreTests`、拒绝隐私 UI 路径与原课表回归待 macOS CI；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
@@ -294,8 +294,8 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 待真机验证 | 自动读取真实 campus/type/list 端点时会话过期先尝试隐藏续期，失败保留缓存和重试按钮，不拉起 ADWMH 可见 WebView；只读接口接受校方 `10000` 成功码，避免把“操作成功!”当成错误；分页、筛选和详情保留 | `CampusAuthenticatedClientTests` 的静默未授权与既有失物测试在 CI `35867866032` 通过；`LostFoundTests` 的 `10000` 本地夹具已在 CI `35898534602` 通过，见 `E-20260924-01`；无感续期见 `E-20260924-05`（CI `35959882196` 全绿）；真实登录联调仍依赖 AUTH-02 真机验证 | 2026-09-24 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；会话过期显示失败与手动登录入口，不因自动重试触发 WebView 或重放写请求 | 既有所有权/发布/删除单测及 UI smoke 在 CI `35867866032` 全绿；真实登录联调仍依赖 AUTH-02 真机验证 | 2026-09-23 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 的路径、面包屑、LFS、下载完整性、凭据边界与 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
-| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
-| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整；本轮修正共享容器缺失状态、统一签名共享组、组件预览和周末列，重签后列表缺失仍待设备确认 | `ScheduleWidgetSnapshotTests` 6 项含跨周推进与共享容器缺失；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
+| PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者；设置行统一轻触觉、明暗和短缩放，减弱动态效果保留非动态反馈；本轮修正偏好入口高亮越界并精简数据清理/更新文案 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；原生入口与反馈实际模拟器复核见 `E-20261019-02` | 2026-10-19 |
+| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整；本轮修正共享容器缺失状态、统一签名共享组、组件预览和周末列，重签后列表缺失仍待设备确认 | `ScheduleWidgetSnapshotTests` 6 项含跨周推进与共享容器缺失；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；可滚动、可展开的小组件指引及大字体复核见 `E-20261019-02` | 2026-10-19 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护及 ActivityKit 锁屏与灵动岛倒计时；用户设置保留，Debug 测试页已删除；提醒统一校园时区，ActivityKit 按真实结束节次计算；当前没有 APNs | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 
@@ -447,6 +447,32 @@ xcodebuild "${maintenance_args[@]}" test \
 xcodebuild "${maintenance_args[@]}" test \
   -only-testing:AHUTongUITests/PaymentLocalParityUITests \
   -resultBundlePath build/maintenance/Payment-correction-recheck.xcresult
+```
+
+### E-20261019-02：原生导航、设置反馈与简洁文案复核
+
+- 范围：继续使用同一 AIO worktree 和 iOS 维护分支；核对原生底栏、无 Debug/玻璃入口、真实图标与账户位置、设置行反馈。本次提交修复偏好入口按压高亮越过卡片边界，精简清理/更新/隐私/充值/课前倒计时文案，删除不可达说明弹窗，小组件指引支持滚动和中/大高度。详细对照见 [维护记录](2026-10-19-maintenance-audit.md#原生导航设置入口与按压反馈复核)。
+- 静态检查：根容器仍是 `TabView`，四标签定义与系统选中语义未改；无自绘底栏、`UITabBarAppearance`/兼容模式覆盖、玻璃偏好或 Debug 页面。`AppMark` 与 AppIcon 图片 SHA-256 均为 `11a68849ce885e55b0bdc5be4c61b98ebb1a331b26a89e13bb121b96758f67c8`。设置域可点击行统一反馈样式；系统对话框和工具栏按钮继续使用系统样式。
+- 单元测试：`SettingsInteractionTests` 5 项通过，包括普通按压、减弱动态效果保留非动态反馈、旧偏好清理和账户偏好隔离；结果在 `build/ux-review/Settings-final.xcresult`，只以其中单元测试部分为通过证据。
+- 模拟器：Xcode 27.0 / iPhone 17 Pro / iOS 26.5，使用测试账户且禁用真实缴费。新增 3 个 UI 用例分别通过：`testNativeTabsSettingsStructureAndConciseCopy`（39.336 秒，`Settings-verified.xcresult`）、`testPressFeedbackWithSystemReduceMotion`（68.022 秒，`Settings-motion-confirmed.xcresult`）、`testSettingsAndWidgetGuideRemainReachable`（19.256 秒，`Settings-accessibility.xcresult`）。验证四个原生标签的顺序与选中态、App 卡片八连点无 Debug、账户入口位置、无玻璃入口、清理/更新说明、小组件指引及可达性。
+- 系统设置与视觉：通过真实系统 Settings 的“减弱动态效果”开关分别运行普通与减弱状态，并恢复本次用例进入时的值；实际长按截图 `normal-pressed-fixed.png`、`reduced-pressed-fixed.png` 确认高亮留在卡片内，减弱状态不缩放。另将 Simulator 设置为深色及 `accessibility-medium` 字体运行可达性测试，已恢复原来的 light/large。设置、偏好和小组件截图已人工检查，指引完整内容可滚动、展开，“完成”可点击。
+- 可视证据：全部保留在 `build/ux-review/`；`settings-ux-settings-resting.png`、`settings-ux-preferences-top.png` 为正常界面，`settings-ux-accessible-*.png` 为深色大字体；`settings-accessibility.mp4` 为约 20 秒实际模拟器录屏，按压过程另见 `settings-feedback-fixed.mp4`。均来自实际运行，未用设计稿替代。XCTest 附件随各结果包保存。
+- 失败记录：早期 UI 轮次暴露系统弹层没有独立“取消”行、系统 Settings 整行与内部开关的定位差异，以及恢复后仍停留详情页导致根 Tab 不存在等测试假设。修正定位、跨应用重新进入与根页面清理后分别复验通过；`Settings-inspection`、`Settings-final`、`Settings-verified`、`Settings-motion-final` 和 `Settings-motion-recheck` 原始结果保留，不将这些完整轮次写成全绿。
+- 设备构建：本次界面修改的 Release iphoneos 无签名构建成功，见 `device-final-build.log`。新包 `AHUTong-ux-unsigned.ipa` 为 6,809,519 bytes，SHA-256 `b63c0c9b430dea729a835203793227eadabd20b256e0faa441472b392c24aa16`，Widget 包结构校验通过；`ipa-verification.json` 记录的是结构检查输出，未签名包仍需重签后以 `--require-signature` 再验。前一轮维护包及其校验和不变。
+- 边界：本轮 5 项单测与 3 条 UI 是定向回归，未重跑全部 423 单测；轻触觉手感、iOS 27 外观及重签后系统组件注册仍待物理机确认。静态布局遵循既有 Android 基线，本轮未重新初始化 Android 或做新一轮双端截图对照。PREF-01、SYS-01 不提升真机验收状态，严格完成数仍为 14 / 25。
+
+主要复验命令（共同参数沿用 E-20261019-01 的 `maintenance_args`，结果与日志位于 `build/ux-review/`）：
+
+```bash
+xcodebuild "${maintenance_args[@]}" test \
+  -only-testing:AHUTongTests/SettingsInteractionTests \
+  -only-testing:AHUTongUITests/SettingsExperienceUITests
+# 三条 UI 的最终通过证据分属上列三个结果包，未将此首轮命令写为全绿。
+xcrun simctl ui 64F2DE05-3F35-4563-85C7-00378E4F42B8 appearance dark
+xcrun simctl ui 64F2DE05-3F35-4563-85C7-00378E4F42B8 content_size accessibility-medium
+xcodebuild "${maintenance_args[@]}" test \
+  -only-testing:AHUTongUITests/SettingsExperienceUITests/testSettingsAndWidgetGuideRemainReachable
+python3 scripts/verify-widget-bundle.py build/ux-review/AHUTong-ux-unsigned.ipa
 ```
 
 ## 12. 风险与阻断项
@@ -640,3 +666,4 @@ xcodebuild "${maintenance_args[@]}" test \
 | 2026-10-14 | AUTH-022 / SCH-007 / HOME-004 | 修复网络校验阻塞开屏、周数字段误读、地区设置换周、演示偏好残留及下学期日期伪推算；保留按账号/学期隔离的离线周锚点，旧校验和旧课表请求不能覆盖新状态；补充申请制 Ad Hoc OTA 分发方案与第三方应用授权边界 | 本机 Xcode 27：401 单测 + 2 UI 全绿，见 `E-20261014-01`；授权真机待验收 | 本分支 |
 | 2026-10-14 | CARD-010 | 弱网首页优先预取付款码并取消慢余额请求；续期不等待余额验证；补齐内存年龄、后台清理和旧响应保护，按本机预览后推送/打包的顺序交付 | 最终本机 410 单测 + 3 UI 全绿，预览与边界见 `E-20261014-02` | 本分支 |
 | 2026-10-19 | AUTH-023 / ACA-006 / SYS-003 / UI-007 | 按用户七项顺序完成 PR 审查与维护：临时续期保留凭据、Cookie 轮换与账号隔离、成绩/考试缓存提示、校园时区和实际节次、小组件包与共享组检查、缴费键盘完成入口；校准完成计数，SYS-01 重开真机验证，更新 25 人问卷计划及失效手册 | 本机 423 单测；5 个受影响 UI 用例通过复验；Release iphoneos 构建与最终 IPA 结构校验通过，首轮失败及真机边界见 `E-20261019-01` | iOS `bd4335f` 与本次文档提交 |
+| 2026-10-19 | UI-008 / PREF-011 | 复核系统 TabView 四入口、无 Debug/玻璃设置、真实图标和账户位置；修复偏好行高亮越界，精简提示，删除不可达弹窗，小组件指引适应大字体 | 5 项设置单测、3 条 UI 分别通过；真实系统减弱动态效果及深色大字体截图/录屏、Release device 构建与新 IPA 结构校验见 `E-20261019-02`；真机边界保留 | 本次提交 |

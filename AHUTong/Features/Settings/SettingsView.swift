@@ -26,9 +26,9 @@ struct SettingsView: View {
                     } label: {
                         AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
                             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-                            .padding(.horizontal, 16)
                     }
                     .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
+                    .padding(.horizontal, 16)
                     .accessibilityIdentifier("settings.preferences")
                     section("关于")
                     settingsGroup {
@@ -47,9 +47,10 @@ struct SettingsView: View {
                             }
                         }
                         .accessibilityIdentifier("settings.feedback")
-                        AndroidSettingButton(label: "清除缓存", systemImage: "line.3.horizontal.decrease.circle") {
+                        AndroidSettingButton(label: "清除本机数据", systemImage: "line.3.horizontal.decrease.circle") {
                             showClearConfirmation = true
                         }
+                        .accessibilityIdentifier("settings.clear-data")
                         AndroidSettingButton(label: "检查更新", systemImage: "arrow.triangle.2.circlepath") {
                             guard !isCheckingUpdate else { return }
                             isCheckingUpdate = true
@@ -64,13 +65,14 @@ struct SettingsView: View {
                             }
                         }
                         AndroidSettingButton(label: "更新说明", systemImage: "doc.text") { showUpdateLog = true }
+                            .accessibilityIdentifier("settings.update-notes")
                     }
                 }
                 .padding(.bottom, 16)
             }
             .scrollIndicators(.hidden)
         }
-        .confirmationDialog("您的登录状态、课表等信息将会被永久清除", isPresented: $showClearConfirmation, titleVisibility: .visible) {
+        .confirmationDialog("清除本机数据？", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("清除", role: .destructive) {
                 Task {
                     await AppDataCleaner.clearCaches()
@@ -79,11 +81,13 @@ struct SettingsView: View {
                 }
             }
             Button("取消", role: .cancel) {}
+        } message: {
+            Text("将退出登录，并清除课表、缓存和隐私选择。")
         }
         .alert("更新说明", isPresented: $showUpdateLog) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("测试版本由 GitHub Actions 构建；七天签名到期后需要重新签名安装。")
+            Text("改进登录续期、成绩与考试提示、缴费输入和小组件添加指引。")
         }
         .alert("检查更新", isPresented: Binding(
             get: { updateResult != nil },
@@ -107,7 +111,7 @@ struct SettingsView: View {
                         await onboardingModel.setPrivacyDecisionAndConfirm(.accepted)
                         await appModel.prepareForRealLogin()
                         showsPrivacyConsent = false
-                        toastCenter.show("已同意保存登录信息，请登录真实校园账号")
+                        toastCenter.show("已同意，请登录校园账号")
                     }
                 }
             )
@@ -315,7 +319,6 @@ private struct AndroidPreferencesView: View {
     @AppStorage("notifications.live-activity") private var liveActivity = false
     @AppStorage("theme.color") private var themeColor = "blue"
     @AppStorage private var prefersCMB: Bool
-    @State private var showsIslandExplanation = false
     @State private var showsCustomColor = false
     @State private var showsPrivacyConsent = false
     @State private var customColor = ""
@@ -348,7 +351,7 @@ private struct AndroidPreferencesView: View {
                     preferenceSection("隐私与登录") {
                         preferenceRow(
                             title: "保存登录信息并自动续期",
-                            detail: "账号、密码和 Cookie 仅保存在本机 Keychain",
+                            detail: "在本机安全保存，用于自动登录",
                             isOn: onboardingModel.consent.privacyDecision == .accepted,
                             identifier: "preferences.privacy-consent"
                         ) {
@@ -368,7 +371,7 @@ private struct AndroidPreferencesView: View {
                         preferenceSection("充值") {
                             preferenceRow(
                                 title: "总是使用招商银行充值",
-                                detail: "开启后首页校园卡充值会直接进入招商银行充值",
+                                detail: "首页充值直接打开招商银行",
                                 isOn: prefersCMB,
                                 identifier: "preferences.cmb-card-recharge"
                             ) {
@@ -392,8 +395,8 @@ private struct AndroidPreferencesView: View {
 
                         preferenceSection("通知增强") {
                             preferenceRow(
-                                title: "课前倒计时岛卡提醒（实验性）",
-                                detail: "仅部分系统支持 需同时开启课前提醒",
+                                title: "课前倒计时（实验性）",
+                                detail: "在锁屏和灵动岛显示，需先开启课前提醒",
                                 isOn: liveActivity,
                                 identifier: "preferences.island-reminder"
                             ) {
@@ -431,11 +434,6 @@ private struct AndroidPreferencesView: View {
         .alert("无法更新提醒", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("确定", role: .cancel) {}
         } message: { Text(model.errorMessage ?? "") }
-        .alert("iOS 平台说明", isPresented: $showsIslandExplanation) {
-            Button("确定", role: .cancel) {}
-        } message: {
-            Text("iOS 使用 Live Activity 在锁定屏幕和灵动岛显示下一节课倒计时。可在“设置 → 安大通 → 实时活动”中管理系统权限。")
-        }
         .alert("自定义主题颜色", isPresented: $showsCustomColor) {
             TextField("#FF007FAC", text: $customColor)
             Button("取消", role: .cancel) {}
@@ -455,7 +453,7 @@ private struct AndroidPreferencesView: View {
                         await onboardingModel.setPrivacyDecisionAndConfirm(.accepted)
                         await appModel.prepareForRealLogin()
                         showsPrivacyConsent = false
-                        toastCenter.show("已同意保存登录信息，请登录真实校园账号")
+                        toastCenter.show("已同意，请登录校园账号")
                     }
                 }
             )
@@ -468,7 +466,7 @@ private struct AndroidPreferencesView: View {
             Task {
                 await onboardingModel.setPrivacyDecisionAndConfirm(.declined)
                 await appModel.enterExperienceMode()
-                toastCenter.show("已切换为安大通体验用户，除课表外的校园功能已停用。")
+                toastCenter.show("已切换为体验账户，仅保留课表和设置")
             }
         } else {
             showsPrivacyConsent = true

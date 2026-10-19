@@ -56,32 +56,32 @@ struct ToolsView: View {
         }
         .sheet(isPresented: $showsWidgetGuide) {
             NavigationStack {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("添加课表小组件").font(.title2.bold())
-                    Label("长按 iPhone 主屏幕空白处", systemImage: "hand.tap")
-                    Label("点击左上角“编辑”或“+”", systemImage: "plus.circle")
-                    Label("搜索“安大通课表”，选择尺寸并添加", systemImage: "rectangle.grid.2x2")
-                    Text("iOS 不允许 App 直接固定桌面小组件，需要在系统主屏幕完成最后一步。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if ScheduleWidgetSnapshotStore.sharedContainerURL == nil {
-                        Label("当前安装方式无法同步小组件课表。请使用支持小组件的签名版本重新安装。", systemImage: "exclamationmark.triangle")
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text("添加课表小组件").font(.title2.bold())
+                        Label("长按 iPhone 主屏幕空白处", systemImage: "hand.tap")
+                        Label("点击左上角“编辑”或“+”", systemImage: "plus.circle")
+                        Label("搜索“安大通课表”，选择尺寸并添加", systemImage: "rectangle.grid.2x2")
+                        if ScheduleWidgetSnapshotStore.sharedContainerURL == nil {
+                            Label("当前安装无法同步课表，请安装支持小组件的签名版本。", systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("未找到安大通？重签时保留小组件扩展，安装后先打开 App。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    Text("如果添加列表里找不到安大通，请确认重签安装时保留了小组件扩展，然后至少打开 App 一次。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                    .padding(24)
                 }
-                .padding(24)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("完成") { showsWidgetGuide = false }
+                            .accessibilityIdentifier("tools.widget-guide.done")
                     }
                 }
             }
-            .presentationDetents([.medium])
+            .presentationDetents([.medium, .large])
+            .accessibilityIdentifier("tools.widget-guide")
         }
         .task { homeLayout = (try? await layoutStore.load()) ?? HomeWidgetLayout() }
     }
@@ -126,6 +126,7 @@ struct ToolsView: View {
                     .padding(.horizontal, 24)
 
                 Button("添加") { showsWidgetGuide = true }
+                    .accessibilityIdentifier("tools.widget-add")
                     .buttonStyle(.plain)
                     .font(.headline)
                     .foregroundStyle(Color.primary)
