@@ -624,7 +624,7 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 培养方案：复用成绩学籍与教务认证，只访问本科完成情况页；手动同域入口跳转限定精确 info/id，不转发 Cookie 到外部域名；单引号、裸枚举键、转义及 undefined 纯解析，不执行学校脚本。汇总沿用教务服务端学分，不累加课程重算学分；无服务端进度时以“学分完成率”明确展示已完成/要求学分比值。支持模块/子模块、课程状态、只看未完成、档案选择、按账号缓存与手动刷新，错误时保留旧数据。原始 HTML 与 student 身份资料不持久化。已登录模拟器读取真实方案及模块成功。
 - 校园卡账单：复用 YCardReadOnlyClient 的内存 Token/Cookie、HTTP/业务 401 单次续期及严格读请求白名单，增加 GET turnover 与 count；金额用整数分，方向按 typeFrom，不以正负猜测。支持月份/全部时间、收入支出、已加载记录金额过滤、分页去重、详情；统计遍历所选范围全部页后计算每日/商户，任一页失败不发布部分总额，超过上限要求缩小范围。真实账户列表、服务端汇总与本地完整统计已核对一致；未创建充值订单、未执行支付、不保存真实账单截图或明细到仓库。
 - 最终单测：`build/native-ui/final-unit-494.xcresult`，494 / 494 Swift 测试通过，包括缓存/账号隔离、重定向边界、分页/完整统计、首页缓存刷新、周末/重叠/晚课与布局渲染。打包验证 Python 4 / 4 通过并接入 CI。18 项不同目标 UI 用例分组通过（本轮无“18 用例单个整包”）；新增只读查询及 Siri 冷启动/跨 Tab 重复/体验账户边界见 `services-final-validation.xcresult`，原生 Form 行宽修正后的 Siri 引导见 `shortcut-native-form-final.xcresult`。地点缩写后的 Widget 渲染复验见 `widget-location-final.xcresult`。
-- 构建/产物：Xcode 27.0 / iOS 26.5 Simulator，Release arm64 Simulator 和 unsigned iphoneos 均已编译；版本保持 1.0.2（3），本轮不是生产发版。产物、校验和与最终构建记录在 `build/native-ui-device/`；发布前需继续完成 iOS 27 的 Siri/Widget 有效重签物理机复验。CI、PR 与最终产物校验将在本节补录。
+- 构建/产物：Xcode 27.0 / iOS 26.5 Simulator，Release arm64 Simulator 和 unsigned iphoneos 均已编译；版本保持 1.0.2（3），本轮不是生产发版。产物、校验和与最终构建记录在 `build/native-ui-device/`；发布前需继续完成 iOS 27 的 Siri/Widget 有效重签物理机复验。维护 PR [#6](https://github.com/OpenAHU/AHUTong-iOS/pull/6)，云端检查状态以该 PR 为准；最终本地产物和 SHA-256 记录在同目录 verification JSON。最终可视化复查将本科说明移入列表脚注，避免底部浮层遮挡课程文字。首次云端 Xcode 26 在 Widget 的复合 VoiceOver 表达式触发类型检查超时，本机 Xcode 27 未复现；已拆为显式字符串 helper，以云端重新编译结果作为兼容性验收。
 
 ## 12. 风险与阻断项
 

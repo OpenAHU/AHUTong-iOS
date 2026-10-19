@@ -125,7 +125,7 @@ struct ScheduleWidgetContent: View {
                                 .background(card, in: RoundedRectangle(cornerRadius: 4))
                                 .clipped()
                                 .offset(y: CGFloat(block.start - 1) * row)
-                                .accessibilityLabel("周\(weekday(day))，\(block.start)至\(block.end)节，" + block.courses.map { "\($0.name)，\($0.location)" }.joined(separator: "；"))
+                                .accessibilityLabel(Text(blockLabel(block, day: day)))
                             }
                         }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
@@ -133,6 +133,12 @@ struct ScheduleWidgetContent: View {
             }
         }
     }
+    private func blockLabel(_ block: ScheduleWidgetBlock, day: Int) -> String {
+        let details: [String] = block.courses.map { course in course.name + "，" + course.location }
+        let period = String(block.start) + "至" + String(block.end) + "节"
+        return "周" + weekday(day) + "，" + period + "，" + details.joined(separator: "；")
+    }
+
     private var status: some View {
         let message: String = switch snapshot.status {
         case .ready: ""

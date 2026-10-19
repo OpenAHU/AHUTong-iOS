@@ -96,6 +96,7 @@ struct ProgramCompletionView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         if !value.auditPublished { Text("审核结果尚未发布，以教务系统为准。") }
                         Text("同步于 \(saved.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                        Text("当前支持本科教务培养方案")
                     }
                 }
                 Toggle("只看未完成", isOn: $unfinishedOnly)
@@ -114,7 +115,6 @@ struct ProgramCompletionView: View {
             }
             if model.saved == nil, !model.isLoading, model.error == nil { Text("暂无培养方案数据") }
         }
-        .safeAreaInset(edge: .bottom) { Text("当前支持本科教务培养方案").font(.footnote).foregroundStyle(.secondary).padding(8) }
         .navigationTitle("培养方案")
         .accessibilityIdentifier("program-completion.screen")
         .refreshable { await model.load(demo: AppRuntime.isDemoSession, refresh: true) }
