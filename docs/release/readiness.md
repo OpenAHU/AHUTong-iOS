@@ -46,9 +46,11 @@ Kazumi 的[官方构建工作流](https://github.com/Predidit/Kazumi/blob/main/.
 
 1. 在 macOS 下载并解压未签名 IPA，或从仓库生成 Xcode 工程：`xcodegen generate --spec project.yml`。
 2. 用 Xcode 打开 `AHUTong.xcodeproj`，在 App 和 Widget 两个 target 选择自己的 Personal Team。
-3. 将 App、Widget 和 App Group 的 Bundle ID 改成自己账号下唯一且相互匹配的值；不要提交这些本地签名改动。
+3. 将 App 和 Widget 的 Bundle ID 改成自己账号下唯一且相互匹配的值。需要共享课表时，两个 target 都须获授权使用同一 App Group，并设置 `AHUTONG_APP_GROUP`；不要提交这些本地签名改动。
 4. 用数据线连接 iPhone 13 Pro，选择设备后运行；首次安装需在设备的“VPN 与设备管理”中信任开发者。
 5. 免费 Personal Team 通常需要每 7 天重新构建/安装。到期前保留本地项目和相同 Bundle ID，以减少数据迁移影响。
+
+Apple 的[能力支持取决于平台及会员类型](https://developer.apple.com/help/account/capabilities/capabilities-overview)。如果当前团队无法为双方授权 App Group，修改标识字符串本身不能解决共享课表；必须以实际 profile、签名权限和设备结果为准，不能承诺免费重签后完整支持 Widget。
 
 ### Sideloadly / AltStore
 
@@ -59,7 +61,7 @@ Kazumi 的[官方构建工作流](https://github.com/Predidit/Kazumi/blob/main/.
 ## 发布前人工检查
 
 - [ ] 使用授权校园测试账号验证登录、课表和 PAY-01～05；真实支付只由测试者在明确授权的小额环境中手动确认。
-- [ ] 验证隐私 v3 接受/拒绝/撤回、可见 CAS 首登、前台隐藏 WebView 续期、ADWMH 验证码降级，以及只含课表+设置的体验账户。
+- [ ] 验证隐私 v4 接受/拒绝/撤回、可见 CAS 首登、首次及过期校园服务隐藏认证、OCR 失败重试，以及只含课表+设置的体验账户。
 - [ ] 确认 Apple target 不编译 Rust `/login` 与外部 OCR 链路；Release Archive 会拒绝包含旧 OCR 端点的二进制。
 - [x] PAY-01、PAY-03、PAY-05 的客户端签名与 PAY-02 安全键盘兼容逻辑已按 Android `2c33b0b` 隔离实现；协议常量只存在于私有支付兼容层，值不得进入日志、文档、诊断或验收记录。
 - [x] CI/自动测试通过应用级禁写开关、runner 域名阻断和 URLProtocol/Mock 禁止连接真实扣款接口。
@@ -67,3 +69,20 @@ Kazumi 的[官方构建工作流](https://github.com/Predidit/Kazumi/blob/main/.
 - [ ] 检查定位、通知、Widget、Quick Look/分享、支付宝跳转与回跳、弱网和取消路径。
 - [ ] 固定正式 Bundle ID、签名团队、许可证、版本号、App Icon、支持与隐私政策链接。
 - [ ] 生成有签名的 Release Archive，并在 Organizer/App Store Connect 完成最终验证。
+
+## 重签后找不到课表小组件
+
+安大通 Widget 是独立的 `PlugIns/AHUTongWidget.appex`。主 App 能启动不代表扩展被保留；[Sideloadly](https://sideloadly.io/) 提供移除部分或全部扩展的选项，[AltStore](https://faq.altstore.io/altstore-classic/app-ids) 也将扩展计入 App ID 使用量。安装时须保留课表扩展，并在主 App 首次打开后检查系统添加列表。
+
+在重签前检查包结构，重签导出后检查签名与共享权限：
+
+```bash
+python3 scripts/verify-widget-bundle.py AHUTong-unsigned.ipa
+python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
+```
+
+检查器核对扩展存在、App/Widget Bundle ID 前缀、版本号、可执行文件、双方配置的 App Group，以及签名和描述文件中的共享权限；不会打印描述文件、设备 UDID 或证书。结构检查通过不能替代 iOS 系统注册和真机添加验证。
+
+从源码使用自己团队签名时，设置 `AHUTONG_APP_GROUP` 为该团队已配置并且 App/Widget 都获授权的共享组；两份 entitlements 与两份 Info.plist 共用此变量。仅修改 Bundle ID 而丢失共享权限，会导致组件读不到课表。iOS 的 App/扩展需要共同获授权的 [App Group](https://developer.apple.com/documentation/xcode/configuring-app-groups)。
+
+若系统列表完全没有安大通，先排查扩展保留、扩展签名/标识和注册；若可添加但无数据，再检查共享权限和课表同步。当前本机运行时为 iOS 26.5，不能用模拟器测试替代用户报告的 iOS 27 真机结论。
