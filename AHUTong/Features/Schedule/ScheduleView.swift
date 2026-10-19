@@ -205,6 +205,14 @@ final class ScheduleViewModel: ObservableObject {
 
     private func updateSystemIntegrations(courses: [Course], referenceDate: Date = Date()) async {
         await publishWidget(.make(courses: courses, currentWeek: currentWeek, updatedAt: referenceDate))
+        if accessMode == .authenticated, !AppRuntime.isDemoSession {
+            _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(
+                UserDefaults.standard.bool(forKey: "notifications.live-activity"),
+                courses: courses,
+                currentWeek: currentWeek,
+                now: referenceDate
+            )
+        }
         if UserDefaults.standard.bool(forKey: "notifications.course-reminders") {
             _ = try? await CourseReminderCoordinator().setEnabled(
                 true,

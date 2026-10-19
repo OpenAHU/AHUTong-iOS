@@ -76,7 +76,10 @@ struct RootView: View {
             if case .experience = state, !availableTabs.contains(selectedTab) {
                 selectedTab = .schedule
             }
-            Task { await reloadGrayGate() }
+            Task {
+                await reloadGrayGate()
+                await rescheduleCourseRemindersIfNeeded()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
             Task { await reloadGrayGate() }
@@ -156,23 +159,36 @@ struct RootView: View {
     }
 
     private func rescheduleCourseRemindersIfNeeded() async {
-        let isAuthenticated: Bool
-        if case .authenticated = appModel.sessionState {
-            isAuthenticated = true
-        } else {
-            isAuthenticated = false
+        guard !AppRuntime.isDemoSession else { return }
+        let liveActivityEnabled = UserDefaults.standard.bool(forKey: "notifications.live-activity")
+        guard case let .authenticated(user) = appModel.sessionState else {
+            _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(false, courses: [], currentWeek: 1)
+            return
         }
         guard CourseReminderMaintenancePolicy.shouldRefresh(
             isDemoSession: AppRuntime.isDemoSession,
             remindersEnabled: UserDefaults.standard.bool(forKey: "notifications.course-reminders"),
-            isAuthenticated: isAuthenticated
-        ) else { return }
+            isAuthenticated: true,
+            liveActivityEnabled: liveActivityEnabled
+        ) else {
+            _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(false, courses: [], currentWeek: 1)
+            return
+        }
         do {
             async let courses = appModel.campusAPI.schedule()
             async let week = appModel.campusAPI.currentWeek()
             let (loadedCourses, loadedWeek) = try await (courses, week)
-            _ = try await CourseReminderCoordinator().setEnabled(
-                true,
+            guard case let .authenticated(currentUser) = appModel.sessionState,
+                  currentUser.studentID == user.studentID else { return }
+            if UserDefaults.standard.bool(forKey: "notifications.course-reminders") {
+                _ = try? await CourseReminderCoordinator().setEnabled(
+                    true,
+                    courses: loadedCourses,
+                    currentWeek: loadedWeek
+                )
+            }
+            _ = try await CourseLiveActivityCoordinator.shared.setEnabled(
+                UserDefaults.standard.bool(forKey: "notifications.live-activity"),
                 courses: loadedCourses,
                 currentWeek: loadedWeek
             )
@@ -186,9 +202,10 @@ enum CourseReminderMaintenancePolicy {
     static func shouldRefresh(
         isDemoSession: Bool,
         remindersEnabled: Bool,
-        isAuthenticated: Bool
+        isAuthenticated: Bool,
+        liveActivityEnabled: Bool = false
     ) -> Bool {
-        !isDemoSession && remindersEnabled && isAuthenticated
+        !isDemoSession && (remindersEnabled || liveActivityEnabled) && isAuthenticated
     }
 }
 

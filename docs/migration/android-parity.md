@@ -8,13 +8,13 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 用户只在 App 初次登录手动输入一次：无历史 ADWMH Cookie 时也静默建立校园服务会话；余额与失物招领只读请求自动续期，失败仅提示重试，不弹第二登录页 |
+| 当前焦点 | SYS-02 实时活动回归：系统原生上课/下课双倒计时、当天课程与八小时寿命、前台及课表刷新维护；本次不接入 APNs |
 | 下一步 | 物理 iPhone 用授权账号验证清缓存重登后首次 ADWMH 隐藏登录、网络失败重试、余额/失物招领及隐私 v4 再确认 |
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
 | 严格完成定义 | 16 / 25（64.0%）；AUTH-02、CARD-01、CONTENT-01 的首次无感校园服务登录仍待 macOS 和授权账号真机验证，PREF-01 及 PAY-01～05 保留各自验证边界 |
-| 当前分支 | `codex/ios-authorization-prep` |
-| 最近更新 | 2026-09-24 |
+| 当前分支 | `feat/live-activity-countdown` |
+| 最近更新 | 2026-10-19 |
 
 ## 1. 目标与边界
 
@@ -293,7 +293,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 的路径、面包屑、LFS、下载完整性、凭据边界与 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证 | 2026-09-24 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 已完成 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整 | `ScheduleWidgetSnapshotTests` 5 项含跨周推进；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证 | 2026-09-24 |
-| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护及 ActivityKit 锁屏与灵动岛倒计时；用户设置保留，Debug 测试页已删除 | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归 | 2026-09-23 |
+| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、`Core/LiveActivity/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 提前 10 分钟提醒；Live Activity 独立开关、上课/下课原生双倒计时、课程进度、截止停零、当天/八小时范围和前台/课表刷新维护；不接入 APNs | Xcode 27 / iOS 26.5 Simulator 定向 29 单测通过（含 12 项 Live Activity），独立开关及后台倒计时 UI 场景分别通过；截图和真机边界见 `E-20261019-LIVE-01` | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过 | 2026-09-23 |
 
 ### 8.1 全量复查收口（2026-07-15）
@@ -348,7 +348,7 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 天气异常数据 | 固定 Android 基线遇到小数 UV 指数时可能因整数强转抛出 `NumberFormatException` | iOS 使用兼容小数的安全解析并显示结构化错误/旧缓存，不复制崩溃 |
 | 加载/空/错误缓存 | Android 部分课表、成绩和考试状态截图会继续显示已播种缓存，状态与旧数据可同时存在 | iOS 对显式 demo 状态确定性显示加载、空或错误组件；生产 cache-first 仅在安全的 stale-cache 回退场景保留旧数据，不复制含糊状态 |
 | 校园卡测试二维码 | Android UI 基线使用固定 mock 二维码，生产路径从真实接口刷新 | iOS UI 测试同样只使用不可支付的确定性 fixture；生产仍读取固定 SDK 动态响应，任何测试内容不得进入真实付款码 |
-| 偏好中的岛卡权限 | Android 可跳转厂商岛卡/通知增强相关系统权限 | iOS 保留同序入口和状态样式；Android 专属权限入口显示平台说明，普通通知仍使用 UserNotifications |
+| 偏好中的岛卡权限 | Android 可跳转厂商岛卡/通知增强相关系统权限 | iOS 使用独立 Live Activity 偏好并跳转系统实时活动权限；普通通知仍使用 UserNotifications，两个开关互不依赖 |
 | 许可证 | Android 列表标有 TODO，可能不完整 | 从 iOS 实际依赖生成/维护完整清单 |
 | 浴室数据源 | `SdkDataSource.getBathRooms()` 当前为空响应，部分功能走其他直连接口 | 以实际接口契约和 fixture 为准，不复制空实现 |
 | APK/热更新 | Android 有完整自更新、分段下载和安装流程 | 完全排除，走 App Store/TestFlight |
@@ -391,6 +391,17 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | iOS 真机 | Keychain、定位、通知、WidgetKit、ActivityKit、相册/文件、第三方跳转、后台与支付 |
 
 每次验证都在对应功能行记录实际命令、Xcode/iOS 版本、设备或 Simulator、结果和证据路径；不要只写“已测试”。
+
+### E-20261019-LIVE-01：课程实时活动倒计时回归
+
+- 基线：远端 `main` / AIO iOS gitlink `449300f`；独立 AIO worktree `.worktree/ios-live-activity-countdown`，iOS 分支 `feat/live-activity-countdown`。
+- 修复 `.timer` 越过上课时间后正向计时、跨课间下课时间错误、开关关闭先联网、无课程误关偏好及只切开关才维护活动的问题。同一课程活动复用，切换课程、关闭、退出会话及清缓存清理旧活动。偏好行补齐整行点击区域。
+- 锁屏/展开岛同时显示距上课和距下课；紧凑岛明确显示下课剩余时间。使用 `Text(timerInterval:pauseTime:countsDown:showsHours:)` 与时间进度条，由系统更新，不依赖每秒 App 运行。截止后停零，课程结束的 stale 状态显示“本节课程已结束”。
+- 无 APNs：按打开 App、回到前台、时区变化及刷新课表维护当天课程；不承诺 App 长期不运行时自动创建/切换后续课程，staleDate 也不是准点结束 Activity 的调度器。
+- 本机 Xcode 27.0（27A266a），独立 iPhone 17 Pro / iOS 26.5 Simulator；`xcodegen generate --spec project.yml`、App/Widget/测试目标编译及定向 29 单测通过，0 失败（12 项 `CourseLiveActivityTests`、9 项提醒、4 项设置、4 项体验课表）。最终结果：`build/LiveActivityUnitValidation3.xcresult`；使用 `test-without-building` 复验编译后的最终核心逻辑。
+- UI：`testLiveActivityPreferenceDoesNotRequireCourseReminder` 在 `build/LiveActivityUIValidation6.xcresult` 中通过；`testCourseCountdownContinuesInBackgroundAcrossClassStart` 在 `build/LiveActivityCountdownValidation7.xcresult` 中通过。前者截图见 `build/LiveActivityUIAttachments6/`，后者四张截图见 `build/LiveActivityCountdownAttachments7/`。Widget 辅助功能标签是归档快照，倒计时 UI 测试使用系统 Vision 识别真实截图数字；不把静态辅助功能标签当作逐秒刷新证据。
+- 实际后台截图：距上课 `0:37 → 0:31`，距下课 `2:07 → 2:01`；越过上课后前者保持 `0:00`，后者继续 `1:14 → 1:10`，课程进度随时间推进。无账号、无网络和无 APNs 参与此 UI fixture；fixture 仅 Debug 加显式测试启动参数可用，不提供用户 Debug 入口。
+- 首轮 UI 发现 `pauseTime` 会立即暂停，已移除；测试启动/点击/辅助功能快照问题已根据截图与界面树修正，最终证据采用上述独立通过的用例。物理 iPhone 的锁屏、常亮屏刷新节奏、灵动岛和系统权限仍需真机回归。
 
 ## 12. 风险与阻断项
 
@@ -481,6 +492,7 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 
 | 日期 | 条目 | 变更 | 验证证据 | Commit / PR |
 | --- | --- | --- | --- | --- |
+| 2026-10-19 | SYS-004 | 用户要求校验岛卡并优先真实倒计时：改为系统原生双截止倒计时及进度条；修复下课时间、八小时寿命、独立权限/开关、前台/课表维护、整行点击与旧活动清理，暂不接入 APNs | Xcode 27 / iOS 26.5 Simulator App/Widget 编译、29 项定向单测、独立开关 UI、后台跨上课时刻的截图数字测试均通过；见 `E-20261019-LIVE-01`，真机仍待回归 | 本分支 |
 | 2026-07-14 | INIT-001 | 建立 Android → iOS 长期路线图；固定三仓基线；完成 Android 功能、架构、安全风险和 iOS 空仓现状盘点；尚未迁移功能 | 只读源码审查；Android/iOS/AIO `git status` 均在改动前干净；未初始化 Android 嵌套子模块 | — |
 | 2026-07-14 | APP-001 | 建立 XcodeGen 工程基线、SwiftUI 四入口、统一页面状态、单元/UI 测试骨架及 macOS CI；APP-01 进入待验证 | Windows：`project.yml`/workflow YAML 与 asset JSON 解析通过；14 个 Swift 文件分隔符和全仓空白检查通过；当前环境无 `xcodebuild`，未执行编译 | — |
 | 2026-07-14 | OPS-001 | 新增 `codex/**` 推送及手动触发的 macOS 26 未签名设备 IPA workflow，产出 IPA 与 SHA-256 并保留 7 天；明确 Personal Team 本地签名边界 | Windows：PyYAML 6.0.3 解析成功，job/产物路径断言及 `git diff --check` 通过；当前环境无 `xcodebuild`，GitHub Actions 和 iPhone 13 Pro 安装待验证 | — |

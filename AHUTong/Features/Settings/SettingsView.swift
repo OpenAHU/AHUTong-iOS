@@ -255,7 +255,7 @@ final class PreferencesModel: ObservableObject {
     @Published var errorMessage: String?
     private let api: any CampusCoreAPI
     private let reminder = CourseReminderCoordinator()
-    private let liveActivity = CourseLiveActivityCoordinator()
+    private let liveActivity = CourseLiveActivityCoordinator.shared
     private let demo: Bool
 
     init(api: any CampusCoreAPI, demo: Bool = AppRuntime.isDemoSession) {
@@ -287,6 +287,9 @@ final class PreferencesModel: ObservableObject {
     func setLiveActivity(_ enabled: Bool) async -> Bool {
         if demo { return enabled }
         do {
+            if !enabled {
+                return try await liveActivity.setEnabled(false, courses: [], currentWeek: 1)
+            }
             async let courses = api.schedule()
             async let week = api.currentWeek()
             let (loadedCourses, loadedWeek) = try await (courses, week)
@@ -295,7 +298,7 @@ final class PreferencesModel: ObservableObject {
                 courses: loadedCourses,
                 currentWeek: loadedWeek
             )
-            if enabled && !result { errorMessage = "系统未允许实时活动，或未来两周暂无课程" }
+            if !result { errorMessage = "系统未允许实时活动，请在系统设置中开启" }
             return result
         } catch {
             errorMessage = error.localizedDescription
@@ -392,15 +395,11 @@ private struct AndroidPreferencesView: View {
 
                         preferenceSection("通知增强") {
                             preferenceRow(
-                                title: "课前倒计时岛卡提醒（实验性）",
-                                detail: "仅部分系统支持 需同时开启课前提醒",
+                                title: "课程倒计时岛卡",
+                                detail: "锁屏和灵动岛显示上课、下课倒计时",
                                 isOn: liveActivity,
                                 identifier: "preferences.island-reminder"
                             ) {
-                                guard reminders || liveActivity else {
-                                    model.errorMessage = "请先开启课前提醒"
-                                    return
-                                }
                                 Task { liveActivity = await model.setLiveActivity(!liveActivity) }
                             }
                             Button("管理系统实时活动权限") {
@@ -411,6 +410,10 @@ private struct AndroidPreferencesView: View {
                                 .foregroundStyle(AndroidThemeColor.color(for: themeColor))
                                 .padding(.vertical, 8)
                         }
+                        Text("开启后，在打开 App 或刷新课表时更新当天课程。无需开启课前提醒；没有灵动岛的设备可查看锁屏卡片。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
                     }
 
                     preferenceSection("主题颜色") {
@@ -506,6 +509,7 @@ private struct AndroidPreferencesView: View {
                 AndroidPreferenceToggle(isOn: isOn)
             }
             .padding(.vertical, 8)
+            .contentShape(Rectangle())
         }
         .buttonStyle(SettingsPressFeedbackStyle())
         .accessibilityIdentifier(identifier ?? "")
@@ -866,6 +870,7 @@ private struct ContributorsView: View {
 @MainActor
 enum AppDataCleaner {
     static func clearCaches() async {
+        _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(false, courses: [], currentWeek: 1)
         await AppPersistence.clearCaches()
         if let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
             try? FileManager.default.removeItem(at: support.appendingPathComponent("AHUTong/Cache", isDirectory: true))
