@@ -53,6 +53,10 @@ jobs:
         if: matrix.suite == 'unit'
         run: cargo test --manifest-path Vendor/sdk/Cargo.toml --all-features
 
+      - name: Test artifact verification
+        if: matrix.suite == 'unit'
+        run: python3 -m unittest discover -s scripts/tests -v
+
       - name: Block live campus and payment hosts during automated tests
         shell: bash
         run: |

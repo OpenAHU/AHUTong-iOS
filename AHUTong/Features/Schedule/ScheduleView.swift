@@ -742,107 +742,59 @@ struct ScheduleView: View {
 
 private struct ScheduleSettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showAllCourses: Bool
     @Binding var previewNextSemester: Bool
     let isExperienceMode: Bool
     let importAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("课表设置")
-                    .font(.title2.bold())
-                Spacer()
-                Button("完成") { dismiss() }
-                    .font(.headline)
-                    .accessibilityIdentifier("schedule.settings.done")
-            }
-
-            settingToggle(
-                title: "总览课表",
-                description: "显示全部周次的课程，重叠课程会平分同一块时间区域",
-                identifier: "schedule.settings.overview",
-                isOn: $showAllCourses
-            )
-            settingToggle(
-                title: "预览下学期课表",
-                description: "切换到教务系统中的下学期课表",
-                identifier: "schedule.settings.next-semester",
-                isOn: $previewNextSemester
-            )
-            if isExperienceMode {
-                Button(action: importAction) {
-                    Label("导入课表 JSON", systemImage: "square.and.arrow.down")
-                        .font(.body.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    settingToggle(title: "总览课表", description: "显示全部周次的课程，重叠课程会平分同一块时间区域",
+                                  identifier: "schedule.settings.overview", isOn: $showAllCourses)
+                    settingToggle(title: "预览下学期课表", description: "切换到教务系统中的下学期课表",
+                                  identifier: "schedule.settings.next-semester", isOn: $previewNextSemester)
+                    if isExperienceMode {
+                        Button("导入课表 JSON", systemImage: "square.and.arrow.down", action: importAction)
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("schedule.settings.import")
+                    }
                 }
-                .buttonStyle(ScheduleSettingPressStyle())
-                .accessibilityIdentifier("schedule.settings.import")
+                .padding(24)
             }
-            Spacer(minLength: 0)
+            .navigationTitle("课表设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                        .accessibilityIdentifier("schedule.settings.done")
+                }
+            }
+            // Keep the system sheet surface visible. iOS 26 supplies Liquid Glass
+            // for partial-height sheets; painting an opaque background hides it.
+            .background(Color.clear)
         }
-        .padding(24)
-        .background(AndroidParityPalette.raisedSurface(colorScheme))
-        .presentationDetents([.height(isExperienceMode ? 370 : 310)])
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(isExperienceMode ? 370 : 310), .large])
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(32)
     }
 
-    private func settingToggle(
-        title: String,
-        description: String,
-        identifier: String,
-        isOn: Binding<Bool>
-    ) -> some View {
-        Button { isOn.wrappedValue.toggle() } label: {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.body.bold())
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Toggle("", isOn: isOn)
-                    .labelsHidden()
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+    private func settingToggle(title: String, description: String, identifier: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.bold())
+                Text(description).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(ScheduleSettingPressStyle())
-        .padding(.vertical, 10)
         .accessibilityIdentifier(identifier)
-        .accessibilityValue(isOn.wrappedValue ? "开启" : "关闭")
-    }
-}
-
-private struct ScheduleSettingPressStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
-            .opacity(configuration.isPressed ? 0.78 : 1)
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0))
-                    .allowsHitTesting(false)
-            }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
-            .sensoryFeedback(.impact(weight: .light, intensity: 0.55), trigger: configuration.isPressed) { oldValue, newValue in
-                !oldValue && newValue
-            }
+        .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
     }
 }
 
 private struct CourseDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     let course: Course
 
     var body: some View {
@@ -863,9 +815,8 @@ private struct CourseDetailView: View {
                 detail("person.crop.circle", course.teacher)
             }
         }
-        .background(AndroidParityPalette.raisedSurface(colorScheme))
-        .presentationDetents([.height(300)])
-        .presentationCornerRadius(32)
+        .presentationDetents([.height(300), .large])
+        .presentationDragIndicator(.visible)
         .accessibilityIdentifier("schedule.course-detail")
     }
 

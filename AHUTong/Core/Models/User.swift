@@ -33,8 +33,3 @@ struct User: Codable, Equatable, Hashable, Identifiable, Sendable {
             .map { "\($0)-\($0 + 1)" }
     }
 }
-
-enum LoginProvider: String, Codable, Sendable {
-    case wisdom = "2"
-    case local = "0"
-}

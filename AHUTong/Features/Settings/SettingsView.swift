@@ -15,64 +15,57 @@ struct SettingsView: View {
     @State private var showsPrivacyConsent = false
 
     var body: some View {
-        AndroidScreen {
-            ScrollView {
-                VStack(spacing: 24) {
-                    AndroidHeader(title: "设置", large: true)
-                    appCard
-                    section("账户信息")
-                    accountCard
-                    NavigationLink {
-                        AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
-                    } label: {
-                        AndroidSettingRow(label: "偏好设置", systemImage: "slider.horizontal.3")
-                            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-                    }
-                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
-                    .padding(.horizontal, 16)
-                    .accessibilityIdentifier("settings.preferences")
-                    section("关于")
-                    settingsGroup {
-                        NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
-                            AndroidSettingRow(label: "开源协议", systemImage: "doc.text")
-                        }
-                        .buttonStyle(SettingsPressFeedbackStyle())
-                        NavigationLink { ContributorsView().androidDetailScreen() } label: {
-                            AndroidSettingRow(label: "贡献名单", systemImage: "person.2")
-                        }
-                        .buttonStyle(SettingsPressFeedbackStyle())
-                        .accessibilityIdentifier("settings.contributors")
-                        AndroidSettingButton(label: "意见反馈", systemImage: AndroidParitySymbol.feedback) {
-                            openURL(AgreementDocument.communityQQGroupURL) { accepted in
-                                if !accepted { feedbackMessage = "请安装 QQ 后重试，或手动加入反馈群：1006203134" }
-                            }
-                        }
-                        .accessibilityIdentifier("settings.feedback")
-                        AndroidSettingButton(label: "清除本机数据", systemImage: "line.3.horizontal.decrease.circle") {
-                            showClearConfirmation = true
-                        }
-                        .accessibilityIdentifier("settings.clear-data")
-                        AndroidSettingButton(label: "检查更新", systemImage: "arrow.triangle.2.circlepath") {
-                            guard !isCheckingUpdate else { return }
-                            isCheckingUpdate = true
-                            Task {
-                                defer { isCheckingUpdate = false }
-                                do {
-                                    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-                                    updateResult = try await AppUpdateChecker().check(currentVersion: version)
-                                } catch {
-                                    updateResult = AppUpdateResult(message: "检查更新失败：\(error.localizedDescription)", destination: nil)
-                                }
-                            }
-                        }
-                        AndroidSettingButton(label: "更新说明", systemImage: "doc.text") { showUpdateLog = true }
-                            .accessibilityIdentifier("settings.update-notes")
+        Form {
+            Section { appCard.listRowInsets(EdgeInsets()) }
+            Section("账户信息") { accountCard }
+            Section {
+                NavigationLink {
+                    AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
+                } label: { Label("偏好设置", systemImage: "slider.horizontal.3") }
+                .buttonStyle(SettingsPressFeedbackStyle())
+                .accessibilityIdentifier("settings.preferences")
+            }
+            Section("关于") {
+                NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
+                    Label("开源协议", systemImage: "doc.text")
+                }
+                .buttonStyle(SettingsPressFeedbackStyle())
+                NavigationLink { ContributorsView().androidDetailScreen() } label: {
+                    Label("贡献名单", systemImage: "person.2")
+                }
+                .buttonStyle(SettingsPressFeedbackStyle())
+                .accessibilityIdentifier("settings.contributors")
+                settingsButton("意见反馈", systemImage: AndroidParitySymbol.feedback) {
+                    openURL(AgreementDocument.communityQQGroupURL) { accepted in
+                        if !accepted { feedbackMessage = "请安装 QQ 后重试，或手动加入反馈群：1006203134" }
                     }
                 }
-                .padding(.bottom, 16)
+                .accessibilityIdentifier("settings.feedback")
+                settingsButton("清除本机数据", systemImage: "line.3.horizontal.decrease.circle") {
+                    showClearConfirmation = true
+                }
+                .accessibilityIdentifier("settings.clear-data")
+                settingsButton(isCheckingUpdate ? "正在检查…" : "检查更新", systemImage: "arrow.triangle.2.circlepath") {
+                    guard !isCheckingUpdate else { return }
+                    isCheckingUpdate = true
+                    Task {
+                        defer { isCheckingUpdate = false }
+                        do {
+                            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+                            updateResult = try await AppUpdateChecker().check(currentVersion: version)
+                        } catch {
+                            updateResult = AppUpdateResult(message: "检查更新失败：\(error.localizedDescription)", destination: nil)
+                        }
+                    }
+                }
+                .disabled(isCheckingUpdate)
+                settingsButton("更新说明", systemImage: "doc.text") { showUpdateLog = true }
+                    .accessibilityIdentifier("settings.update-notes")
             }
-            .scrollIndicators(.hidden)
         }
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .confirmationDialog("清除本机数据？", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("清除", role: .destructive) {
                 Task {
@@ -135,7 +128,6 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 24).padding(.vertical, 16)
         }
-        .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("settings.app-card")
     }
@@ -168,18 +160,16 @@ struct SettingsView: View {
             .buttonStyle(SettingsPressFeedbackStyle())
             .accessibilityIdentifier("settings.account-login")
         }
-        .padding(24)
-        .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 
-    private func section(_ text: String) -> some View {
-        Text(text).font(.headline.bold()).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24)
+    private func settingsButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(SettingsPressFeedbackStyle())
     }
 
-    private func settingsGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 2, content: content).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 16)
-    }
 }
 
 private struct ShortcutsGuideView: View {
@@ -211,12 +201,12 @@ private struct ShortcutsGuideView: View {
                     guideCard(
                         "打开付款码", icon: "qrcode",
                         phrase: "“打开安大通付款”\n“打开安大通付款码”",
-                        detail: "直接展开校园码，需要登录真实账号。"
+                        detail: "推荐直接说完整名称。需要登录真实账号。"
                     )
                     guideCard(
                         "只说“打开校园码”", icon: "waveform",
                         phrase: "“打开校园码”",
-                        detail: "在“快捷指令”中新建指令，添加安大通的“打开付款码”动作，命名为“打开校园码”。完成后，对 Siri 说出这个名称即可。"
+                        detail: "在“快捷指令”中新建指令，添加安大通的“打开付款码”动作，命名为“打开校园码”。先在快捷指令中点运行一次，再对 Siri 说“运行快捷指令打开校园码”。若被当作搜索，改名为“安大通校园码”后再试。"
                     )
                     guideCard(
                         "查询指定日期课表", icon: "calendar",
@@ -249,36 +239,6 @@ private struct ShortcutsGuideView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
         }
-    }
-}
-
-private struct AndroidSettingRow: View {
-    @Environment(\.colorScheme) private var colorScheme
-    let label: String
-    let systemImage: String
-    var detail: String? = nil
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: systemImage).frame(width: 24)
-            Text(label).font(.headline)
-            Spacer()
-            if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-        }
-        .padding(.horizontal, 24).padding(.vertical, 16)
-        .background(AndroidParityPalette.surface(colorScheme)).contentShape(Rectangle())
-    }
-}
-
-private struct AndroidSettingButton: View {
-    let label: String
-    let systemImage: String
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            AndroidSettingRow(label: label, systemImage: systemImage)
-        }
-        .buttonStyle(SettingsPressFeedbackStyle())
     }
 }
 
@@ -328,30 +288,56 @@ struct SettingsPressFeedbackStyle: ButtonStyle {
 @MainActor
 final class PreferencesModel: ObservableObject {
     @Published var errorMessage: String?
-    private let api: any CampusCoreAPI
-    private let reminder = CourseReminderCoordinator()
-    private let liveActivity = CourseLiveActivityCoordinator.shared
+    @Published private(set) var isUpdatingReminders = false
+    @Published private(set) var isUpdatingLiveActivity = false
+    private let repository: ScheduleRepository
+    private let weekRepository: ScheduleWeekRepository
+    private let reminder: CourseReminderCoordinator
+    private let liveActivity: CourseLiveActivityCoordinator
     private let demo: Bool
 
-    init(api: any CampusCoreAPI, demo: Bool = AppRuntime.isDemoSession) {
-        self.api = api
+    init(
+        api: any CampusCoreAPI, userID: String = "guest", demo: Bool = AppRuntime.isDemoSession,
+        store: any DataStore = AppPersistence.migratingDefaults(),
+        reminder: CourseReminderCoordinator = CourseReminderCoordinator(),
+        liveActivity: CourseLiveActivityCoordinator = .shared
+    ) {
         self.demo = demo
+        self.reminder = reminder
+        self.liveActivity = liveActivity
+        let cache = UserScopedStore(store: store, userID: userID)
+        repository = ScheduleRepository(remote: RustScheduleRemoteDataSource(api: api), cache: cache)
+        weekRepository = ScheduleWeekRepository(api: api, cache: cache, semester: Semester.current())
+    }
+
+    private func schedule() async throws -> (courses: [Course], week: Int) {
+        async let courses = repository.load(semester: Semester.current(), policy: .cacheFirst)
+        let cachedWeek = await weekRepository.cached()
+        let week = cachedWeek.isFallback ? try await weekRepository.refresh() : cachedWeek
+        return (try await courses.courses, week.week)
     }
 
     func setReminders(_ enabled: Bool) async -> Bool {
-        // UI parity fixtures must not inherit notification authorization left by
-        // another Simulator test. Production still exercises UserNotifications.
-        if demo { return enabled }
+        isUpdatingReminders = true
+        defer { isUpdatingReminders = false }
+        if demo {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--demo-slow-notification-update") {
+                try? await Task.sleep(for: .seconds(3))
+            }
+            #endif
+            return enabled
+        }
         do {
-            let courses = try await api.schedule()
-            let week = try await api.currentWeek()
-            let result = try await reminder.setEnabled(
-                enabled,
-                courses: courses,
-                currentWeek: week,
-                now: Date()
-            )
-            if enabled && !result { errorMessage = "未授予通知权限，无法开启课前提醒" }
+            // Turning a reminder off must never depend on school network availability.
+            if !enabled { return try await reminder.setEnabled(false, courses: [], currentWeek: 1) }
+            guard try await reminder.requestPermissionIfNeeded() else {
+                errorMessage = "未授予通知权限，无法开启课前提醒"
+                return false
+            }
+            let schedule = try await schedule()
+            let result = try await reminder.setEnabled(true, courses: schedule.courses, currentWeek: schedule.week)
+            if !result { errorMessage = "未授予通知权限，无法开启课前提醒" }
             return result
         } catch {
             errorMessage = error.localizedDescription
@@ -360,19 +346,24 @@ final class PreferencesModel: ObservableObject {
     }
 
     func setLiveActivity(_ enabled: Bool) async -> Bool {
-        if demo { return enabled }
-        do {
-            if !enabled {
-                return try await liveActivity.setEnabled(false, courses: [], currentWeek: 1)
+        isUpdatingLiveActivity = true
+        defer { isUpdatingLiveActivity = false }
+        if demo {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--demo-slow-notification-update") {
+                try? await Task.sleep(for: .seconds(3))
             }
-            async let courses = api.schedule()
-            async let week = api.currentWeek()
-            let (loadedCourses, loadedWeek) = try await (courses, week)
-            let result = try await liveActivity.setEnabled(
-                enabled,
-                courses: loadedCourses,
-                currentWeek: loadedWeek
-            )
+            #endif
+            return enabled
+        }
+        do {
+            if !enabled { return try await liveActivity.setEnabled(false, courses: [], currentWeek: 1) }
+            guard await liveActivity.activitiesEnabled() else {
+                errorMessage = "系统未允许实时活动，请在系统设置中开启"
+                return false
+            }
+            let schedule = try await schedule()
+            let result = try await liveActivity.setEnabled(true, courses: schedule.courses, currentWeek: schedule.week)
             if !result { errorMessage = "系统未允许实时活动，请在系统设置中开启" }
             return result
         } catch {
@@ -383,7 +374,6 @@ final class PreferencesModel: ObservableObject {
 }
 
 private struct AndroidPreferencesView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var toastCenter: AppToastCenter
     @ObservedObject private var onboardingModel: OnboardingViewModel
@@ -400,12 +390,12 @@ private struct AndroidPreferencesView: View {
     init(onboardingModel: OnboardingViewModel, appModel: AppModel) {
         _onboardingModel = ObservedObject(wrappedValue: onboardingModel)
         _appModel = ObservedObject(wrappedValue: appModel)
-        _model = StateObject(wrappedValue: PreferencesModel(api: appModel.campusAPI))
         let userID = if case let .authenticated(user) = appModel.sessionState {
             user.studentID
         } else {
             "guest"
         }
+        _model = StateObject(wrappedValue: PreferencesModel(api: appModel.campusAPI, userID: userID))
         _prefersCMB = AppStorage(
             wrappedValue: false,
             AccountPreferenceKey.make("payment.cmb-card-recharge-preferred", userID: userID)
@@ -413,119 +403,83 @@ private struct AndroidPreferencesView: View {
     }
 
     var body: some View {
-        AndroidScreen {
-            ScrollView {
-                VStack(spacing: 24) {
-                    Text("偏好设置")
-                        .font(.largeTitle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 32)
+        Form {
+            Section("隐私与登录") {
+                preferenceToggle(
+                    title: "保存登录信息并自动续期",
+                    detail: "在本机安全保存，用于自动登录",
+                    isOn: Binding(get: { onboardingModel.consent.privacyDecision == .accepted }, set: { _ in changePrivacyConsent() }),
+                    identifier: "preferences.privacy-consent"
+                )
+                Button("查看隐私政策", systemImage: "hand.raised") { showsPrivacyConsent = true }
+                    .buttonStyle(SettingsPressFeedbackStyle())
+                    .accessibilityIdentifier("preferences.privacy-policy")
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("preferences.privacy-section")
 
-                    preferenceSection("隐私与登录") {
-                        preferenceRow(
-                            title: "保存登录信息并自动续期",
-                            detail: "在本机安全保存，用于自动登录",
-                            isOn: onboardingModel.consent.privacyDecision == .accepted,
-                            identifier: "preferences.privacy-consent"
-                        ) {
-                            changePrivacyConsent()
-                        }
-                        Button {
-                            showsPrivacyConsent = true
-                        } label: {
-                            Label("查看隐私政策", systemImage: "hand.raised")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(SettingsPressFeedbackStyle())
-                        .accessibilityIdentifier("preferences.privacy-policy")
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("preferences.privacy-section")
-
-                    NavigationLink {
-                        ShortcutsGuideView().androidDetailScreen()
-                    } label: {
-                        preferenceSection("Siri 与快捷指令") {
-                            HStack(spacing: 12) {
-                                Text("语音打开校园码，查询课表")
-                                    .font(.subheadline)
-                                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.vertical, 8)
-                        }
-                    }
-                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
-                    .accessibilityIdentifier("preferences.shortcuts")
-
-                    if !appModel.isExperienceMode {
-                        preferenceSection("充值") {
-                            preferenceRow(
-                                title: "总是使用招商银行充值",
-                                detail: "首页充值直接打开招商银行",
-                                isOn: prefersCMB,
-                                identifier: "preferences.cmb-card-recharge"
-                            ) {
-                                prefersCMB.toggle()
-                            }
-                        }
-
-                        preferenceSection("通知") {
-                            preferenceRow(
-                                title: "课前提醒",
-                                detail: "上课前 10 分钟提醒下一节课",
-                                isOn: reminders,
-                                identifier: "preferences.course-reminders"
-                            ) {
-                                Task {
-                                    let actual = await model.setReminders(!reminders)
-                                    reminders = actual
-                                }
-                            }
-                        }
-
-                        preferenceSection("通知增强") {
-                            preferenceRow(
-                                title: "课程倒计时岛卡",
-                                detail: "仅在课前显示，上课时结束",
-                                isOn: liveActivity,
-                                identifier: "preferences.island-reminder"
-                            ) {
-                                Task { liveActivity = await model.setLiveActivity(!liveActivity) }
-                            }
-                            Button("管理系统实时活动权限") {
-                                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-                            }
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                                .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 8))
-                                .foregroundStyle(AndroidThemeColor.color(for: themeColor))
-                                .padding(.vertical, 8)
-                        }
-                        Text("打开 App 或刷新课表时更新。课中不显示；后台运行受限时会提前结束。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                    }
-
-                    preferenceSection("主题颜色") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 16) {
-                                themeSwatch(value: customColorValue, name: "自定义", custom: true)
-                                ForEach(Array(AndroidThemeColor.options.enumerated()), id: \.offset) { _, option in
-                                    themeSwatch(value: option.value, name: option.name)
-                                }
-                            }
-                        }
+            Section {
+                NavigationLink {
+                    ShortcutsGuideView().androidDetailScreen()
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Siri 与快捷指令")
+                        Text("语音打开校园码，查询课表").font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
-                .padding(16)
-                .padding(.bottom, 64)
+                .buttonStyle(SettingsPressFeedbackStyle())
+                .accessibilityIdentifier("preferences.shortcuts")
+            }
+
+            if !appModel.isExperienceMode {
+                Section("充值") {
+                    preferenceToggle(title: "总是使用招商银行充值", detail: "首页充值直接打开招商银行",
+                                     isOn: $prefersCMB, identifier: "preferences.cmb-card-recharge")
+                }
+                Section("通知") {
+                    preferenceToggle(
+                        title: "课前提醒", detail: "上课前 10 分钟提醒下一节课",
+                        isOn: Binding(get: { reminders }, set: { enabled in
+                            reminders = enabled
+                            Task { reminders = await model.setReminders(enabled) }
+                        }), identifier: "preferences.course-reminders"
+                    )
+                    .disabled(model.isUpdatingReminders)
+                    if model.isUpdatingReminders { ProgressView("正在更新提醒…").font(.footnote) }
+                }
+                Section {
+                    preferenceToggle(
+                        title: "课程倒计时岛卡", detail: "仅在课前显示，上课时结束",
+                        isOn: Binding(get: { liveActivity }, set: { enabled in
+                            liveActivity = enabled
+                            Task { liveActivity = await model.setLiveActivity(enabled) }
+                        }), identifier: "preferences.island-reminder"
+                    )
+                    .disabled(model.isUpdatingLiveActivity)
+                    if model.isUpdatingLiveActivity { ProgressView("正在更新实时活动…").font(.footnote) }
+                    Button("管理系统实时活动权限") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                    .buttonStyle(SettingsPressFeedbackStyle())
+                } header: { Text("通知增强") } footer: {
+                    Text("打开 App 或刷新课表时更新。课中不显示；后台运行受限时会提前结束。")
+                }
+            }
+
+            Section("主题颜色") {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 16) {
+                        themeSwatch(value: customColorValue, name: "自定义", custom: true)
+                        ForEach(Array(AndroidThemeColor.options.enumerated()), id: \.offset) { _, option in
+                            themeSwatch(value: option.value, name: option.name)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
             }
         }
+        .navigationTitle("偏好设置")
+        .navigationBarTitleDisplayMode(.inline)
         .alert("无法更新提醒", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("确定", role: .cancel) {}
         } message: { Text(model.errorMessage ?? "") }
@@ -568,42 +522,17 @@ private struct AndroidPreferencesView: View {
         }
     }
 
-    private func preferenceSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title).font(.title3)
-            content()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private func preferenceRow(
-        title: String,
-        detail: String? = nil,
-        isOn: Bool,
-        identifier: String? = nil,
-        action: @escaping () -> Void
+    private func preferenceToggle(
+        title: String, detail: String, isOn: Binding<Bool>, identifier: String
     ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).foregroundStyle(.primary)
-                    if let detail {
-                        Text(detail)
-                            .font(.subheadline)
-                            .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                AndroidPreferenceToggle(isOn: isOn)
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
             }
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(SettingsPressFeedbackStyle())
-        .accessibilityIdentifier(identifier ?? "")
-        .accessibilityValue(isOn ? "开启" : "关闭")
+        .accessibilityIdentifier(identifier)
+        .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
     }
 
     private var customColorValue: String {
@@ -642,25 +571,6 @@ private struct AndroidPreferencesView: View {
             }
         }
         .buttonStyle(SettingsPressFeedbackStyle())
-    }
-}
-
-private struct AndroidPreferenceToggle: View {
-    let isOn: Bool
-
-    var body: some View {
-        ZStack(alignment: isOn ? .trailing : .leading) {
-            Capsule()
-                .fill(isOn ? AndroidParityPalette.liquidToggle : Color.secondary.opacity(0.24))
-                .frame(width: 52, height: 32)
-            Circle()
-                .fill(.white)
-                .frame(width: 26, height: 26)
-                .padding(3)
-                .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
-        }
-        .animation(.easeInOut(duration: 0.18), value: isOn)
-        .accessibilityValue(isOn ? "开启" : "关闭")
     }
 }
 

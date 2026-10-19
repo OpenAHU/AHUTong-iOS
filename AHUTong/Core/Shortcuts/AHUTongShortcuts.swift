@@ -5,6 +5,8 @@ struct OpenPaymentCodeIntent: AppIntent {
     static let title: LocalizedStringResource = "打开付款码"
     static let description = IntentDescription("打开安大通并显示校园卡付款码；需要登录真实校园账号。")
     static let openAppWhenRun = true
+    @available(iOS 26.0, *)
+    static var supportedModes: IntentModes { .foreground(.immediate) }
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @MainActor

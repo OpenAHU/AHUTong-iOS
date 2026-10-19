@@ -8,12 +8,12 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.2 交互优化与功能集成：校园码展开/放大、圆形周指示器、设置 Tab 返回根页、偏好中的 Siri 引导、随机双排贡献者头像；实时活动与会话维护一并集成，见 E-20261019-04/05/06 |
+| 当前焦点 | 1.0.2 后续维护：原生设置与校园码恢复；补充首页刷新、可配置深浅色课表 Widget、本科培养方案、校园卡账单/消费统计；Siri 语音匹配与重签配置面板仍有实机验收边界。证据见 E-20261019-07/08 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
-| 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
-| Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
+| 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
+| Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前分支 | `codex/ios-integration-1.0.2` |
+| 当前分支 | `codex/ios-native-ui-campus-code`；起点为已集成 1.0.2 的官方 main `7897a54` |
 | 最近更新 | 2026-10-19 |
 
 ## 1. 目标与边界
@@ -28,8 +28,8 @@
 
 - 应用启动、协议确认、登录、会话恢复与退出。
 - 四个主入口：主页、课表、小工具、设置。
-- 课表、成绩、考试、空闲教室、校历和电话本。
-- 校园卡余额与付款码、校园卡充值、招商银行充值、浴室缴费、电控缴费和网费充值。
+- 课表、成绩、考试、空闲教室、校历和电话本；本科培养方案完成情况。
+- 校园卡余额与付款码、只读账单及消费统计、校园卡充值、招商银行充值、浴室缴费、电控缴费和网费充值。
 - 天气、失物招领、学习资料浏览/Markdown 阅读/下载管理。
 - 首页自定义、课表桌面组件、课程提醒与可选 Live Activity。
 - 测试、CI、辅助功能、隐私、安全与 App Store 发布准备。
@@ -47,20 +47,23 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 ### 1.4 UI 完全一致硬约束
 
 1. 固定基线表中的 Android commit 及其 Compose 实际渲染结果是唯一视觉真源；不得以“更符合 iOS”“更简洁”或个人审美为由重新设计。
-2. 页面信息架构、组件类型、内容顺序、中文文案、图标语义、颜色、字号/字重、圆角、阴影、间距、留白、对齐、卡片尺寸、列表密度、底栏和顶部栏必须与 Android 保持一致；第 8、9 条记录的用户显式覆盖除外。
+2. 页面信息架构、组件类型、内容顺序、中文文案、图标语义、颜色、字号/字重、圆角、阴影、间距、留白、对齐、卡片尺寸、列表密度、底栏和顶部栏必须与 Android 保持一致；第 8～11 条记录的用户显式覆盖除外。
 3. 正常、加载、空数据、错误、弹窗、菜单、搜索、展开/收起、刷新和权限降级等可见状态都必须逐一对齐；不能只对齐首屏静态状态。
 4. iOS 只允许保留系统强制差异：安全区、Home Indicator、系统权限弹窗、系统返回手势、拨号/分享/Quick Look 等系统控制器。差异必须限制在系统边界内，并记录在平台差异表中。
-5. SwiftUI 可以使用等价实现，但不得用默认 `List`、`Form` 或系统导航样式替代 Android 已明确设计的自定义外观；需要时应以自定义组件复现 Compose 布局。四入口底栏仅按第 8 条用户显式覆盖使用系统 `TabView`。
+5. SwiftUI 可以使用等价实现，但不得用默认 `List`、`Form` 或系统导航样式替代 Android 已明确设计的自定义外观；需要时应以自定义组件复现 Compose 布局。四入口底栏按第 8 条使用系统 `TabView`，设置表单与课表弹层按第 11 条优先使用系统组件。
 6. 每个页面完成前必须保存同一设备尺寸、同一数据状态的 Android 与 iOS 截图，检查关键几何尺寸与颜色；主要页面必须有 UI 测试覆盖可见文案、入口和交互状态。
 7. 本约束追溯适用于此前已标记完成的 APP-01、AUTH-01、INFO-01、INFO-02、INFO-03、CONTENT-03；这些切片在 UI 复验通过前统一回到“实现中”。
 8. 2026-07-16 用户进一步明确四入口必须使用 iOS 原生底部导航，而非仅在自绘容器上调用 Liquid Glass API。根容器必须使用系统 `TabView`/`UITabBar`，iOS 26+ 的 Liquid Glass、折射、触控、辅助功能和后续系统演进全部交给系统；禁止自绘 `HStack + Button` 冒充原生 Tab Bar。Liquid Glass 默认启用，设置页不得提供开关、关闭路径或单独说明入口。入口顺序、图标、中文文案和选中语义仍与 Android 一致。
 9. 2026-09-23 用户要求彻底删除 iOS Debug 页面与 App 信息卡隐藏入口；设置首页使用真实 App 图标。2026-09-24 用户进一步明确账户信息与真实账号登录保留在设置首页，仅隐私选择及登录偏好进入偏好设置。
 10. 设置域所有可点击行必须在跳转或执行前提供可感知的按压态；iOS 使用轻触觉、明暗高亮和短缩放补足交互反馈，开启“减弱动态效果”时禁用缩放但不得移除非动态反馈。静态布局仍以 Android 为准。
+11. 2026-10-19 用户进一步要求更多 iOS 原生 UI，明确指出设置通知按钮卡顿、iOS 26+ 课表设置缺少玻璃材质。设置首页/偏好使用系统 `Form`、`NavigationLink` 和真实 `Toggle`；系统开关保留原生操作与反馈，导航/动作行继续保留轻触觉及按压反馈。课表设置采用系统半高 sheet 和工具栏，不用实色背景覆盖系统 Liquid Glass；不提供玻璃开关。此条覆盖对应页面的 Android 静态组件复刻限制。
 
 ## 2. 固定基线
 
 | 仓库 | 基线 | 说明 |
 | --- | --- | --- |
+| iOS 本轮原生 UI / 校园码基线 | `7897a54e92a929814d9a74776eab8d423604a842` | 官方 main；1.0.2 集成后起点 |
+| Android 本轮最新功能与校园码参考 | `595e63c4615ec6d7e9602cc613c03022048fd0a9` | 官方 master，2026-10-19 抓取；只读检查，未改 Android 和 AIO 主工作区 gitlink |
 | AIO 2026-10-19 维护 | `59e9ed1` | `ios-roadmap-survey` detached worktree；本轮实际使用 |
 | iOS 2026-10-19 上游 | `449300f` | 本轮审查时的官方 `main` |
 | iOS 2026-10-19 维护起点 | `cc3dd5f` | PR #3 精确尖端；续期、UI 和 Widget 维护在此基础上进行 |
@@ -311,6 +314,20 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | SYS-02 | 岛卡仅课前显示，上课结束；不保留课中/课后卡片；通知独立 | 后台预算不足会提前结束，未接入 APNs；强制终止场景待实机 |
 | SYS-03 | Siri 手动开关/系统设置入口、内置付款短语与无应用名快捷指令创建引导；课表紧凑回复 | 本机数据边界保留；系统 Siri 语音识别待实机 |
 
+2026-10-19 原生 UI / 校园码维护对矩阵的增量覆盖（E-20261019-07）：
+
+| 切片 | 本轮更新 | 状态边界 |
+| --- | --- | --- |
+| APP-01 / SET-01 | 设置首页/偏好原生 Form/Toggle，Siri 行与其他行使用系统一致布局，保留账户首页与按压反馈 | 正常签名模拟器宿主及原生控件 UI 已通过，见 E-20261019-07/08 |
+| SCH-02 | 课表设置原生 Toggle/工具栏，移除遮挡系统材质的实色背景；课程详情同样保留系统 sheet | iOS 26.5 已实际观察背景折射/透出并保存截图；iOS 27 无本机运行时 |
+| CARD-01 / HOME-01 | 校园码双通道恢复，12 秒传输超时、失败后重新打开/显式重试、15 秒内存复用、可插值展开高度与异步位图 | 不保证校方接口持续可用；真实扫码/长期会话仍需设备验收 |
+| SYS-02 | 关闭通知零网络，开启先查权限/缓存，系统开关及时反馈并防止重复提交 | 仍为本地通知，未增加 APNs |
+| HOME-01 | 下拉刷新课表/周次/天气/余额及校园码；课表更新后刷新 Widget 与快捷指令快照；前台余额 30 秒刷新，课表进入/回前台按 60 秒节流 | 不后台轮询；二维码显示时优先保码；失败保留旧课表并说明 |
+| SYS-01 | AppIntentConfiguration 外观选择；小/中尺寸显示后续课程，大尺寸按星期/节次覆盖周末晚课，显示地点缩写及重叠提示 | 三尺寸深浅色布局渲染通过；模拟器可找到并添加，但原生编辑面板受无 Team ID 的临时签名限制，仍待有效重签实机验证 |
+| SYS-03 | iOS 26+ 显式前台执行；补充 Siri 搜索误匹配的简洁引导，保留旧动作标识和认证要求 | 用户实机 iOS 27 手动执行成功，语音被当作网络搜索；不宣称端到端 Siri 语音已修复 |
+| ACADEMIC-NEW-01 | 本科培养方案：教务原始 JS 数据安全解析、档案选择、模块/子模块、课程状态、未完成筛选、学分汇总与账号隔离缓存 | 真实登录模拟器查询成功；不含研究生 GMIS，不缓存原始 HTML/student 身份资料 |
+| CARD-NEW-02 | 校园卡账单分页/类型/月及全部时间筛选/金额过滤/详情；完整范围的消费总额、逐日与商户统计 | 真实查询及统计与服务端收支汇总一致；统计任一页失败不展示部分总额，未迁移 Android 高级餐次/食堂识别 |
+
 ### 8.1 全量复查收口（2026-07-15）
 
 下表保留 2026-07-15 全量复查及后续补记的历史范围和状态；该轮证据见 `E-20260715-04`，不作为当前验收计数。当前状态以第 8 节功能矩阵和本文摘要为准。2026-07-16 原生系统 Tab Bar 修复证据单独见 `E-20260716-01`。
@@ -374,6 +391,31 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | QQ/支付宝跳转 | 依赖 Android Intent/deep link | 使用 iOS URL Scheme/Universal Link 白名单，并提供未安装时降级路径 |
 | 防截屏/录屏 | Android 登录/付款码可使用窗口安全标志 | 用户于 2026-07-15 明确要求移除校园卡余额/付款码录屏遮罩；iOS 不监听 `UIScreen.capturedDidChangeNotification`，录屏和截图时保持原内容可见。测试码仅为不可支付 fixture，真实码的展示风险由产品决策接受 |
 | 系统栏与安全区 | Android 显示状态栏和三键/手势导航栏 | iOS 保留系统状态栏、安全区、Dynamic Island/Home Indicator；App 内容区域的颜色、尺寸、顺序和密度仍按 Android 对齐 |
+
+本轮原生 UI 评估：根容器的系统 TabView、开发者原生 popover、Siri 的 ShortcutsLink、支付的系统键盘/文件选择器均保留。设置首页/偏好和课表弹层已迁移。下一批可评估天气设置（现有 AndroidScreen 实色背景与自绘样式选择器）以及失物招领详情/发布/我的帖子（实色容器）；它们仍有业务布局价值，不因名称带 Android 就当作死代码删除。充值确认和未知结果恢复涉及真实写请求，优先保留清楚的业务状态，单独验收后再调整外观。
+
+### 9.1 最新 Android master 与 iOS 1.0.2 的业务差距（2026-10-19）
+
+对照 Android `595e63c` 的路由、HomeWidgetRegistry 和对应数据/界面实现，与 iOS `7897a54` 的真实工具入口、API、模型和视图核对。以下是源码能力盘点，不代表 Android 已经在本机运行验收；不将 Android 专属界面、API 名称或贡献者介绍误判为 iOS 已有功能。
+
+| 能力 | Android 证据（相对 Android 子仓） | iOS 当前情况 | 建议 |
+| --- | --- | --- | --- |
+| 校园通知与新公告提醒 | `ui/screen/Main.kt` 的 `campus_notices`，`ui/screen/main/CampusNoticeScreen.kt`、`data/notice/*`、`notification/CampusNoticeNotifier.kt` | 没有公告聚合、未读状态或订阅。当前课程本地提醒不是公告推送；Android 聚合安徽大学/研究生院公告，也不等同全部教务通知 | P1：先只读列表/详情/未读与缓存，再设计后台更新、通知权限及 APNs 服务端边界 |
+| 学习通日历、作业截止、课程进度和自建日程 | `feature/xuexiaotong/`、`data/chaoxing/`；经典版工具入口、Radiant 中为主入口 | 没有学习通会话、作业/进度或本地日程模块；贡献名单中的“学习通日历开发”不代表 iOS 已实现 | P2：独立产品切片，先只读同步/本地日程，随后提醒和 Widget |
+| 培养方案/完成度 | `ui/screen/main/ProgramCompletion.kt`、`data/ProgramCompletionGateway.kt` | 本分支已接入本科完成情况、模块/课程、学分、未完成筛选与账号隔离缓存 | 真实只读查询已通过；研究生培养方案仍不支持 |
+| 校园卡账单与消费统计 | Main 的 `billing` / `billing_stats`，`ui/screen/main/Billing.kt`、`BillingStats.kt` | 本分支已接入只读流水/筛选/详情、月度及选定范围的每日/商户统计 | 真实账单和统计已核对；Android 高级餐次/食堂分析尚未完整移植 |
+| 电费剩余天数预测与多房间预警 | `feature/recharge/.../ElectricityDeposit.kt`、`electricity/ElectricityAlertChecker.kt` | 有余额、缴费、房间选择和历史查询相关界面；没有用电预测/剩余天数、每日预算和多房间自动预警 | P2：先补只读用电数据和预测验证；用户未提供宿舍信息，真实余额/预测仍待授权测试 |
+| 研究生独立登录与课表 | `data/crawler/gmis/*`、`ui/state/PostgraduateScheduleViewModel.kt`、`AcademicFeatureAccess` | 当前课表接本科 JWXT/SDK，没有 GMIS 会话/课表/周次配置，也没有研究生功能适用性分流；成绩多学籍不是该能力 | P1/P2：若核心测试账号为研究生则提升 P1，先完成独立认证和课表契约 |
+| 学生邮箱 | `ui/screen/main/StudentMailScreen.kt`、`data/mail/*` | 没有收件箱、正文、附件、联系人、草稿或发送；Android 已含读写与完整网页回退 | P3：问卷邮箱 2/25；先做只读版本，发送/删除作为独立授权功能设计 |
+| 菜鸟身份码入口 | Main 的 `identity_code` 外部淘宝页面 | 没有入口；它不是校园卡付款码 | P3：评估实际用户需求，可作轻量外部跳转 |
+| 网费加入首页可选工具 | HomeWidgetRegistry 的 `network_recharge` | 网费充值功能已有，小工具页可用；首页自定义列表尚不包含网费 | P2 小改：补入口映射与旧布局兼容，不能算整项网费功能缺失 |
+| 自定义运行期插件 | `ui/plugin/RuntimePluginLoader.kt`、`PluginRegistry.kt`、`.ahup` | 没有动态插件容器 | 暂不直接迁移 Android 动态加载方式；先定义 iOS 扩展范围 |
+| 行为预测/个性化与多套 UI 主题 | `personalization/*`、`RadiantComponentPack.kt` | 没有预测系统或 Radiant 界面；已有主题色和首页自定义 | 另行确定产品需求、数据边界；当前优先 iOS 原生体验 |
+| 教学评价 | Main 的 `evaluation`、Grade 到教评路由 | 已按用户既定要求整体移除 | 保持既定决策，不自动恢复 |
+
+校园码具体差距已在本轮修复：Android `data/crawler/PaymentQrRequest.kt` 采用学校直连、Rust HTTP 回退、再直连，单通道 12 秒预算；重新打开/强制刷新可以恢复请求，内存缓存 15 秒，后台清空。iOS 增加学校直连并保留 Rust 回退，处理 HTTP 200 的会话失效业务码；取消不启动回退、换账号拒绝旧结果；不缓存或记录真实付款码。学校失败、网络失败仍可能发生，客户端恢复不等于校方服务可用性保证。
+
+问卷 25 人：课程表 22（88%）、校园码 20（80%）、成绩/考试 19（76%）、水电网费及教务通知各 15（60%）、“安大必…”7（28%，全称未取得）、邮箱及其他各 2（8%）。多选结果不能相加当参与人数。“安大必…”不擅自等同学习通。建议先稳定登录/校园码/课表、验证成绩考试，再公告查询与可靠提醒，其后只读账单和电费预警；邮箱排后。公告订阅与用户问卷的教务通知存在关联，但不能宣称范围完全等价。
 
 ## 10. 安全门槛
 
@@ -560,6 +602,30 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 系统快捷指令库可发现两项动作，但 iOS 26.5 Simulator 上执行内置 App Shortcut 报 `Couldn't find AppShortcutsProvider`；Debug、关闭 debug dylib 的 Debug 对照以及 Release 均复现，AppIntents 元数据及 Provider 类型仍存在。Apple Developer Forums 的 [Simulator 报告](https://developer.apple.com/forums/tags/simulator?page=3) 记录相同系统与官方示例的失败，提示模拟器限制，尚不能据此保证物理机通过；不降低认证要求，实际 Siri/快捷指令运行仍保留为实机验收。
 - 平台说明：[Apple WWDC25 短语要求](https://developer.apple.com/videos/play/wwdc2025/244/)、[快捷指令通过名称运行](https://support.apple.com/zh-cn/HT209055)、[Siri App 权限路径](https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/)。App 与 Widget 统一为 1.0.2 (3)，不改变 AIO gitlink。
 
+### E-20261019-07：原生设置、校园码恢复与最新 Android 差距
+
+- 基线：独立 AIO worktree `android-ios-native-ui-campus-code`；iOS 从官方 main `7897a54` 建立 `codex/ios-native-ui-campus-code`，Android 只读固定 `595e63c`。不改 AIO 主工作区 gitlink，保留 PR #2 的未合并状态。
+- 设置首页及偏好改为系统 Form；真实 UISwitch/Toggle 取代自绘开关和“Button 包住不可交互 Toggle”。开关先响应选择，异步期间防重复操作、显示准备状态，权限拒绝/加载失败回退；关闭提醒不访问校园网络；开启先检查系统权限，再读账号/学期隔离缓存，缺数据才请求学校。
+- 课表设置使用系统 NavigationStack/工具栏/半高 sheet，支持原生 Toggle、上拉大尺寸和辅助功能大字号；课表设置与课程详情不再用不透明背景覆盖 sheet，材质由系统决定。iOS 26+ 默认 Liquid Glass，旧系统保留系统默认 sheet，无应用内材质开关。
+- 校园码由学校 HTTPS 直连优先、Rust HTTP 回退、再次直连恢复；单次传输 12 秒；第一方请求仅向 `adwmh.ahu.edu.cn` 发送匹配的本机 Cookie，不跟随重定向、不使用共享 URLSession Cookie 存储，不记录/持久化付款码。Keychain 账号检查防止旧账号结果显示到新账号。业务码失效走现有 single-flight 前台续期；不修改凭据失效/支付写请求的既定规则。
+- 界面区分被动预加载与用户打开：预加载失败不自动循环，重新展开则允许再次请求；强制刷新取消旧请求并拒绝迟到结果。短暂二维码内存复用改为 15 秒，后台立即失效。固定折叠/展开高度插值取代 `140 ↔ nil` 的不可见尺寸切换，位图生成移至后台任务并仅保留当前视图图片，避免每次 body 生成 CIContext 阻塞动画；减弱动态效果关闭尺寸动画，保留状态与触觉反馈。
+- 清理已无调用的 `AndroidSettingRow`、`AndroidSettingButton`、`AndroidPreferenceToggle`、`ScheduleSettingPressStyle`、旧自绘开关颜色和冗余设置布局 helper；扩大引用审查后另删除旧 `FeatureLandingView`、`LoadableContentView`、`LoginProvider` 与 `AgreementDetailView`，保留实际使用的 `LoadableState` 和 `AgreementDocumentBodyView`。全生产 Swift 私有类型/方法静态引用扫描未发现额外“只定义一次”的候选，但不据此承诺全项目绝无死代码。`CampusAuthenticatedClient`、验证码/登录/OCR 客户端和旧偏好清理器均有真实调用，保留；测试夹具仍仅 Debug 启动参数可达，无隐藏调试页。
+- 最新 Android 差距与后续建议列于 §9.1；原摘要的 25/25 仅属于历史固定范围，不能继续作为最新 Android 全量覆盖率。
+- 验证：原生/校园码切片 476 项单测及 13 项不同 UI 用例跨分组回归通过；正常签名宿主下 Keychain 测试通过。结果包位于 `build/native-ui/final-regression.xcresult`、`notification-controls-final.xcresult` 与 `signed-unit-settings.xcresult`。Release arm64 Simulator 编译通过，按用户授权保留数据覆盖已登录 iPhone 17 Pro，真实校园码打开/刷新成功，未执行支付。
+- 可视化：`build/native-ui/evidence/schedule-settings-system-glass.png` 展示 iOS 26.5 系统 sheet 的背景透出；`campus-code-expansion.mp4` 为演示二维码录像，原始帧可观察展开及收起的多个连续高度，非仅比较终态。默认减弱动态效果关闭。
+- 过时测试与实际问题分别处理：原生 UISwitch 的值为 1/0，点击整行 AX 中心会点到标签，改为操作真实开关；用启动参数固定 NO 会锁住 NSArgumentDomain，改为由 UI 建立初始状态；原生 Form section 的多节点不能当作单张旧卡片比较，改比较实际 Cell 宽度。新增工具一度破坏原顺序，属于实际回归，已恢复浴室/电控在前、网费在末。首轮未签名宿主 Keychain `-34018` 属测试签名问题，未删除或跳过安全用例。
+
+### E-20261019-08：首页刷新、Widget 外观、培养方案及只读账单
+
+- 最新源码对照：Android 首页每 30 秒刷新余额，`onHomeEntered()` 只重读课表缓存，课表网络更新另有入口；iOS 旧版只推日期/读缓存且无统一下拉刷新。本轮补齐下拉课表/周次/天气/卡片刷新、进入/回前台 60 秒节流与前台 30 秒余额刷新；二维码展开时优先保码，后台不新增轮询。课表缓存失败回退保留，Widget/快捷指令快照随有效周次同步。
+- Widget 保留原 kind，改用原生 AppIntentConfiguration，外观含跟随系统/浅色/深色。替换固定浅色底，明确高对比文本/课程底色；小中尺寸展示后续上课日的课程、节次和地点及溢出数量，大尺寸按节次对齐所有有效周课程，包含周末/晚课，重叠课程合并标示。共享既有 ScheduleTextFormatter 地点缩写，保证教室号优先可见，VoiceOver 保留完整地点。
+- 已在系统列表找到并添加课表 Widget，布局由三尺寸 × 深浅色的真实 SwiftUI ImageRenderer 渲染截图验证。原生“编辑小组件”面板在本机临时签名 Simulator 停留加载，linkd 日志报告无法取得 Widget Team ID；不把渲染图当作原生配置 UI 已通过。打包脚本新增 App/Widget 的动作及三种外观元数据检查；重签验证还要求双方 Team ID 一致、保留 App Group/配置描述文件授权。最终仍需有效签名的 iOS 27 实机验收，不虚构签名团队绕过系统。
+- Siri：用户确认实机 iOS 27 在快捷指令 App 内运行成功、解锁语音却转为网络搜索，因此将其定位为调用匹配问题，不归因于校园码网络请求。iOS 26+ 用 supportedModes 明确前台执行，旧系统保留 openAppWhenRun；未降低认证要求、未改变动作标识。引导保留带安大通的短语，补充运行自建快捷指令/改为独特名称的建议。Apple 要求 App Shortcut 触发短语包含 applicationName；无应用名的“打开校园码”仍依赖用户自建快捷指令及 Siri 匹配，不承诺应用可以强制 Siri 命中。参考 [Apple App Intents](https://developer.apple.com/videos/play/wwdc2025/244/) 与 [Siri 运行快捷指令](https://support.apple.com/guide/shortcuts/apd07c25bb38/ios)。
+- 培养方案：复用成绩学籍与教务认证，只访问本科完成情况页；手动同域入口跳转限定精确 info/id，不转发 Cookie 到外部域名；单引号、裸枚举键、转义及 undefined 纯解析，不执行学校脚本。汇总沿用教务服务端学分，不累加课程重算学分；无服务端进度时以“学分完成率”明确展示已完成/要求学分比值。支持模块/子模块、课程状态、只看未完成、档案选择、按账号缓存与手动刷新，错误时保留旧数据。原始 HTML 与 student 身份资料不持久化。已登录模拟器读取真实方案及模块成功。
+- 校园卡账单：复用 YCardReadOnlyClient 的内存 Token/Cookie、HTTP/业务 401 单次续期及严格读请求白名单，增加 GET turnover 与 count；金额用整数分，方向按 typeFrom，不以正负猜测。支持月份/全部时间、收入支出、已加载记录金额过滤、分页去重、详情；统计遍历所选范围全部页后计算每日/商户，任一页失败不发布部分总额，超过上限要求缩小范围。真实账户列表、服务端汇总与本地完整统计已核对一致；未创建充值订单、未执行支付、不保存真实账单截图或明细到仓库。
+- 最终单测：`build/native-ui/final-unit-494.xcresult`，494 / 494 Swift 测试通过，包括缓存/账号隔离、重定向边界、分页/完整统计、首页缓存刷新、周末/重叠/晚课与布局渲染。打包验证 Python 4 / 4 通过并接入 CI。18 项不同目标 UI 用例分组通过（本轮无“18 用例单个整包”）；新增只读查询及 Siri 冷启动/跨 Tab 重复/体验账户边界见 `services-final-validation.xcresult`，原生 Form 行宽修正后的 Siri 引导见 `shortcut-native-form-final.xcresult`。地点缩写后的 Widget 渲染复验见 `widget-location-final.xcresult`。
+- 构建/产物：Xcode 27.0 / iOS 26.5 Simulator，Release arm64 Simulator 和 unsigned iphoneos 均已编译；版本保持 1.0.2（3），本轮不是生产发版。产物、校验和与最终构建记录在 `build/native-ui-device/`；发布前需继续完成 iOS 27 的 Siri/Widget 有效重签物理机复验。CI、PR 与最终产物校验将在本节补录。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -648,6 +714,8 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - [x] 形成 D-003、D-004 的明确结论，并保留可注入 Swift 数据层与未来直连 FFI 替换边界。
 
 ## 14. 变更日志
+
+- 2026-10-19：完成原生设置/课表系统 sheet、校园码双通道恢复与尺寸动画，清理无调用 UI；补充首页刷新、可配置高对比 Widget、本科培养方案及校园卡账单/统计，真实只读查询通过，明确 Siri 语音匹配与 Widget 重签验收边界；重新盘点 Android `595e63c`，修正全量对齐措辞（E-20261019-07/08）。
 
 | 日期 | 条目 | 变更 | 验证证据 | Commit / PR |
 | --- | --- | --- | --- | --- |

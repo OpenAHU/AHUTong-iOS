@@ -2,6 +2,7 @@
 """Check an app or IPA before and after re-signing, without launching it."""
 
 import argparse
+import json
 import plistlib
 import subprocess
 import tempfile
@@ -46,12 +47,27 @@ def verify(app, require_signature):
     group = app_info.get("AHUTongAppGroupIdentifier")
     if not group or "$(" in group or group != widget_info.get("AHUTongAppGroupIdentifier"):
         raise ValueError("App and Widget must declare the same resolved App Group identifier")
+    app_actions = json.loads((app / "Metadata.appintents/extract.actionsdata").read_text()).get("actions", {})
+    if not {"OpenPaymentCodeIntent", "QueryScheduleIntent"}.issubset(app_actions):
+        raise ValueError("App is missing its Siri/Shortcuts action metadata")
+    widget_metadata = json.loads((widget / "Metadata.appintents/extract.actionsdata").read_text())
+    configuration = widget_metadata.get("actions", {}).get("ScheduleWidgetConfiguration", {})
+    if "com.apple.link.systemProtocol.WidgetConfiguration" not in configuration.get("systemProtocols", []):
+        raise ValueError("Widget is missing its editable configuration intent")
+    appearance = next((value for value in widget_metadata.get("enums", []) if value.get("identifier") == "ScheduleWidgetAppearance"), {})
+    if {case.get("identifier") for case in appearance.get("cases", [])} != {"system", "light", "dark"}:
+        raise ValueError("Widget is missing its system/light/dark appearance options")
+    signing_teams = set()
     for bundle, info in ((app, app_info), (widget, widget_info)):
         executable = bundle / info["CFBundleExecutable"]
         if not executable.is_file():
             raise ValueError("A bundle is missing its executable")
         if require_signature:
             entitlements = signed_entitlements(bundle)
+            team = entitlements.get("com.apple.developer.team-identifier")
+            if not team:
+                raise ValueError("A signed App/Widget has no Team ID; App Intents may not register")
+            signing_teams.add(team)
             if group not in entitlements.get("com.apple.security.application-groups", []):
                 raise ValueError("Signed App/Widget do not both retain the configured App Group")
             profile = bundle / "embedded.mobileprovision"
@@ -63,7 +79,9 @@ def verify(app, require_signature):
                 allowed = plistlib.loads(result.stdout).get("Entitlements", {}).get("com.apple.security.application-groups", [])
                 if group not in allowed:
                     raise ValueError("Provisioning profile does not allow the configured App Group")
-    print("PASS: embedded Widget, bundle IDs, versions, executables and shared group")
+    if require_signature and len(signing_teams) != 1:
+        raise ValueError("App and Widget must be signed by the same team")
+    print("PASS: embedded Widget, bundle IDs, versions, executables, shared group and App Intents metadata")
     if require_signature:
         print("PASS: signatures and shared-group entitlements (profiles checked when present)")
     else:

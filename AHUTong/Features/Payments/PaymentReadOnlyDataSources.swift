@@ -40,10 +40,12 @@ private func finiteYCardReadOnlyMessage(_ error: Error) -> String {
 enum YCardReadOnlyEndpoint: Equatable, Sendable {
     case cardAccount
     case feeItemData
+    case billPage
+    case billSummary
 
     var method: String {
         switch self {
-        case .cardAccount: "GET"
+        case .cardAccount, .billPage, .billSummary: "GET"
         case .feeItemData: "POST"
         }
     }
@@ -52,6 +54,8 @@ enum YCardReadOnlyEndpoint: Equatable, Sendable {
         switch self {
         case .cardAccount: "/berserker-app/ykt/tsm/queryCard"
         case .feeItemData: "/charge/feeitem/getThirdData"
+        case .billPage: "/berserker-search/search/personal/turnover"
+        case .billSummary: "/berserker-search/statistics/turnover/count"
         }
     }
 }
@@ -135,6 +139,10 @@ enum YCardReadOnlyRequestPolicy {
         switch (method, url.path) {
         case ("GET", "/berserker-app/ykt/tsm/queryCard"):
             try authorizeCardAccountRequest(request)
+        case ("GET", "/berserker-search/search/personal/turnover"):
+            try CardBillingContract.authorize(request, summary: false)
+        case ("GET", "/berserker-search/statistics/turnover/count"):
+            try CardBillingContract.authorize(request, summary: true)
         case ("POST", "/charge/feeitem/getThirdData"):
             try authorizeFeeItemRequest(request)
         default:
@@ -349,7 +357,9 @@ actor YCardReadOnlyClient {
         guard let response = rawResponse as? HTTPURLResponse else {
             throw YCardReadOnlyError.invalidResponse
         }
-        if CampusSessionExpiryDetector.isExpired(response: response, data: data)
+        let businessCode = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["code"] as? Int
+        if businessCode == 401 || businessCode == 403
+            || CampusSessionExpiryDetector.isExpired(response: response, data: data)
             || (300..<400).contains(response.statusCode) {
             clearCredentials()
             guard mayRefreshSession else {

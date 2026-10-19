@@ -1,6 +1,10 @@
 import CoreImage.CIFilterBuiltins
 import CryptoKit
 import SwiftUI
+
+extension Notification.Name {
+    static let homeRefreshRequested = Notification.Name("AHUTong.homeRefreshRequested")
+}
 import UIKit
 
 @MainActor
@@ -27,8 +31,11 @@ final class CampusCardViewModel: ObservableObject {
     private let defaults: UserDefaults
     private let now: @Sendable () -> Date
     // The API does not supply an expiry time. Reuse a prefetched code only briefly.
-    private static let maximumQRCodeAge: TimeInterval = 30
+    private static let maximumQRCodeAge: TimeInterval = 15
     private var qrLoadedAt: Date?
+    #if DEBUG
+    private var demoQRRequests = 0
+    #endif
     private var qrRequestTask: Task<String, Error>?
     private var balanceRequestTask: Task<Double, Error>?
     private var latestQRRequestID: UUID?
@@ -111,19 +118,21 @@ final class CampusCardViewModel: ObservableObject {
         if case .failed = qrState { await load(demo: demo) }
     }
 
-    func loadQRCode(demo: Bool, force: Bool = false) async {
-        if case .loading = qrState { return }
+    func loadQRCode(demo: Bool, force: Bool = false, retryFailure: Bool = false) async {
+        if case .loading = qrState, !force { return }
         if !force {
             switch qrState {
             case .loaded:
                 if let qrLoadedAt, (0..<Self.maximumQRCodeAge).contains(now().timeIntervalSince(qrLoadedAt)) {
                     return
                 }
-            case .failed: return
+            case .failed where !retryFailure: return
+            case .failed: break
             case .idle, .loading:
                 break
             }
         }
+        qrRequestTask?.cancel()
         // Opening or refreshing a payment code takes precedence over a passive balance read.
         balanceRequestTask?.cancel()
         balanceRequestTask = nil
@@ -132,7 +141,17 @@ final class CampusCardViewModel: ObservableObject {
         latestQRRequestID = requestID
         qrLoadedAt = nil
         qrState = .loading
+        #if DEBUG
+        demoQRRequests += 1
+        let failsDemoRequest = demo && ProcessInfo.processInfo.arguments.contains("--demo-card-qr-fails-twice") && demoQRRequests <= 2
+        #endif
         let task = Task(priority: .userInitiated) { [api] in
+            #if DEBUG
+            if demo && ProcessInfo.processInfo.arguments.contains("--demo-card-qr-fails-twice") {
+                try await Task.sleep(for: .seconds(1))
+                if failsDemoRequest { throw URLError(.cannotConnectToHost) }
+            }
+            #endif
             if demo { return "AHUTONG-DEMO-PAYMENT-CODE" }
             return try await api.cardQRCode()
         }
@@ -147,7 +166,13 @@ final class CampusCardViewModel: ObservableObject {
         } catch {
             guard latestQRRequestID == requestID else { return }
             qrRequestTask = nil
-            qrState = .failed(error.localizedDescription)
+            let message: String
+            if let networkError = error as? URLError {
+                message = networkError.code == .notConnectedToInternet ? "请检查网络连接" : "暂时无法连接校园服务"
+            } else {
+                message = error.localizedDescription
+            }
+            qrState = .failed(message)
         }
     }
 
@@ -181,6 +206,7 @@ struct CampusCardPanel: View {
     @State private var showsQRCode = false
     @State private var showsFullQRCode = false
     @State private var previousBrightness: CGFloat?
+    @State private var expandedHeight: CGFloat = 280
     private let demo: Bool
     private let paymentCodeRequestID: UUID?
     private let onRecharge: () -> Void
@@ -196,17 +222,24 @@ struct CampusCardPanel: View {
     }
 
     var body: some View {
-        Group {
+        ZStack(alignment: .top) {
+            balanceCard
+                .frame(height: 140)
+                .opacity(showsQRCode ? 0 : 1)
+                .allowsHitTesting(!showsQRCode)
+                .accessibilityHidden(showsQRCode)
             if showsQRCode {
-                qrCard.transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-            } else {
-                balanceCard.transition(.opacity)
+                qrCard
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { expandedHeight = $0 }
+                    .transition(.opacity)
             }
         }
-        .frame(height: showsQRCode ? nil : 140)
+        .frame(height: showsQRCode ? expandedHeight : 140, alignment: .top)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.38, dampingFraction: 0.86), value: showsQRCode)
+        .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.86), value: showsQRCode)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: expandedHeight)
         .sensoryFeedback(.selection, trigger: showsQRCode)
         .onGeometryChange(for: CGFloat.self) { min(150, max(100, $0.size.width - 32)) } action: { inlineQRSize = $0 }
         .task { await model.prefetchQRCode(demo: demo) }
@@ -221,6 +254,13 @@ struct CampusCardPanel: View {
             } else if phase == .background {
                 model.invalidateQRCode()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeRefreshRequested)) { _ in
+            Task { await model.refreshQRCodeAndBalance(demo: demo) }
+        }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            guard scenePhase == .active, !showsQRCode, !showsFullQRCode else { return }
+            Task { await model.load(demo: demo, refresh: true) }
         }
         .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
             guard scenePhase == .active, showsQRCode || showsFullQRCode else { return }
@@ -316,7 +356,7 @@ struct CampusCardPanel: View {
                 .accessibilityIdentifier("campus-card.qr-panel")
                 .allowsHitTesting(false)
         }
-        .task { await model.loadQRCode(demo: demo) }
+        .task { await model.loadQRCode(demo: demo, retryFailure: true) }
     }
 
     @ViewBuilder
@@ -346,6 +386,7 @@ struct CampusCardPanel: View {
             .accessibilityIdentifier("campus-card.qr-refresh")
         case .loading:
             ProgressView().frame(width: size, height: size)
+                .accessibilityIdentifier("campus-card.qr-loading")
         case let .failed(message):
             Button {
                 Task { await model.refreshQRCodeAndBalance(demo: demo) }
@@ -370,18 +411,28 @@ struct CampusCardPanel: View {
 private struct PaymentQRCode: View {
     let payload: String
 
+    @State private var image: UIImage?
+
     var body: some View {
-        if let image = Self.makeImage(payload) {
+        Group {
+        if let image {
             Image(uiImage: image).resizable().interpolation(.none)
                 .padding(4).background(.white)
                 .accessibilityLabel("校园卡付款码")
                 .accessibilityIdentifier("campus-card.qr-image")
         } else {
-            Text("加载失败")
+            ProgressView()
+        }
+        }
+        .task(id: payload) {
+            image = nil
+            let rendered = await Task.detached(priority: .userInitiated) { Self.makeImage(payload) }.value
+            guard !Task.isCancelled else { return }
+            image = rendered
         }
     }
 
-    private static func makeImage(_ payload: String) -> UIImage? {
+    nonisolated private static func makeImage(_ payload: String) -> UIImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(payload.utf8)
         filter.correctionLevel = "L"

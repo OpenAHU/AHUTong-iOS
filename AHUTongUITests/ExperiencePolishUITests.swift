@@ -17,7 +17,7 @@ final class ExperiencePolishUITests: XCTestCase {
         let app = launch()
         app.tabBars.buttons["设置"].tap()
         app.buttons["settings.preferences"].tap()
-        XCTAssertTrue(app.buttons["preferences.privacy-consent"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.switches["preferences.privacy-consent"].waitForExistence(timeout: 4))
         // Detail screens intentionally hide the tab bar; a shortcut can leave
         // their navigation stack alive while returning to a top-level tab.
         app.open(URL(string: "ahutong://schedule")!)

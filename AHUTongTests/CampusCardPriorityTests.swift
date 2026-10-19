@@ -84,7 +84,7 @@ final class CampusCardPriorityTests: XCTestCase {
         let model = CampusCardViewModel(api: api, userID: "qr-fixture", defaults: defaults.0,
                                         now: { clock.now() })
         await model.prefetchQRCode(demo: false)
-        clock.advance(seconds: 29)
+        clock.advance(seconds: 14)
         await model.loadQRCode(demo: false)
         XCTAssertEqual(model.qrState, .loaded("QR-1"))
 
@@ -129,6 +129,33 @@ final class CampusCardPriorityTests: XCTestCase {
         if case .failed = model.qrState {} else { XCTFail("付款码失败应可显式重试") }
         let events = await api.events()
         XCTAssertEqual(events, ["qr", "balance"])
+    }
+
+    func testReopeningAfterPrefetchFailureActuallyRetries() async {
+        let api = DeferredCampusCardAPI(failsQR: true)
+        let defaults = makeDefaults()
+        defer { defaults.0.removePersistentDomain(forName: defaults.1) }
+        let model = CampusCardViewModel(api: api, userID: "qr-fixture", defaults: defaults.0)
+        await model.prefetchQRCode(demo: false)
+        await model.loadQRCode(demo: false, retryFailure: true)
+        let events = await api.events()
+        XCTAssertEqual(events, ["qr", "balance", "qr"])
+    }
+
+    func testExplicitRetryReplacesHungRequestAndLateResultCannotOverwrite() async {
+        let api = DeferredCampusCardAPI(suspendFirstQR: true)
+        let defaults = makeDefaults()
+        defer { defaults.0.removePersistentDomain(forName: defaults.1) }
+        let model = CampusCardViewModel(api: api, userID: "qr-fixture", defaults: defaults.0)
+        let prefetch = Task { await model.prefetchQRCode(demo: false) }
+        await api.waitForQR()
+        await model.refreshQRCodeAndBalance(demo: false)
+        XCTAssertEqual(model.qrState, .loaded("QR-2"))
+        await api.releaseQR()
+        await prefetch.value
+        XCTAssertEqual(model.qrState, .loaded("QR-2"))
+        let events = await api.events()
+        XCTAssertEqual(events, ["qr", "qr", "balance"])
     }
 
     private func makeDefaults() -> (UserDefaults, String) {
