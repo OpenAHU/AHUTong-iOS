@@ -527,6 +527,8 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 冲突处理：保留严格教学周解析、按账号/学期的离线周锚点、旧请求隔离、二维码优先预取与过期刷新、Android 同款原生 Tab 图标、设置反馈；快捷指令快照接入同一可靠周次和注入存储。实时活动复用校园时区和真实节次，不重新引入设备时区或时刻表副本。
 - 设置首页新增“Siri 与快捷指令”入口，引导页包含两个动作、简短口令、日期选择、本机数据来源和系统 `ShortcutsLink`；统一 `CFBundleName` 为“安大通”以避免系统按钮显示工程名，支持滚动与 Dynamic Type，沿用设置按压反馈；无 Debug/玻璃开关。
 - App 与 Widget 同步 `1.0.1 (2)`。本次为实机测试用未签名 IPA，不上传商店、不改变 AIO gitlink，不进行真实支付。
+- 云端首轮 `39229524785` 的 457 单测通过，设置组 12 UI 中仅后台倒计时测试失败：runner 的启动/截图/OCR 耗时使 135 秒测试课程在最后一轮识别前结束，未再显示两个倒计时。保留原失败日志/附件，不将该轮写为全绿；Debug fixture 改为 90 秒后开课、10 分钟后结束，并按截图时间与识别的剩余秒数等待跨上课，保留后台递减和截止停零断言。生产调度、倒计时和 IPA 功能不变。
+- 测试计时修正后，本机 `Live-timing-recheck.xcresult` 通过（后台跨上课回归）；Release 再构建成功。最终交付包 `build/integration-1.0.1/AHUTong-1.0.1-2-final-unsigned.ipa`：6,942,774 bytes，SHA-256 `186ed10e69a2218ea1fff6d3217f3c7ade41ac5192d59c75544c7ce97f471139`。之前的包与原失败证据保留。
 - 最终中文系统按钮 UI 通过 `Guide-branding.xcresult` 复验，截图 `build/integration-1.0.1/shortcuts-guide.png` 已目视检查；`device-final-build.log` 为最终 Release iphoneos 构建成功证据。两项带系统身份验证的 App Intents、两个 App Shortcuts、必填日期和中文 NLU 元数据检查通过。
 - 最终本机包 `build/integration-1.0.1/AHUTong-1.0.1-2-unsigned.ipa`：6,942,774 bytes；SHA-256 `793f8afa8a0fbbda3ac02bde0901e523648c46203f1ec2a7a85d32d99b13032a`；ZIP 完整性和 Widget BundleID、版本、可执行文件、共享组结构检查通过。此为未签名包，重签后仍需保留 Widget 并复验签名与 App Group。
 - 本机 Xcode 27 / iOS 26.5 独立模拟器：`Integrated.xcresult` 456 单测 + 9 UI 全部通过，覆盖后台跨上课倒计时、独立偏好、付款码冷/热启动与体验拦截、设置引导、日期和 Tab 返回；`Final-recheck.xcresult` 补充校园默认时区/离线快照断言后 457 单测 + 1 设置 UI 通过；真实账号此前的成绩/考试刷新、校园卡与网费只读查询、前后台及冷启动保持登录均已检查；自然隔天过期、实际重签后的 Widget/Siri 与物理机实时活动仍需设备验收。浴室/房间余额按用户要求未测试。

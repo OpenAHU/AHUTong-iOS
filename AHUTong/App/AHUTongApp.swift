@@ -45,8 +45,8 @@ struct AHUTongApp: App {
                 courseID: "live-activity-ui-fixture",
                 courseName: "实时活动倒计时验证",
                 location: "博学南楼 A101",
-                startDate: now.addingTimeInterval(45),
-                endDate: now.addingTimeInterval(135)
+                startDate: now.addingTimeInterval(90),
+                endDate: now.addingTimeInterval(10 * 60)
             ))
             liveActivityFixtureStatus = "已创建"
         } catch {

@@ -71,13 +71,16 @@ final class CourseLiveActivityUITests: XCTestCase {
         // rendered timer pixels rather than expecting those labels to tick.
         let initialTimers = try renderedCountdowns(springboard)
         Thread.sleep(forTimeInterval: 3)
+        let backgroundCaptureTime = Date()
         let backgroundTimers = try renderedCountdowns(springboard)
         XCTAssertLessThan(backgroundTimers[0], initialTimers[0], "上课倒计时应在后台继续变化")
         XCTAssertLessThan(backgroundTimers[1], initialTimers[1], "下课倒计时应在后台继续变化")
         capture("live-activity-counting-in-background", springboard: springboard)
-        // The fixture starts after 45 seconds. Neither timer may count up
-        // after its deadline; the end countdown must continue independently.
-        Thread.sleep(forTimeInterval: 46)
+        // OCR can itself take tens of seconds on a hosted runner. Wait only
+        // until the deadline observed in the screenshot, not a fixed delay
+        // after recognition. Keep the fixture alive through slow captures.
+        let classStart = backgroundCaptureTime.addingTimeInterval(TimeInterval(backgroundTimers[0]))
+        Thread.sleep(forTimeInterval: max(0, classStart.timeIntervalSinceNow + 3))
         let startCountdown = springboard.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS %@", "距上课")).firstMatch
         XCTAssertTrue(startCountdown.exists)
