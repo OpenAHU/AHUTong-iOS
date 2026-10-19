@@ -500,6 +500,17 @@ xcodebuild "${maintenance_args[@]}" test \
 python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned.ipa
 ```
 
+### E-20261019-LIVE-01：课程实时活动倒计时回归
+
+- 基线：远端 `main` / AIO iOS gitlink `449300f`；独立 AIO worktree `.worktree/ios-live-activity-countdown`，iOS 分支 `feat/live-activity-countdown`。
+- 修复 `.timer` 越过上课时间后正向计时、跨课间下课时间错误、开关关闭先联网、无课程误关偏好及只切开关才维护活动的问题。同一课程活动复用，切换课程、关闭、退出会话及清缓存清理旧活动。偏好行补齐整行点击区域。
+- 锁屏/展开岛同时显示距上课和距下课；紧凑岛明确显示下课剩余时间。使用 `Text(timerInterval:pauseTime:countsDown:showsHours:)` 与时间进度条，由系统更新，不依赖每秒 App 运行。截止后停零，课程结束的 stale 状态显示“本节课程已结束”。
+- 无 APNs：按打开 App、回到前台、时区变化及刷新课表维护当天课程；不承诺 App 长期不运行时自动创建/切换后续课程，staleDate 也不是准点结束 Activity 的调度器。
+- 本机 Xcode 27.0（27A266a），独立 iPhone 17 Pro / iOS 26.5 Simulator；`xcodegen generate --spec project.yml`、App/Widget/测试目标编译及定向 29 单测通过，0 失败（12 项 `CourseLiveActivityTests`、9 项提醒、4 项设置、4 项体验课表）。最终结果：`build/LiveActivityUnitValidation3.xcresult`；使用 `test-without-building` 复验编译后的最终核心逻辑。
+- UI：`testLiveActivityPreferenceDoesNotRequireCourseReminder` 在 `build/LiveActivityUIValidation6.xcresult` 中通过；`testCourseCountdownContinuesInBackgroundAcrossClassStart` 在 `build/LiveActivityCountdownValidation7.xcresult` 中通过。前者截图见 `build/LiveActivityUIAttachments6/`，后者四张截图见 `build/LiveActivityCountdownAttachments7/`。Widget 辅助功能标签是归档快照，倒计时 UI 测试使用系统 Vision 识别真实截图数字；不把静态辅助功能标签当作逐秒刷新证据。
+- 实际后台截图：距上课 `0:37 → 0:31`，距下课 `2:07 → 2:01`；越过上课后前者保持 `0:00`，后者继续 `1:14 → 1:10`，课程进度随时间推进。无账号、无网络和无 APNs 参与此 UI fixture；fixture 仅 Debug 加显式测试启动参数可用，不提供用户 Debug 入口。
+- 首轮 UI 发现 `pauseTime` 会立即暂停，已移除；测试启动/点击/辅助功能快照问题已根据截图与界面树修正，最终证据采用上述独立通过的用例。物理 iPhone 的锁屏、常亮屏刷新节奏、灵动岛和系统权限仍需真机回归。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -704,3 +715,5 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 
 
 | 2026-10-19 | SCH-008 / OPS-003 | 修复课表 Tab 重入回跳并拆分 CI，保留 #3 包含关系和 #2 暂缓决定 | 独立模拟器单测、启动/日期/Tab 回归，见 E-20261019-04 | 本次提交 |
+
+| 2026-10-19 | SYS-004 | 合入实时活动双倒计时、后台持续计时与独立偏好，沿用校园日历与真实节次 | 分支证据 E-20261019-LIVE-01，集成回归待验证 | `89975b7` 与本次集成 |

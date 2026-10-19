@@ -156,21 +156,10 @@ struct AHUTongScheduleWidget: Widget {
 struct CourseLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CourseActivityAttributes.self) { context in
-            HStack(spacing: 12) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(context.state.courseName).font(.headline).lineLimit(1)
-                    Text(context.state.location).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                Text(context.state.startDate, style: .timer)
-                    .font(.headline.monospacedDigit())
-            }
-            .padding()
-            .activityBackgroundTint(Color(red: 247 / 255, green: 246 / 255, blue: 252 / 255))
-            .activitySystemActionForegroundColor(.blue)
+            CourseLiveActivityCard(state: context.state, isStale: context.isStale)
+                .padding()
+                .activitySystemActionForegroundColor(.blue)
+                .widgetURL(URL(string: "ahutong://schedule"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -179,22 +168,115 @@ struct CourseLiveActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.center) {
                     Text(context.state.courseName).font(.headline).lineLimit(1)
                 }
-                DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.startDate, style: .timer).monospacedDigit()
-                }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(context.state.location).font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(context.state.location).lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(context.state.startDate, style: .time)
+                            Text("–")
+                            Text(context.state.endDate, style: .time)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        CourseLiveActivityTimers(state: context.state, isStale: context.isStale)
+                    }
                 }
             } compactLeading: {
                 Image(systemName: "book.closed.fill").foregroundStyle(.blue)
             } compactTrailing: {
-                Text(context.state.startDate, style: .timer).monospacedDigit()
+                if context.isStale {
+                    Text("结束").font(.caption)
+                } else {
+                    // Always identify the deadline. This remains correct across
+                    // the class start even while the app is suspended.
+                    HStack(spacing: 2) {
+                        Text("下").font(.caption2)
+                        CourseCountdownText(state: context.state, target: context.state.endDate)
+                            .font(.caption.monospacedDigit())
+                            .frame(width: 62, alignment: .trailing)
+                    }
+                }
             } minimal: {
-                Image(systemName: "book.closed.fill").foregroundStyle(.blue)
+                Image(systemName: context.isStale ? "checkmark" : "book.closed.fill").foregroundStyle(.blue)
             }
             .widgetURL(URL(string: "ahutong://schedule"))
             .keylineTint(.blue)
         }
+    }
+}
+
+private struct CourseLiveActivityCard: View {
+    let state: CourseActivityAttributes.ContentState
+    let isStale: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "calendar.badge.clock").font(.title2).foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(state.courseName).font(.headline).lineLimit(1)
+                    Text(state.location).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing) {
+                    Text(state.startDate, style: .time)
+                    Text(state.endDate, style: .time)
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+            CourseLiveActivityTimers(state: state, isStale: isStale)
+        }
+    }
+}
+
+private struct CourseLiveActivityTimers: View {
+    @ScaledMetric(relativeTo: .headline) private var timerWidth = 86.0
+    let state: CourseActivityAttributes.ContentState
+    let isStale: Bool
+
+    var body: some View {
+        if isStale {
+            Label("本节课程已结束", systemImage: "checkmark.circle")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        } else {
+            HStack {
+                timer("距上课", target: state.startDate)
+                Spacer(minLength: 12)
+                timer("距下课", target: state.endDate)
+            }
+            ProgressView(timerInterval: state.startDate...state.endDate, countsDown: false)
+                .labelsHidden()
+                .tint(.blue)
+                .accessibilityLabel("本节课程进度")
+        }
+    }
+
+    private func timer(_ label: String, target: Date) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+            CourseCountdownText(state: state, target: target)
+                .font(.headline.monospacedDigit())
+                .frame(width: timerWidth, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct CourseCountdownText: View {
+    let state: CourseActivityAttributes.ContentState
+    let target: Date
+
+    var body: some View {
+        Text(
+            timerInterval: state.countdownInterval(to: target),
+            countsDown: true,
+            showsHours: true
+        )
+        .multilineTextAlignment(.trailing)
+        .contentTransition(.numericText(countsDown: true))
     }
 }
 

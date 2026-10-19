@@ -2,6 +2,16 @@ import XCTest
 @testable import AHUTong
 
 final class CourseReminderPlannerTests: XCTestCase {
+    func testLiveActivityAloneTriggersForegroundMaintenanceWithoutNotificationPreference() {
+        XCTAssertTrue(CourseReminderMaintenancePolicy.shouldRefresh(
+            isDemoSession: false, remindersEnabled: false, isAuthenticated: true, liveActivityEnabled: true
+        ))
+        XCTAssertFalse(CourseReminderMaintenancePolicy.shouldRefresh(
+            isDemoSession: true, remindersEnabled: false, isAuthenticated: true, liveActivityEnabled: true
+        ))
+    }
+
+
     func testDeviceTimeZoneDoesNotMoveCampusReminderTime() throws {
         let previous = NSTimeZone.default
         NSTimeZone.default = TimeZone(secondsFromGMT: 0)!
