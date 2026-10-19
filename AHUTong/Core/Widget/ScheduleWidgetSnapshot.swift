@@ -5,6 +5,7 @@ enum ScheduleWidgetStatus: String, Codable, Equatable, Sendable {
     case empty
     case signedOut
     case expired
+    case sharingUnavailable
 }
 
 struct ScheduleWidgetCourse: Codable, Identifiable, Equatable, Sendable {
@@ -69,33 +70,36 @@ struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
 
 actor ScheduleWidgetSnapshotStore {
     static let shared = ScheduleWidgetSnapshotStore()
-    static let appGroup = "group.com.openahu.ahutong.shared"
+    nonisolated static var appGroup: String {
+        Bundle.main.object(forInfoDictionaryKey: "AHUTongAppGroupIdentifier") as? String
+            ?? "group.com.openahu.ahutong.shared"
+    }
 
-    private let fileURL: URL
+    nonisolated static var sharedContainerURL: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+    }
+
+    private let fileURL: URL?
 
     init(fileURL: URL? = nil) {
         if let fileURL {
             self.fileURL = fileURL
-        } else if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroup) {
+        } else if let container = Self.sharedContainerURL {
             self.fileURL = container.appendingPathComponent("schedule-widget.json")
         } else {
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            self.fileURL = base.appendingPathComponent("AHUTong/schedule-widget.json")
+            self.fileURL = nil
         }
+    }
+
+    init(containerURL: URL?) {
+        fileURL = containerURL?.appendingPathComponent("schedule-widget.json")
     }
 
     /// WidgetKit's callback-based provider API is synchronous. Reading this
     /// tiny, atomically-written snapshot directly avoids sending its
     /// non-Sendable completion handler across an actor boundary.
     nonisolated static func loadSharedSnapshot() -> ScheduleWidgetSnapshot {
-        let fileURL: URL
-        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) {
-            fileURL = container.appendingPathComponent("schedule-widget.json")
-        } else {
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            fileURL = base.appendingPathComponent("AHUTong/schedule-widget.json")
-        }
-        return decode(from: fileURL)
+        decode(from: sharedContainerURL?.appendingPathComponent("schedule-widget.json"))
     }
 
     func load() -> ScheduleWidgetSnapshot {
@@ -103,6 +107,7 @@ actor ScheduleWidgetSnapshotStore {
     }
 
     func save(_ snapshot: ScheduleWidgetSnapshot) throws {
+        guard let fileURL else { throw ScheduleWidgetStoreError.sharingUnavailable }
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -111,11 +116,16 @@ actor ScheduleWidgetSnapshotStore {
     }
 
 
-    private nonisolated static func decode(from fileURL: URL) -> ScheduleWidgetSnapshot {
+    private nonisolated static func decode(from fileURL: URL?) -> ScheduleWidgetSnapshot {
+        guard let fileURL else { return .unavailable(.sharingUnavailable) }
         guard let data = try? Data(contentsOf: fileURL),
               let snapshot = try? JSONDecoder().decode(ScheduleWidgetSnapshot.self, from: data) else {
             return .unavailable(.signedOut)
         }
         return snapshot
     }
+}
+
+enum ScheduleWidgetStoreError: Error {
+    case sharingUnavailable
 }

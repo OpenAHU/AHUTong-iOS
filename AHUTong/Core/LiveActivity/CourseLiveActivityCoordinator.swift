@@ -7,7 +7,7 @@ actor CourseLiveActivityCoordinator {
         courses: [Course],
         currentWeek: Int,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = ScheduleCalendar.campus
     ) async throws -> Bool {
         for activity in Activity<CourseActivityAttributes>.activities {
             await activity.end(nil, dismissalPolicy: .immediate)
@@ -36,11 +36,6 @@ actor CourseLiveActivityCoordinator {
         now: Date,
         calendar: Calendar
     ) -> (course: Course, start: Date, end: Date)? {
-        let times = [
-            1: (8, 0), 2: (8, 50), 3: (9, 50), 4: (10, 40), 5: (11, 30),
-            6: (14, 0), 7: (14, 50), 8: (15, 50), 9: (16, 40), 10: (17, 30),
-            11: (19, 0), 12: (19, 50), 13: (20, 40)
-        ]
         let weekday = calendar.component(.weekday, from: now)
         let monday = calendar.date(byAdding: .day, value: -((weekday + 5) % 7), to: calendar.startOfDay(for: now)) ?? now
         let candidates = (0..<14).flatMap { offset -> [(Course, Date, Date)] in
@@ -48,9 +43,8 @@ actor CourseLiveActivityCoordinator {
             let week = currentWeek + offset / 7
             let dayOfWeek = offset % 7 + 1
             return courses.filter { $0.weekday == dayOfWeek && $0.occurs(inWeek: week) }.compactMap { course in
-                guard let value = times[course.startPeriod],
-                      let start = calendar.date(bySettingHour: value.0, minute: value.1, second: 0, of: day),
-                      let end = calendar.date(byAdding: .minute, value: max(1, course.duration) * 50 - 5, to: start),
+                guard let start = ScheduleCalendar.startTime(period: course.startPeriod, on: day, calendar: calendar),
+                      let end = ScheduleCalendar.endTime(period: course.endPeriod, on: day, calendar: calendar),
                       end > now else { return nil }
                 return (course, start, end)
             }

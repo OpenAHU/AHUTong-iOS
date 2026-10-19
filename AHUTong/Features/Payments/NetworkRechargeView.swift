@@ -856,6 +856,7 @@ struct NetworkRechargeView: View {
                 passwordDialog
             }
         }
+        .paymentKeyboardDismissal()
         .task {
             await coordinator.resumePendingOrder()
             await model.load()

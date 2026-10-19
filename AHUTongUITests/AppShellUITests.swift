@@ -742,7 +742,13 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         field.tap()
         field.typeText(value)
-        app.swipeDown()
+        let keyboardDone = app.buttons["payment.keyboard.done"]
+        if keyboardDone.exists {
+            keyboardDone.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        } else {
+            app.swipeDown()
+        }
     }
 
     @MainActor

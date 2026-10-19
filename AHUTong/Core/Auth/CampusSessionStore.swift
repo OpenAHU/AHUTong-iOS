@@ -150,7 +150,7 @@ final class AppModel: ObservableObject {
                 reauthenticationMessage = nil
                 sessionState = .authenticated(snapshot.user)
                 do {
-                    _ = try await campusAPI.currentWeek()
+                    try await campusAPI.validateSession(scope: .academic)
                 } catch CampusCoreError.unauthorized {
                     guard sessionGeneration == generation else { return }
                     try await refreshCoordinator.refresh(scope: .academic) { [campusAPI] in
@@ -158,11 +158,10 @@ final class AppModel: ObservableObject {
                     }
                     guard sessionGeneration == generation else { return }
                     do {
-                        _ = try await campusAPI.currentWeek()
+                        try await campusAPI.validateSession(scope: .academic)
                     } catch CampusCoreError.unauthorized {
                         guard sessionGeneration == generation else { return }
-                        await campusAPI.invalidateStoredSession()
-                        throw CampusCoreError.credentialsRejected
+                        throw CampusCoreError.sessionRefreshDeferred
                     }
                 }
                 let refreshedSnapshot = try await sessionStore.load()
@@ -198,7 +197,10 @@ final class AppModel: ObservableObject {
             password: credentials.password
         )
         let previous = try? await sessionStore.load()
-        let existingCookies = previous.flatMap {
+        let sameAccount = previous.flatMap {
+            StudentIDCanonicalizer.canonical($0.user.studentID) == canonicalID ? $0 : nil
+        }
+        let existingCookies = sameAccount.flatMap {
             try? JSONDecoder().decode([CampusCookie].self, from: Data($0.cookiesJSON.utf8))
         } ?? []
         let merged = CampusCookieMerger.merge(existing: existingCookies, incoming: result.cookies)
@@ -218,7 +220,9 @@ final class AppModel: ObservableObject {
         }
         do {
             try await credentialStore.save(normalizedCredentials)
-            try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+            // Validation may rotate the school cookies; keep the resulting jar.
+            let validatedCookies = try await campusAPI.dumpCookies()
+            try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: validatedCookies))
         } catch {
             try? await credentialStore.removeCredentials(for: canonicalID)
             try? await sessionStore.clear()

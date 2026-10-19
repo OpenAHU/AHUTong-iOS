@@ -64,6 +64,14 @@ struct ToolsView: View {
                     Text("iOS 不允许 App 直接固定桌面小组件，需要在系统主屏幕完成最后一步。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    if ScheduleWidgetSnapshotStore.sharedContainerURL == nil {
+                        Label("当前安装方式无法同步小组件课表。请使用支持小组件的签名版本重新安装。", systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("如果添加列表里找不到安大通，请确认重签安装时保留了小组件扩展，然后至少打开 App 一次。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     Spacer()
                 }
                 .padding(24)

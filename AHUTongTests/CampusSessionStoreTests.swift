@@ -2,6 +2,37 @@ import XCTest
 @testable import AHUTong
 
 final class CampusSessionStoreTests: XCTestCase {
+    @MainActor
+    func testInitialLoginSavesCookiesRotatedDuringValidation() async throws {
+        let secure = InMemorySecureStore()
+        let store = CampusSessionStore(secureStore: secure)
+        let api = CampusCoreAPIStub()
+        let rotated = #"[{"name":"SESSION","value":"rotated-test-only","domain":"jw.ahu.edu.cn","path":"/","secure":true}]"#
+        await api.setDumpCookies(rotated)
+        let model = AppModel(campusAPI: api, sessionStore: store, credentialStore: CredentialStore(secureStore: secure))
+
+        try await model.completeWebLogin(Self.webLoginResult())
+
+        let saved = try await store.load()
+        XCTAssertEqual(saved?.cookiesJSON, rotated)
+    }
+
+    @MainActor
+    func testLoginWithAnotherAccountDoesNotImportPreviousCampusCardCookies() async throws {
+        let secure = InMemorySecureStore()
+        let store = CampusSessionStore(secureStore: secure)
+        let oldCookies = #"[{"name":"OLD_CARD","value":"previous-test-only","domain":"adwmh.ahu.edu.cn","path":"/","secure":true}]"#
+        try await store.save(CampusSessionSnapshot(user: User(name: "旧用户", studentID: "AB220002"), cookiesJSON: oldCookies))
+        let api = CampusCoreAPIStub()
+        let model = AppModel(campusAPI: api, sessionStore: store, credentialStore: CredentialStore(secureStore: secure))
+
+        try await model.completeWebLogin(Self.webLoginResult())
+
+        let initialized = await api.lastInitializedCookies()
+        XCTAssertFalse(initialized.contains("OLD_CARD"))
+        XCTAssertTrue(initialized.contains("SESSION"))
+    }
+
     func testLegacyCookieDetectionDoesNotTreatOfflinePlaceholderAsNativeDump() {
         XCTAssertTrue(CampusCookieSnapshotPolicy.isLegacyNativeDump(#"{"raw_cookie":"test-only"}"#))
         XCTAssertFalse(CampusCookieSnapshotPolicy.isLegacyNativeDump("cached-cookie"))
@@ -378,7 +409,7 @@ private actor CampusCoreAPIStub: CampusCoreAPI {
         }
         return User(name: "测试同学", studentID: studentID)
     }
-    func dumpCookies() -> String { nextDumpCookies ?? "cookie-json" }
+    func dumpCookies() -> String { nextDumpCookies ?? cookies }
     func setDumpCookies(_ value: String) { nextDumpCookies = value }
     func cookiesFlat() -> String { flatCookies ?? "[]" }
     func schedule() -> [Course] { [] }

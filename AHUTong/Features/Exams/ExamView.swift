@@ -45,19 +45,21 @@ enum CampusExamLocationFormatter {
 @MainActor
 final class ExamViewModel: ObservableObject {
     @Published private(set) var state: LoadableState<[CampusExam]> = .idle
+    @Published private(set) var refreshMessage: String?
     private let api: any CampusCoreAPI
     private let cache: JSONStore<[CampusExam]>
 
-    init(api: any CampusCoreAPI, userID: String) {
+    init(api: any CampusCoreAPI, userID: String, store: any DataStore = AppPersistence.migratingFileCache()) {
         self.api = api
         cache = JSONStore(
-            store: UserScopedStore(store: AppPersistence.migratingFileCache(), userID: userID),
+            store: UserScopedStore(store: store, userID: userID),
             key: "exams.v1"
         )
     }
 
     func load(demo: Bool = false) async {
         state = .loading
+        refreshMessage = nil
         if demo {
             switch DemoDataState.current {
             case .normal:
@@ -76,7 +78,11 @@ final class ExamViewModel: ObservableObject {
             try await cache.save(exams)
             state = exams.isEmpty ? .empty : .loaded(exams)
         } catch {
-            if cached == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
+            if cached == nil {
+                state = .failed(AppErrorState(message: error.localizedDescription))
+            } else {
+                refreshMessage = "刷新失败，当前显示上次保存的考试安排。\(error.localizedDescription)"
+            }
         }
     }
 
@@ -129,6 +135,12 @@ struct ExamView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     header
+                    if let message = model.refreshMessage {
+                        Label(message, systemImage: "exclamationmark.arrow.circlepath")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("exams.cached-warning")
+                    }
                     content
                 }
                 .padding(.bottom, 80)

@@ -2,6 +2,26 @@ import XCTest
 @testable import AHUTong
 
 final class CourseReminderPlannerTests: XCTestCase {
+    func testDeviceTimeZoneDoesNotMoveCampusReminderTime() throws {
+        let previous = NSTimeZone.default
+        NSTimeZone.default = TimeZone(secondsFromGMT: 0)!
+        defer { NSTimeZone.default = previous }
+        let campus = ScheduleCalendar.campus
+        let now = try XCTUnwrap(campus.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 7)))
+        let request = try XCTUnwrap(CourseReminderPlanner().requests(courses: [course()], currentWeek: 1, now: now).first)
+        XCTAssertEqual(campus.component(.hour, from: request.date), 7)
+        XCTAssertEqual(campus.component(.minute, from: request.date), 50)
+    }
+
+    func testCourseEndUsesActualFinalPeriodAcrossLunchBreak() throws {
+        let calendar = ScheduleCalendar.campus
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 19)))
+        let end = try XCTUnwrap(ScheduleCalendar.endTime(period: 6, on: day))
+        XCTAssertEqual(calendar.component(.hour, from: end), 14)
+        XCTAssertEqual(calendar.component(.minute, from: end), 45)
+        XCTAssertNil(ScheduleCalendar.endTime(period: 14, on: day))
+    }
+
     func testForegroundMaintenanceSkipsDemoSessionEvenWhenReminderPreferencePersists() {
         XCTAssertFalse(
             CourseReminderMaintenancePolicy.shouldRefresh(

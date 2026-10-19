@@ -124,6 +124,9 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     private let sessionStore: CampusSessionStore
     private let credentialStore: CredentialStore
     private let refreshCoordinator: SessionRefreshCoordinator
+    private let authenticate: @MainActor @Sendable (
+        CampusSessionScope, LoginCredentials
+    ) async throws -> CampusWebAuthenticationResult
     private let gradeParser = CampusGradeParser()
     private let cardParser = CampusCardResponseParser()
 
@@ -132,13 +135,24 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         session: URLSession = .shared,
         sessionStore: CampusSessionStore = CampusSessionStore(),
         credentialStore: CredentialStore = CredentialStore(),
-        refreshCoordinator: SessionRefreshCoordinator = .shared
+        refreshCoordinator: SessionRefreshCoordinator = .shared,
+        authenticate: @escaping @MainActor @Sendable (
+            CampusSessionScope, LoginCredentials
+        ) async throws -> CampusWebAuthenticationResult = { scope, credentials in
+            switch scope {
+            case .academic:
+                try await CampusWebAuthenticationService.shared.refreshAcademic(credentials: credentials)
+            case .campusCard:
+                try await CampusWebAuthenticationService.shared.refreshCampusCard(credentials: credentials)
+            }
+        }
     ) {
         self.server = server
         self.session = session
         self.sessionStore = sessionStore
         self.credentialStore = credentialStore
         self.refreshCoordinator = refreshCoordinator
+        self.authenticate = authenticate
     }
 
     func initialize(cookiesJSON: String) async throws {
@@ -258,24 +272,28 @@ actor RustCampusCoreAPI: CampusCoreAPI {
                 throw CampusCoreError.credentialsUnavailable
             }
             do {
-                let result = try await CampusWebAuthenticationService.shared.refreshCampusCard(
-                    credentials: credentials
-                )
+                let result = try await authenticate(.campusCard, credentials)
+                guard let current = try await sessionStore.load(), current.user == snapshot.user else {
+                    throw CancellationError()
+                }
                 let existing = (try? JSONDecoder().decode(
                     [CampusCookie].self,
-                    from: Data(snapshot.cookiesJSON.utf8)
+                    from: Data(current.cookiesJSON.utf8)
                 )) ?? []
                 let merged = CampusCookieMerger.merge(existing: existing, incoming: result.cookies)
                 let cookies = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
                 try await initialize(cookiesJSON: cookies)
                 try await validateSession(scope: .campusCard)
                 let validatedCookies = try await dumpCookies()
+                guard let current = try await sessionStore.load(), current.user == snapshot.user else {
+                    throw CancellationError()
+                }
                 try await sessionStore.save(CampusSessionSnapshot(
-                    user: snapshot.user, cookiesJSON: validatedCookies
+                    user: current.user, cookiesJSON: validatedCookies
                 ))
                 return
             } catch {
-                try? await initialize(cookiesJSON: snapshot.cookiesJSON)
+                await restoreCurrentCookies()
                 let reason: String
                 if let webError = error as? CampusWebAuthenticationError {
                     reason = webError.localizedDescription
@@ -294,29 +312,38 @@ actor RustCampusCoreAPI: CampusCoreAPI {
             throw CampusCoreError.credentialsUnavailable
         }
         do {
-            let result = try await CampusWebAuthenticationService.shared.refreshAcademic(
-                credentials: credentials
-            )
+            let result = try await authenticate(.academic, credentials)
+            guard let current = try await sessionStore.load(), current.user == snapshot.user else {
+                throw CancellationError()
+            }
             let existing = (try? JSONDecoder().decode(
                 [CampusCookie].self,
-                from: Data(snapshot.cookiesJSON.utf8)
+                from: Data(current.cookiesJSON.utf8)
             )) ?? []
             let merged = CampusCookieMerger.merge(existing: existing, incoming: result.cookies)
             let cookies = String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
             try await initialize(cookiesJSON: cookies)
             try await validateSession(scope: .academic)
-            try await sessionStore.save(CampusSessionSnapshot(user: snapshot.user, cookiesJSON: cookies))
+            let validatedCookies = try await dumpCookies()
+            guard let current = try await sessionStore.load(), current.user == snapshot.user else {
+                throw CancellationError()
+            }
+            try await sessionStore.save(CampusSessionSnapshot(user: current.user, cookiesJSON: validatedCookies))
         } catch CampusWebAuthenticationError.credentialsRejected {
+            guard (try await sessionStore.load())?.user == snapshot.user else { throw CancellationError() }
             await invalidateStoredSession()
             throw CampusCoreError.credentialsRejected
         } catch CampusWebAuthenticationError.interactionRequired,
                 CampusWebAuthenticationError.credentialsUnavailable,
                 CampusWebAuthenticationError.inactive,
                 CampusWebAuthenticationError.timedOut {
-            await postNotification(.campusReauthenticationRequired)
-            throw CampusCoreError.credentialsUnavailable
+            await restoreCurrentCookies()
+            throw CampusCoreError.sessionRefreshDeferred
+        } catch CampusCoreError.unauthorized {
+            await restoreCurrentCookies()
+            throw CampusCoreError.sessionRefreshDeferred
         } catch {
-            try? await initialize(cookiesJSON: snapshot.cookiesJSON)
+            await restoreCurrentCookies()
             throw error
         }
     }
@@ -344,7 +371,13 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     func persistSessionCookies() async throws {
         guard let snapshot = try await sessionStore.load() else { return }
         let cookies = try await dumpCookies()
+        guard (try await sessionStore.load())?.user == snapshot.user else { return }
         try await sessionStore.save(CampusSessionSnapshot(user: snapshot.user, cookiesJSON: cookies))
+    }
+
+    private func restoreCurrentCookies() async {
+        let snapshot = try? await sessionStore.load()
+        try? await initialize(cookiesJSON: snapshot?.cookiesJSON ?? "")
     }
 
     private func authenticatedRequest(
@@ -356,7 +389,9 @@ actor RustCampusCoreAPI: CampusCoreAPI {
     ) async throws -> Data {
         let retryPolicy = retryPolicy ?? .automatic(forHTTPMethod: method)
         do {
-            return try await request(path: path, method: method, body: body)
+            let data = try await request(path: path, method: method, body: body)
+            try? await persistSessionCookies()
+            return data
         } catch CampusCoreError.unauthorized {
             try await refreshCoordinator.refresh(scope: scope) { [self] in
                 try await self.refreshSession(scope: scope)
@@ -365,13 +400,13 @@ actor RustCampusCoreAPI: CampusCoreAPI {
                 throw CampusCoreError.unauthorized
             }
             do {
-                return try await request(path: path, method: method, body: body)
+                let data = try await request(path: path, method: method, body: body)
+                try? await persistSessionCookies()
+                return data
             } catch CampusCoreError.unauthorized {
-                if scope == .academic {
-                    await invalidateStoredSession()
-                    throw CampusCoreError.credentialsRejected
-                }
-                throw CampusCoreError.credentialsUnavailable
+                // A second expired response is still not evidence of a wrong
+                // password (CAS and downstream services can expire separately).
+                throw CampusCoreError.sessionRefreshDeferred
             }
         }
     }

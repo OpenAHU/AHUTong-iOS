@@ -246,7 +246,7 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         }
     }
 
-    func testRepeatedUnauthorizedRetriesGetOnlyOnceThenInvalidates() async throws {
+    func testRepeatedUnauthorizedRetriesGetOnlyOnceAndPreservesCredentials() async throws {
         let api = CampusAuthenticatedClientAPIStub(cookies: "[]")
         let client = CampusAuthenticatedClient(
             campusAPI: api,
@@ -275,7 +275,7 @@ final class CampusAuthenticatedClientTests: XCTestCase {
         let refreshCount = await api.refreshCount()
         let invalidationCount = await api.invalidationCount()
         XCTAssertEqual(refreshCount, 1)
-        XCTAssertEqual(invalidationCount, 1)
+        XCTAssertEqual(invalidationCount, 0)
     }
 
     func testPaymentPostRefreshesFutureSessionButIsNeverRepeated() async throws {

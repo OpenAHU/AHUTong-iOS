@@ -38,9 +38,12 @@ final class PaymentLocalParityUITests: XCTestCase {
         )
 
         password.tap()
-        password.typeText("6")
+        // Re-focusing a secure field may clear its old contents. Explicitly
+        // replace the invalid entry instead of assuming five digits remain.
+        password.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 6))
+        password.typeText("123456")
         XCTAssertFalse(app.staticTexts["payment.electricity.password-error"].exists)
-        app.swipeDown()
+        dismissKeyboard(app: app)
         app.buttons["payment.electricity.confirm"].tap()
         waitForPaymentSuccess("payment.electricity.state", app: app)
 
@@ -81,7 +84,15 @@ final class PaymentLocalParityUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         field.tap()
         field.typeText(value)
-        app.swipeDown()
+        dismissKeyboard(app: app)
+    }
+
+    @MainActor
+    private func dismissKeyboard(app: XCUIApplication) {
+        let done = app.buttons["payment.keyboard.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        done.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
     }
 
     @MainActor

@@ -137,6 +137,7 @@ enum CampusCoreError: Error, Equatable, LocalizedError, Sendable {
     case unauthorized
     case credentialsRejected
     case credentialsUnavailable
+    case sessionRefreshDeferred
     case campus(String)
 
     var errorDescription: String? {
@@ -146,6 +147,7 @@ enum CampusCoreError: Error, Equatable, LocalizedError, Sendable {
         case .unauthorized: "登录已过期，请重新登录"
         case .credentialsRejected: "保存的登录信息已失效，请重新登录"
         case .credentialsUnavailable: "登录已过期，请重新登录"
+        case .sessionRefreshDeferred: "校园会话暂未恢复，已保留登录信息，请回到前台重试"
         case let .campus(message): message
         }
     }

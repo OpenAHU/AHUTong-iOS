@@ -80,6 +80,20 @@ enum CampusWebAuthenticationError: LocalizedError, Equatable, Sendable {
     }
 }
 
+enum AcademicLoginFailurePolicy {
+    /// A CAPTCHA, a locked account or a transient CAS error is not proof that
+    /// the password is wrong. Never delete credentials for an arbitrary banner.
+    static func error(for message: String?) -> CampusWebAuthenticationError {
+        let text = (message ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let explicitRejections = [
+            "用户名或密码错误", "用户名或密码不正确", "用户名或密码有误",
+            "账号或密码错误", "帐号或密码错误", "invalid username or password"
+        ]
+        return explicitRejections.contains(where: text.contains)
+            ? .credentialsRejected : .interactionRequired
+    }
+}
+
 enum CampusWebNavigationPolicy {
     static let academicEntryURL = URL(string: "https://jw.ahu.edu.cn/student/sso/login")!
     static let campusCardEntryURL = URL(string: "https://adwmh.ahu.edu.cn/index/tologin")!
@@ -643,9 +657,9 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
     private func detectRejectedCredentials() {
         let script = #"""
         const error = document.querySelector('#errormsg');
-        if (!error) return false;
+        if (!error) return '';
         const style = window.getComputedStyle(error);
-        return style.display !== 'none' && (error.textContent || '').trim().length > 0;
+        return style.display !== 'none' ? (error.textContent || '').trim() : '';
         """#
         webView.callAsyncJavaScript(
             script,
@@ -653,19 +667,15 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             in: nil,
             in: .page,
             completionHandler: { [weak self] result in
-            let rejected: Bool
+            let message: String?
             if case let .success(value) = result {
-                rejected = value as? Bool == true
+                message = value as? String
             } else {
-                rejected = false
+                message = nil
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if rejected {
-                    self.finish(throwing: CampusWebAuthenticationError.credentialsRejected)
-                } else {
-                    self.finish(throwing: CampusWebAuthenticationError.interactionRequired)
-                }
+                self.finish(throwing: AcademicLoginFailurePolicy.error(for: message))
             }
         })
     }

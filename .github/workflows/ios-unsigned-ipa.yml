@@ -91,6 +91,7 @@ jobs:
 
           shasum -a 256 "$ipa_path" > "$checksum_path"
           unzip -t "$ipa_path"
+          python3 scripts/verify-widget-bundle.py "$ipa_path"
           unzip -l "$ipa_path"
 
           echo "ipa_path=$ipa_path" >> "$GITHUB_OUTPUT"

@@ -18,7 +18,9 @@ final class StartupScheduleUITests: XCTestCase {
     func testScheduleWeekSelectionUpdatesMatchingMondayDate() {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
-        app.launchArguments = ["--demo-consent", "--demo-session"]
+        // A preceding settings test can leave next-semester preview enabled.
+        // This test needs the current semester's known date anchor.
+        app.launchArguments = ["--demo-consent", "--demo-session", "-schedule.preview-next", "NO"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         app.tabBars.buttons["课表"].tap()

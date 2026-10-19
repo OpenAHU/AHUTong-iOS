@@ -2,6 +2,18 @@ import XCTest
 @testable import AHUTong
 
 final class ScheduleWidgetSnapshotTests: XCTestCase {
+    func testMissingSharedContainerIsNotMisreportedAsSignedOut() async {
+        let store = ScheduleWidgetSnapshotStore(containerURL: nil)
+        let snapshot = await store.load()
+        XCTAssertEqual(snapshot.status, .sharingUnavailable)
+        do {
+            try await store.save(.unavailable(.signedOut))
+            XCTFail("A private app directory cannot share data with a widget")
+        } catch {
+            XCTAssertTrue(error is ScheduleWidgetStoreError)
+        }
+    }
+
     func testSnapshotKeepsOnlyActiveWeekAndSortsForGrid() {
         let courses = [
             Course(weekday: 2, startWeek: 1, endWeek: 4, location: "B402", name: "计算机网络", teacher: "王老师", duration: 2, startPeriod: 3, courseID: "2", weekIndexes: [1, 2, 3, 4]),
