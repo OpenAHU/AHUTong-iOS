@@ -29,7 +29,18 @@ struct ContributorEntry: Identifiable, Equatable, Sendable {
 
     var contactURL: URL? {
         guard let qq else { return nil }
-        return URL(string: "mqqapi://card/show_pslcard?&uin=\(qq)")
+        var components = URLComponents()
+        components.scheme = "mqqapi"
+        components.host = "card"
+        components.path = "/show_pslcard"
+        components.queryItems = [
+            URLQueryItem(name: "src_type", value: "internal"),
+            URLQueryItem(name: "version", value: "1"),
+            URLQueryItem(name: "uin", value: qq),
+            URLQueryItem(name: "card_type", value: "person"),
+            URLQueryItem(name: "source", value: "qrcode")
+        ]
+        return components.url
     }
 }
 
@@ -43,14 +54,15 @@ enum ContributorsCatalog {
     ]
 
     static let developers = [
-        ContributorEntry(name: "s1nk", description: "架构规划、页面设计、爬虫", kind: .developer(qq: "468766131")),
-        ContributorEntry(name: "😓😢😥😰", description: "架构规划、小组件", kind: .developer(qq: "330771794")),
-        ContributorEntry(name: "\u{200B}", description: "页面设计、交互设计、新技术探索", kind: .developer(qq: "257314409")),
-        ContributorEntry(name: "堂吉诃德", description: "爬虫、交互设计", kind: .developer(qq: "3148336396")),
-        ContributorEntry(name: "Yukon", description: "架构规划、爬虫", kind: .developer(qq: "605606366")),
+        ContributorEntry(name: "s1nk（20级）", description: "架构规划、页面设计、爬虫", kind: .developer(qq: "468766131")),
+        ContributorEntry(name: "😓😢😥😰（21级）", description: "架构规划、小组件", kind: .developer(qq: "330771794")),
+        ContributorEntry(name: "\u{200B}（22级）", description: "页面设计、交互设计、新技术探索", kind: .developer(qq: "257314409")),
+        ContributorEntry(name: "堂吉诃德（22级）", description: "爬虫、交互设计", kind: .developer(qq: "3148336396")),
+        ContributorEntry(name: "Yukon（22级）", description: "架构规划、爬虫", kind: .developer(qq: "605606366")),
+        ContributorEntry(name: "zirui.xu（24级）", description: "功能维护、开发", kind: .developer(qq: "1793838025")),
         ContributorEntry(name: "MuxYang（25级）", description: "充值系统维护、MiuixUI 开发", kind: .developer(qq: "32142587")),
         ContributorEntry(name: "InChange-Jiang（25级）", description: "学习通日历开发、RadiantUI 开发", kind: .developer(qq: "2719904894")),
-        ContributorEntry(name: "Himekawa", description: "iOS开发与维护", kind: .developer(qq: "1705945565"))
+        ContributorEntry(name: "Himekawa（24级）", description: "iOS开发与维护", kind: .developer(qq: "1705945565"))
     ]
 }
 
@@ -108,7 +120,9 @@ struct ContributorsView: View {
     private func open(_ entry: ContributorEntry) {
         guard let url = entry.contactURL else { return }
         openURL(url) { accepted in
-            if !accepted { informationMessage = "未能打开 QQ，请手动搜索 QQ：\(entry.qq ?? "")" }
+            if !accepted {
+                informationMessage = "未能打开 QQ，请搜索 QQ：\(entry.qq ?? "")"
+            }
         }
     }
 }

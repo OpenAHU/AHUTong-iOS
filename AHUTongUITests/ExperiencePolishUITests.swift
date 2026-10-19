@@ -72,6 +72,10 @@ final class ExperiencePolishUITests: XCTestCase {
         if !entry.isHittable { app.swipeUp() }
         entry.tap()
         XCTAssertTrue(app.otherElements["contributors.row.0"].waitForExistence(timeout: 4))
+        let addedMaintainer = app.buttons["contributors.avatar.1793838025"].firstMatch
+        XCTAssertTrue(addedMaintainer.exists)
+        XCTAssertEqual(addedMaintainer.label, "zirui.xu（24级）")
+        XCTAssertEqual(app.buttons["contributors.avatar.1705945565"].firstMatch.label, "Himekawa（24级）")
         let row = app.otherElements["contributors.row.0"]
         let avatar = row.buttons.allElementsBoundByIndex.first { $0.isHittable }
         XCTAssertNotNil(avatar)

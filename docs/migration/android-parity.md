@@ -8,7 +8,7 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.2 后续维护：原生设置与校园码恢复；补充首页刷新、可配置深浅色课表 Widget、本科培养方案、校园卡账单/消费统计；Siri 语音匹配与重签配置面板仍有实机验收边界。证据见 E-20261019-07/08 |
+| 当前焦点 | 1.0.2 后续维护：原生设置与校园码恢复；补充首页刷新、可配置深浅色课表 Widget、本科培养方案、校园卡账单/消费统计；贡献名单补齐 zirui.xu 及全部年级；Siri 语音匹配与重签配置面板仍有实机验收边界。证据见 E-20261019-07/08/09 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
@@ -310,7 +310,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | --- | --- | --- |
 | CARD-01 / HOME-01 | 校园码弹簧展开，二维码最高 150pt；减弱动态效果保留淡入与反馈 | 客户端实现；真实扫码仍待设备验收 |
 | SCH-02 | 等宽高圆形周指示器，单双位数字同尺寸，Dynamic Type 同步放大 | 模拟器 UI 回归 |
-| PREF-01 | Siri 入口移入偏好并与相邻卡片同宽同圆角；设置 Tab 返回根页；Himekawa 与随机双排头像，单击暂停该排并弹出系统贡献浮窗，关闭自动继续，双击 QQ | 无页面内贡献卡或“继续滚动”按钮；保留既有贡献；物理机轻触觉待验 |
+| PREF-01 | Siri 入口移入偏好并与相邻卡片同宽同圆角；设置 Tab 返回根页；Himekawa、zirui.xu 与随机双排头像，全部昵称补齐年级；单击暂停该排并弹出系统贡献浮窗，关闭自动继续，双击 QQ | 无页面内贡献卡或“继续滚动”按钮；保留既有贡献；名单与滚动回归见 E-20261019-09，物理机轻触觉待验 |
 | SYS-02 | 岛卡仅课前显示，上课结束；不保留课中/课后卡片；通知独立 | 后台预算不足会提前结束，未接入 APNs；强制终止场景待实机 |
 | SYS-03 | Siri 手动开关/系统设置入口、内置付款短语与无应用名快捷指令创建引导；课表紧凑回复 | 本机数据边界保留；系统 Siri 语音识别待实机 |
 
@@ -626,6 +626,14 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 最终单测：`build/native-ui/final-unit-494.xcresult`，494 / 494 Swift 测试通过，包括缓存/账号隔离、重定向边界、分页/完整统计、首页缓存刷新、周末/重叠/晚课与布局渲染。打包验证 Python 4 / 4 通过并接入 CI。18 项不同目标 UI 用例分组通过（本轮无“18 用例单个整包”）；新增只读查询及 Siri 冷启动/跨 Tab 重复/体验账户边界见 `services-final-validation.xcresult`，原生 Form 行宽修正后的 Siri 引导见 `shortcut-native-form-final.xcresult`。地点缩写后的 Widget 渲染复验见 `widget-location-final.xcresult`。
 - 构建/产物：Xcode 27.0 / iOS 26.5 Simulator，Release arm64 Simulator 和 unsigned iphoneos 均已编译；版本保持 1.0.2（3），本轮不是生产发版。产物、校验和与最终构建记录在 `build/native-ui-device/`；发布前需继续完成 iOS 27 的 Siri/Widget 有效重签物理机复验。维护 PR [#6](https://github.com/OpenAHU/AHUTong-iOS/pull/6)，云端检查状态以该 PR 为准；最终本地产物和 SHA-256 记录在同目录 verification JSON。最终可视化复查将本科说明移入列表脚注，避免底部浮层遮挡课程文字。首次云端 Xcode 26 在 Widget 的复合 VoiceOver 表达式触发类型检查超时，本机 Xcode 27 未复现；已拆为显式字符串 helper，以云端重新编译结果作为兼容性验收。
 
+### E-20261019-09：开发者名单与年级
+
+- 按用户要求加入 QQ `1793838025`。资料取自本轮固定 Android `595e63c` 的 `DeveloperViewModel.kt`：昵称 `zirui.xu（24级）`、贡献“功能维护、开发”。头像按 QQ 号联网加载；昵称与年级为本地显示资料，不宣称自动同步 QQ 昵称。实测 `r.qzone.qq.com` 与 `users.qzone.qq.com` 的资料接口均返回 `need login`，目前没有接入失败的自动查询。
+- 保留 iOS 已指定的别名、表情与零宽字符；根据同一 Android 名单补齐 s1nk（20级）、表情昵称（21级）、原空白昵称/堂吉诃德/Yukon（22级），保留 MuxYang 和 InChange-Jiang（25级）。用户明确 Himekawa（QQ `1705945565`）为 24 级。
+- 双击资料链接从仅含 `uin` 补齐 `src_type=internal`、`version=1`、`card_type=person`、`source=qrcode`，使用 URLComponents 组装。参考 [QQ 官方跳转页](https://qm.qq.com/cgi-bin/qm/qr) 中的资料页参数约定；QQ 是否实际展示指定个人资料仍需用户所用版本实机复验，`openURL` 接收成功仅代表系统交接。浮窗保持昵称、贡献及 QQ 号，按用户要求不增加复制按钮。
+- 2026-10-19，iPhone 17 Pro QA / iOS 26.5，`build/native-ui/contributors-final.xcresult`：6 项单元测试、1 项 UI 测试全部通过。覆盖完整个人资料链接/头像契约、九人随机分两排无遗漏、两排独立暂停计时、新成员及 Himekawa 昵称年级、系统贡献浮窗、关闭恢复滚动与双击 QQ 的未安装反馈；默认减弱动态效果关闭。新增头像地址 HEAD 返回 HTTP 200 / image/jpeg。最终无复制按钮的界面截图位于 `build/native-ui/evidence/contributors-final/`。
+- 上一提交 `96e5679` 的云端 [四组 CI](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39262041058)、[Release Archive](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39262036452) 和 [unsigned IPA](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39262036461) 已全部成功，确认 Widget 编译兼容修复在云端 Xcode 26 通过。本切片保持 1.0.2（3），用户暂缓 IPA 调试。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -715,6 +723,7 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 
 ## 14. 变更日志
 
+- 2026-10-19：贡献名单新增 zirui.xu（QQ 1793838025，24级），全部既有昵称补齐 Android 对应年级，Himekawa 按用户指定标为 24级；补齐双击个人资料页链接参数，保持简洁浮窗；名单、随机滚动与原生浮窗/QQ 交互回归见 E-20261019-09。
 - 2026-10-19：完成原生设置/课表系统 sheet、校园码双通道恢复与尺寸动画，清理无调用 UI；补充首页刷新、可配置高对比 Widget、本科培养方案及校园卡账单/统计，真实只读查询通过，明确 Siri 语音匹配与 Widget 重签验收边界；重新盘点 Android `595e63c`，修正全量对齐措辞（E-20261019-07/08）。
 
 | 日期 | 条目 | 变更 | 验证证据 | Commit / PR |
