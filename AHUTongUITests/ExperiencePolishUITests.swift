@@ -7,7 +7,9 @@ final class ExperiencePolishUITests: XCTestCase {
     private func launch(additionalArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
-        app.launchArguments = ["--demo-consent", "--demo-session", "-schedule.preview-next", "NO"] + additionalArguments
+        let keepsSession = ProcessInfo.processInfo.environment["AHUTONG_UI_RETAIN_SESSION"] == "1"
+        app.launchArguments = keepsSession ? additionalArguments
+            : ["--demo-consent", "--demo-session", "-schedule.preview-next", "NO"] + additionalArguments
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
         return app
@@ -56,8 +58,15 @@ final class ExperiencePolishUITests: XCTestCase {
         balance.tap()
         let code = app.buttons["campus-card.qr-refresh"]
         XCTAssertTrue(code.waitForExistence(timeout: 5))
-        XCTAssertGreaterThan(code.frame.width, 138)
-        XCTAssertEqual(code.frame.width, code.frame.height, accuracy: 1)
+        // Existence precedes the expansion animation and asynchronous QR layout.
+        expectation(for: NSPredicate { _, _ in
+            let frame = code.frame
+            return frame.width > 138 && abs(frame.width - frame.height) <= 1
+        }, evaluatedWith: code)
+        waitForExpectations(timeout: 5)
+        let codeFrame = code.frame
+        XCTAssertGreaterThan(codeFrame.width, 138)
+        XCTAssertEqual(codeFrame.width, codeFrame.height, accuracy: 1)
         XCTAssertGreaterThan(app.otherElements["campus-card.qr-panel"].frame.height, collapsedHeight)
         capture(app, "home-campus-code-expanded")
         app.buttons["campus-card.qr-collapse"].tap()
@@ -165,7 +174,7 @@ final class ExperiencePolishUITests: XCTestCase {
         capture(app, accessibilitySize ? "course-detail-accessibility" : "course-detail-full-weeks")
     }
 
-    func testDeveloperPopoverDismissalResumesItsRowAndDoubleTapOpensQQ() {
+    func testDeveloperPopoverDismissalResumesItsRowAndDoubleTapOpensQQ() throws {
         let app = launch()
         app.tabBars.buttons["设置"].tap()
         let entry = app.buttons["settings.contributors"]
@@ -177,9 +186,7 @@ final class ExperiencePolishUITests: XCTestCase {
         XCTAssertEqual(addedMaintainer.label, "zirui.xu（24级）")
         XCTAssertEqual(app.buttons["contributors.avatar.1705945565"].firstMatch.label, "Himekawa（24级）")
         let row = app.otherElements["contributors.row.0"]
-        let avatar = row.buttons.allElementsBoundByIndex.first { $0.isHittable }
-        XCTAssertNotNil(avatar)
-        avatar?.tap()
+        try visibleAvatarCoordinate(in: row, app: app).tap()
         XCTAssertTrue(app.otherElements["contributors.detail"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["contributors.detail.close"].exists)
         XCTAssertEqual(row.value as? String, "已暂停")
@@ -192,12 +199,26 @@ final class ExperiencePolishUITests: XCTestCase {
         expectation(for: NSPredicate(format: "value == %@", "向左滚动"), evaluatedWith: row)
         waitForExpectations(timeout: 4)
         XCTAssertEqual(app.otherElements["contributors.row.1"].value as? String, "向右滚动")
-        let currentAvatar = row.buttons.allElementsBoundByIndex.first { $0.isHittable }
-        XCTAssertNotNil(currentAvatar)
-        currentAvatar?.doubleTap()
+        try visibleAvatarCoordinate(in: row, app: app).doubleTap()
         XCTAssertTrue(app.alerts["打开 QQ"].waitForExistence(timeout: 4))
         app.alerts.buttons["知道了"].tap()
         capture(app, "contributors-two-rows")
+    }
+
+    private func visibleAvatarCoordinate(in row: XCUIElement, app: XCUIApplication) throws -> XCUICoordinate {
+        let appFrame = app.frame
+        let visibleBounds = row.frame.intersection(appFrame).insetBy(dx: 32, dy: 0)
+        // Loop copies outside the clipped row are still present in the AX tree.
+        // Tap a visible avatar's position instead of re-resolving a moving AX hit point.
+        for avatar in row.buttons.allElementsBoundByIndex {
+            let frame = avatar.frame
+            guard !frame.isEmpty, visibleBounds.contains(frame) else { continue }
+            return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+                dx: frame.midX - appFrame.minX,
+                dy: frame.minY + min(frame.width, frame.height) / 2 - appFrame.minY
+            ))
+        }
+        return try XCTUnwrap(nil as XCUICoordinate?, "No fully visible contributor avatar")
     }
 
     private func capture(_ app: XCUIApplication, _ name: String) {
