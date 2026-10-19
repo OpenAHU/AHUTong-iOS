@@ -20,6 +20,7 @@ final class ShortcutUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["“打开安大通付款码”"].exists)
         XCTAssertTrue(app.staticTexts["“用安大通查询课表”"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["shortcuts.open"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["shortcuts.open"].label.contains("安大通"))
         attachScreenshot(app, "settings-shortcuts-guide")
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["shortcuts.discovery-help"].isHittable)
