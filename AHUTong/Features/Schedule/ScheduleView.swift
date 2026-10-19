@@ -435,7 +435,7 @@ struct ScheduleView: View {
                     }
                 }
             }
-            HStack(spacing: 4) {
+            NativeHeaderActionGroup {
                 scheduleAction("location", "回到当前周") {
                     if previewNextSemester {
                         previewNextSemester = false
@@ -487,7 +487,7 @@ struct ScheduleView: View {
         identifier: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        NativeHeaderIconButton(systemName: icon, accessibilityLabel: label, action: action)
+        NativeHeaderIconButton(systemName: icon, accessibilityLabel: label, grouped: true, action: action)
             .accessibilityIdentifier(identifier ?? "schedule.action.\(label)")
     }
 
@@ -791,43 +791,88 @@ private struct ScheduleSettingsView: View {
 
 private struct CourseDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var contentHeight: CGFloat = 240
     let course: Course
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 24) {
-                HStack {
-                    Text(course.name).font(.title2.bold())
-                    Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                    Text(course.name)
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
                     Button("完成") { dismiss() }
+                        .fixedSize()
+                        .frame(minHeight: 44)
                 }
-                Text(scheduleDescription).font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("周\(weekdayName) · 第\(course.startPeriod)–\(course.endPeriod)节")
+                        .font(.headline)
+                    Text("第\(weekDescription)周")
+                        .font(.subheadline)
+                        .accessibilityIdentifier("schedule.course-detail.weeks")
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                Divider()
+                metadata
             }
-            .padding(24)
-            Divider().frame(height: 2)
-            HStack(spacing: 0) {
-                detail("location", course.location)
-                Divider().frame(width: 2)
-                detail("person.crop.circle", course.teacher)
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                ceil(geometry.size.height)
+            } action: { height in
+                contentHeight = height
             }
         }
-        .presentationDetents([.height(300), .large])
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(max(180, contentHeight)), .large])
         .presentationDragIndicator(.visible)
         .accessibilityIdentifier("schedule.course-detail")
     }
 
-    private func detail(_ icon: String, _ text: String) -> some View {
-        HStack(spacing: 8) { Image(systemName: icon); Text(text).font(.headline).lineLimit(2) }
-            .frame(maxWidth: .infinity, minHeight: 72)
-            .padding(.horizontal, 16)
+    @ViewBuilder
+    private var metadata: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) { metadataFields }
+        } else {
+            HStack(alignment: .top, spacing: 20) { metadataFields }
+        }
     }
 
-    private var scheduleDescription: String {
+    @ViewBuilder
+    private var metadataFields: some View {
+        detail("location", course.location, label: "地点", identifier: "location")
+        detail("person.crop.circle", course.teacher, label: "授课老师", identifier: "teacher")
+    }
+
+    private func detail(_ icon: String, _ text: String, label: String, identifier: String) -> some View {
+        Label {
+            Text(text.isEmpty ? "未提供" : text)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: icon).foregroundStyle(.secondary)
+        }
+        .font(.body)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel("\(label)：\(text.isEmpty ? "未提供" : text)")
+        .accessibilityIdentifier("schedule.course-detail.\(identifier)")
+    }
+
+    private var weekdayName: String {
         let names = [1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "日"]
+        return names[course.weekday] ?? "未知"
+    }
+
+    private var weekDescription: String {
         let weeks = course.activeWeeks
-        let weekText = weeks == Array(course.startWeek...course.endWeek)
-            ? "\(course.startWeek) - \(course.endWeek)"
-            : weeks.map(String.init).joined(separator: "、")
-        return "第\(weekText)周的周\(names[course.weekday] ?? "")，第 \(course.startPeriod)-\(course.endPeriod) 节课"
+        guard let first = weeks.first, let last = weeks.last else { return "未知" }
+        if first == last { return String(first) }
+        if zip(weeks, weeks.dropFirst()).allSatisfy({ $1 - $0 == 1 }) {
+            return "\(first)–\(last)"
+        }
+        return weeks.map(String.init).joined(separator: "、")
     }
 }

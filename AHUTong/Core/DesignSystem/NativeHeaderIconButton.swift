@@ -3,11 +3,20 @@ import SwiftUI
 struct NativeHeaderIconButton: View {
     let systemName: String
     let accessibilityLabel: String
+    var grouped = false
     let action: () -> Void
 
     var body: some View {
         Group {
-            if #available(iOS 26.0, *) {
+            if grouped {
+                Button(action: action) {
+                    Image(systemName: systemName)
+                        .font(.system(size: 20))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+            } else if #available(iOS 26.0, *) {
                 Button(action: action) {
                     Image(systemName: systemName)
                         .font(.system(size: 20))
@@ -28,6 +37,28 @@ struct NativeHeaderIconButton: View {
         }
         .foregroundStyle(.primary)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+/// Related actions share one material surface while keeping separate native buttons.
+struct NativeHeaderActionGroup<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                actions.glassEffect(.regular.interactive(), in: Capsule())
+            } else {
+                actions.background(.regularMaterial, in: Capsule())
+            }
+        }
+    }
+
+    private var actions: some View {
+        ControlGroup { content }
+            .controlGroupStyle(.navigation)
+            .fixedSize()
+            .padding(.horizontal, 4)
     }
 }
 

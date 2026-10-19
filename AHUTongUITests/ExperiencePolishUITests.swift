@@ -77,6 +77,9 @@ final class ExperiencePolishUITests: XCTestCase {
             XCTAssertGreaterThanOrEqual(button.frame.width, 44)
             XCTAssertGreaterThanOrEqual(button.frame.height, 44)
         }
+        // Native ControlGroup keeps 8-point gaps inside the shared surface.
+        XCTAssertLessThanOrEqual(settings.frame.minX - currentWeek.frame.maxX, 8)
+        XCTAssertLessThanOrEqual(refresh.frame.minX - settings.frame.maxX, 8)
         capture(app, "schedule-native-header-buttons")
         app.buttons["schedule.week.2"].tap()
         currentWeek.tap()
@@ -97,6 +100,69 @@ final class ExperiencePolishUITests: XCTestCase {
         edit.tap()
         XCTAssertTrue(app.staticTexts["添加小工具"].waitForExistence(timeout: 4))
         app.buttons["完成"].tap()
+    }
+
+    func testCourseDetailFitsShortContentWithoutTallMetadata() {
+        let app = launch()
+        app.tabBars.buttons["课表"].tap()
+        app.buttons["schedule.course.demo-3"].tap()
+        let weeks = app.staticTexts["schedule.course-detail.weeks"]
+        XCTAssertTrue(weeks.waitForExistence(timeout: 4))
+        XCTAssertEqual(weeks.label, "第1–12周")
+        let sheet = app.scrollViews["schedule.course-detail"].firstMatch
+        XCTAssertLessThan(sheet.frame.height, 300)
+        for field in ["location", "teacher"] {
+            let element = app.descendants(matching: .any)
+                .matching(identifier: "schedule.course-detail.\(field)").firstMatch
+            XCTAssertTrue(element.isHittable)
+            XCTAssertLessThan(element.frame.height, 50)
+        }
+        capture(app, "course-detail-compact")
+        app.buttons["完成"].tap()
+        XCTAssertTrue(weeks.waitForNonExistence(timeout: 4))
+    }
+
+    func testCourseDetailShowsAllIrregularWeeksAndLongMetadata() throws {
+        try checkLongCourseDetail(accessibilitySize: false)
+    }
+
+    func testCourseDetailScrollsWithAccessibilityTextSize() throws {
+        try checkLongCourseDetail(accessibilitySize: true)
+    }
+
+    private func checkLongCourseDetail(accessibilitySize: Bool) throws {
+        let weeks = (1...60).filter { !$0.isMultiple(of: 3) }
+        let location = "龙河校区博学北楼计算机网络综合实验室 B402（东侧入口）"
+        let teacher = "王老师、李老师、张老师（联合授课）"
+        let fixture: [[String: Any]] = [[
+            "courseId": "long-detail", "name": "计算机网络综合实验与实践", "weekday": 2,
+            "startWeek": 1, "endWeek": 60, "weekIndexes": weeks,
+            "startTime": 3, "length": 2, "location": location, "teacher": teacher
+        ]]
+        let data = try JSONSerialization.data(withJSONObject: fixture)
+        var arguments = ["--demo-endpoint-schedule=\(String(decoding: data, as: UTF8.self))"]
+        if accessibilitySize {
+            arguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        }
+        let app = launch(additionalArguments: arguments)
+        app.tabBars.buttons["课表"].tap()
+        let course = app.buttons["schedule.course.long-detail"]
+        XCTAssertTrue(course.waitForExistence(timeout: 4))
+        course.tap()
+        let weekText = app.staticTexts["schedule.course-detail.weeks"]
+        XCTAssertTrue(weekText.waitForExistence(timeout: 4))
+        XCTAssertEqual(weekText.label, "第\(weeks.map(String.init).joined(separator: "、"))周")
+        XCTAssertGreaterThan(weekText.frame.height, 60, "The complete week list must occupy more than two lines")
+        let sheet = app.scrollViews["schedule.course-detail"].firstMatch
+        for (field, expected) in [("location", "地点：\(location)"), ("teacher", "授课老师：\(teacher)")] {
+            let element = app.descendants(matching: .any)
+                .matching(identifier: "schedule.course-detail.\(field)").firstMatch
+            for _ in 0..<6 where !element.isHittable { sheet.swipeUp() }
+            XCTAssertTrue(element.isHittable)
+            XCTAssertEqual(element.label, expected)
+            XCTAssertGreaterThanOrEqual(element.frame.minY, weekText.frame.maxY)
+        }
+        capture(app, accessibilitySize ? "course-detail-accessibility" : "course-detail-full-weeks")
     }
 
     func testDeveloperPopoverDismissalResumesItsRowAndDoubleTapOpensQQ() {
