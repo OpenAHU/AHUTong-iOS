@@ -163,6 +163,7 @@ final class HomeViewModel: ObservableObject {
     private var currentWeekIsKnown = false
 
     private let repository: ScheduleRepository
+    private let shortcutStore: ScheduleShortcutStore
     private let weekRepository: ScheduleWeekRepository
     private let now: @Sendable () -> Date
 
@@ -171,6 +172,7 @@ final class HomeViewModel: ObservableObject {
         store: any DataStore = AppPersistence.migratingDefaults(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        shortcutStore = ScheduleShortcutStore(userID: userID, dataStore: store)
         self.now = now
         let cache = UserScopedStore(store: store, userID: userID)
         repository = ScheduleRepository(
@@ -205,6 +207,11 @@ final class HomeViewModel: ObservableObject {
                 currentWeek = position.week
                 referenceDate = position.referenceDate
             }
+            try? await shortcutStore.record(
+                courses: result.courses, semester: semester,
+                currentWeek: currentWeekIsKnown ? currentWeek : nil,
+                source: result.source, at: referenceDate
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -249,14 +256,17 @@ struct HomeView: View {
     private let layoutStore: JSONStore<HomeWidgetLayout>
     private let onOpenSchedule: () -> Void
     private let homeEditEnabled: Bool
+    private let paymentCodeRequestID: UUID?
 
     init(
         appModel: AppModel,
         homeEditEnabled: Bool = true,
+        paymentCodeRequestID: UUID? = nil,
         onOpenSchedule: @escaping () -> Void = {}
     ) {
         self.appModel = appModel
         self.homeEditEnabled = homeEditEnabled
+        self.paymentCodeRequestID = paymentCodeRequestID
         self.onOpenSchedule = onOpenSchedule
         let userID: String
         if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = "guest" }
@@ -274,27 +284,34 @@ struct HomeView: View {
 
     var body: some View {
         AndroidScreen {
-            ScrollView {
-                LazyVStack(spacing: 24) {
-                    atAGlance
-                    if !model.todayCourses.isEmpty { todayCourseList }
-                    if effectiveShowWeatherOnHome,
-                       effectiveWeatherHomeMode == .detailed,
-                       case let .loaded(snapshot) = weatherModel.state {
-                        NavigationLink { WeatherView().androidDetailScreen() } label: {
-                            HomeWeatherCard(weather: snapshot.response, configuration: weatherHomeConfiguration)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 24) {
+                        atAGlance
+                        if !model.todayCourses.isEmpty { todayCourseList }
+                        if effectiveShowWeatherOnHome,
+                           effectiveWeatherHomeMode == .detailed,
+                           case let .loaded(snapshot) = weatherModel.state {
+                            NavigationLink { WeatherView().androidDetailScreen() } label: {
+                                HomeWeatherCard(weather: snapshot.response, configuration: weatherHomeConfiguration)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("home.weather")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("home.weather")
+                        homeWidgetLayout.id("home.payment-code")
                     }
-                    homeWidgetLayout
+                    .padding(.bottom, isEditing ? 420 : 16)
                 }
-                .padding(.bottom, isEditing ? 420 : 16)
-            }
-            .scrollIndicators(.hidden)
-            .onLongPressGesture { if homeEditEnabled { isEditing = true } }
-            .overlay(alignment: .bottom) {
-                if isEditing { widgetLibrary }
+                .scrollIndicators(.hidden)
+                .onLongPressGesture { if homeEditEnabled { isEditing = true } }
+                .overlay(alignment: .bottom) {
+                    if isEditing { widgetLibrary }
+                }
+                .task(id: paymentCodeRequestID) {
+                    guard paymentCodeRequestID != nil else { return }
+                    await Task.yield()
+                    proxy.scrollTo("home.payment-code", anchor: .top)
+                }
             }
         }
         .navigationDestination(isPresented: $showsCardRecharge) {
@@ -423,7 +440,10 @@ struct HomeView: View {
     private var homeWidgetLayout: some View {
         VStack(spacing: 16) {
             HStack(alignment: .top, spacing: 16) {
-                CampusCardPanel(api: appModel.campusAPI, userID: userID, demo: demo) {
+                CampusCardPanel(
+                    api: appModel.campusAPI, userID: userID, demo: demo,
+                    paymentCodeRequestID: paymentCodeRequestID
+                ) {
                     showsCardRecharge = true
                 }
                     .frame(maxWidth: .infinity)

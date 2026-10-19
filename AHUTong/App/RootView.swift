@@ -9,6 +9,10 @@ struct RootView: View {
     @StateObject private var grayGate = GrayFeatureGateModel()
     @StateObject private var toastCenter = AppToastCenter()
     @State private var restoredConsentKey = ""
+    @StateObject private var shortcutNavigation = ShortcutNavigation.shared
+    @State private var homeNavigationID = UUID()
+    @State private var settingsNavigationID = UUID()
+    @State private var paymentCodeRequestID: UUID?
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -34,11 +38,12 @@ struct RootView: View {
             } else if appModel.sessionState == .signedOut {
                 LoginView(appModel: appModel, onboardingModel: onboardingModel)
             } else {
-                TabView(selection: $selectedTab) {
+                TabView(selection: tabSelection) {
                     ForEach(availableTabs) { tab in
                         NavigationStack {
                             destination(for: tab)
                         }
+                        .id(navigationID(for: tab))
                         .tabItem {
                             Label {
                                 Text(tab.title)
@@ -67,9 +72,16 @@ struct RootView: View {
             await restoreForCurrentConsent()
         }
         .onChange(of: onboardingModel.consent) { _, _ in
-            Task { await restoreForCurrentConsent() }
+            Task {
+                await restoreForCurrentConsent()
+                handleShortcutRequest()
+            }
         }
         .onOpenURL { url in
+            if let destination = ShortcutDestination(url: url) {
+                shortcutNavigation.request(destination)
+                return
+            }
             guard url.scheme == "ahutong" else { return }
             if url.host == "schedule" {
                 selectedTab = .schedule
@@ -77,10 +89,21 @@ struct RootView: View {
         }
         .tint(themeTint)
         .onChange(of: appModel.sessionState) { _, state in
+            switch state {
+            case .authenticated: break
+            default: paymentCodeRequestID = nil
+            }
             if case .experience = state, !availableTabs.contains(selectedTab) {
                 selectedTab = .schedule
             }
-            Task { await reloadGrayGate() }
+            handleShortcutRequest()
+            Task {
+                await reloadGrayGate()
+                await rescheduleCourseRemindersIfNeeded()
+            }
+        }
+        .onChange(of: shortcutNavigation.pendingRequest, initial: true) { _, _ in
+            handleShortcutRequest()
         }
         .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
             Task { await reloadGrayGate() }
@@ -101,7 +124,29 @@ struct RootView: View {
             Task { await rescheduleCourseRemindersIfNeeded() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await rescheduleCourseRemindersIfNeeded() } }
+            Task {
+                if phase == .active {
+                    await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: true)
+                    await rescheduleCourseRemindersIfNeeded()
+                } else if phase == .background {
+                    await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: false)
+                }
+            }
+        }
+    }
+
+    private var tabSelection: Binding<AppTab> {
+        Binding(get: { selectedTab }, set: { tab in
+            if tab == .settings { settingsNavigationID = UUID() }
+            selectedTab = tab
+        })
+    }
+
+    private func navigationID(for tab: AppTab) -> String {
+        switch tab {
+        case .home: homeNavigationID.uuidString
+        case .settings: settingsNavigationID.uuidString
+        default: tab.rawValue
         }
     }
 
@@ -109,7 +154,11 @@ struct RootView: View {
     private func destination(for tab: AppTab) -> some View {
         switch tab {
         case .home:
-            HomeView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled) {
+            HomeView(
+                appModel: appModel,
+                homeEditEnabled: grayGate.homeEditEnabled,
+                paymentCodeRequestID: paymentCodeRequestID
+            ) {
                 selectedTab = .schedule
             }
         case .schedule:
@@ -122,6 +171,25 @@ struct RootView: View {
         case .settings:
             SettingsView(onboardingModel: onboardingModel, appModel: appModel)
         }
+    }
+
+    private func handleShortcutRequest() {
+        guard onboardingModel.consent.isComplete,
+              let request = shortcutNavigation.pendingRequest else { return }
+        switch appModel.sessionState {
+        case .loading, .signedOut:
+            // Keep a cold-start request until setup and a real login finish.
+            return
+        case .experience:
+            settingsNavigationID = UUID()
+            selectedTab = .settings
+            toastCenter.show("付款码需要登录真实校园账号，请先登录")
+        case .authenticated:
+            paymentCodeRequestID = request.id
+            homeNavigationID = UUID()
+            selectedTab = .home
+        }
+        shortcutNavigation.consume(request)
     }
 
     private var themeTint: Color {
@@ -160,23 +228,36 @@ struct RootView: View {
     }
 
     private func rescheduleCourseRemindersIfNeeded() async {
-        let isAuthenticated: Bool
-        if case .authenticated = appModel.sessionState {
-            isAuthenticated = true
-        } else {
-            isAuthenticated = false
+        guard !AppRuntime.isDemoSession else { return }
+        let liveActivityEnabled = UserDefaults.standard.bool(forKey: "notifications.live-activity")
+        guard case let .authenticated(user) = appModel.sessionState else {
+            _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(false, courses: [], currentWeek: 1)
+            return
         }
         guard CourseReminderMaintenancePolicy.shouldRefresh(
             isDemoSession: AppRuntime.isDemoSession,
             remindersEnabled: UserDefaults.standard.bool(forKey: "notifications.course-reminders"),
-            isAuthenticated: isAuthenticated
-        ) else { return }
+            isAuthenticated: true,
+            liveActivityEnabled: liveActivityEnabled
+        ) else {
+            _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(false, courses: [], currentWeek: 1)
+            return
+        }
         do {
             async let courses = appModel.campusAPI.schedule()
             async let week = appModel.campusAPI.currentWeek()
             let (loadedCourses, loadedWeek) = try await (courses, week)
-            _ = try await CourseReminderCoordinator().setEnabled(
-                true,
+            guard case let .authenticated(currentUser) = appModel.sessionState,
+                  currentUser.studentID == user.studentID else { return }
+            if UserDefaults.standard.bool(forKey: "notifications.course-reminders") {
+                _ = try? await CourseReminderCoordinator().setEnabled(
+                    true,
+                    courses: loadedCourses,
+                    currentWeek: loadedWeek
+                )
+            }
+            _ = try await CourseLiveActivityCoordinator.shared.setEnabled(
+                UserDefaults.standard.bool(forKey: "notifications.live-activity"),
                 courses: loadedCourses,
                 currentWeek: loadedWeek
             )
@@ -190,9 +271,10 @@ enum CourseReminderMaintenancePolicy {
     static func shouldRefresh(
         isDemoSession: Bool,
         remindersEnabled: Bool,
-        isAuthenticated: Bool
+        isAuthenticated: Bool,
+        liveActivityEnabled: Bool = false
     ) -> Bool {
-        !isDemoSession && remindersEnabled && isAuthenticated
+        !isDemoSession && (remindersEnabled || liveActivityEnabled) && isAuthenticated
     }
 }
 

@@ -82,6 +82,9 @@ final class StartupScheduleRegressionTests: XCTestCase {
         await home.load(demo: false)
         XCTAssertEqual(home.currentWeek, 10)
         XCTAssertEqual(home.todayCourses, [Self.course])
+        let shortcut = try await ScheduleShortcutStore(userID: "schedule-fixture", dataStore: store).load()
+        XCTAssertEqual(shortcut?.courses, [Self.course])
+        XCTAssertEqual(shortcut?.semesterStart, try date(2026, 8, 10))
     }
 
     @MainActor
@@ -105,6 +108,8 @@ final class StartupScheduleRegressionTests: XCTestCase {
         let home = HomeViewModel(api: api, userID: "schedule-fixture", store: store, now: { now })
         await home.load(demo: false)
         XCTAssertTrue(home.todayCourses.isEmpty)
+        let shortcut = try await ScheduleShortcutStore(userID: "schedule-fixture", dataStore: store).load()
+        XCTAssertNil(shortcut, "A failed week lookup must not publish a fabricated shortcut anchor")
     }
 
     @MainActor

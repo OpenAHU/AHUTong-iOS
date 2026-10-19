@@ -78,6 +78,7 @@ final class ScheduleViewModel: ObservableObject {
     private let semester: Semester
     private let accessMode: ScheduleAccessMode
     private let experienceStore: ExperienceScheduleStore
+    private let shortcutStore: ScheduleShortcutStore
 
     init(
         api: any CampusCoreAPI,
@@ -87,6 +88,7 @@ final class ScheduleViewModel: ObservableObject {
         store: any DataStore = AppPersistence.migratingDefaults(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        shortcutStore = ScheduleShortcutStore(userID: userID, dataStore: store)
         self.now = now
         self.accessMode = accessMode
         self.experienceStore = experienceStore
@@ -185,6 +187,11 @@ final class ScheduleViewModel: ObservableObject {
                 updatesCurrentWeek: !previewNext
             )
             if !previewNext {
+                try? await shortcutStore.record(
+                    courses: result.courses, semester: semester,
+                    currentWeek: currentWeekIsKnown ? currentWeek : nil,
+                    source: result.source, at: referenceDate
+                )
                 await updateSystemIntegrations(courses: result.courses, referenceDate: referenceDate)
             }
         } catch is CancellationError {
@@ -248,6 +255,14 @@ final class ScheduleViewModel: ObservableObject {
 
     private func updateSystemIntegrations(courses: [Course], referenceDate: Date = Date()) async {
         await publishWidget(.make(courses: courses, currentWeek: currentWeek, updatedAt: referenceDate))
+        if accessMode == .authenticated, !AppRuntime.isDemoSession {
+            _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(
+                UserDefaults.standard.bool(forKey: "notifications.live-activity"),
+                courses: courses,
+                currentWeek: currentWeek,
+                now: referenceDate
+            )
+        }
         if UserDefaults.standard.bool(forKey: "notifications.course-reminders") {
             _ = try? await CourseReminderCoordinator().setEnabled(
                 true,
@@ -285,6 +300,7 @@ final class ScheduleViewModel: ObservableObject {
 }
 
 struct ScheduleView: View {
+    @ScaledMetric(relativeTo: .headline) private var weekIndicatorSize: CGFloat = 44
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: ScheduleViewModel
@@ -400,9 +416,9 @@ struct ScheduleView: View {
                                 Text("\(week)")
                                     .font(.headline.bold())
                                     .foregroundStyle(selectedWeek == week ? Color.white : Color.primary)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Capsule())
+                                    .frame(width: weekIndicatorSize, height: weekIndicatorSize)
+                                    .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Circle())
+                                    .contentShape(Circle())
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("schedule.week.\(week)")

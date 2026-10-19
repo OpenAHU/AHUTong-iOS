@@ -2,11 +2,11 @@ import XCTest
 @testable import AHUTong
 
 final class ContributorsCatalogTests: XCTestCase {
-    func testCatalogMatchesAndroidContributorOrderAndContent() {
+    func testCatalogPreservesExistingContributorsAndAddsIOSMaintainer() {
         XCTAssertEqual(ContributorsCatalog.partners.map(\.name), ["Hello~"])
         XCTAssertEqual(
             ContributorsCatalog.developers.map(\.name),
-            ["s1nk", "😓😢😥😰", "\u{200B}", "堂吉诃德", "Yukon", "MuxYang（25级）", "InChange-Jiang（25级）"]
+            ["s1nk", "😓😢😥😰", "\u{200B}", "堂吉诃德", "Yukon", "MuxYang（25级）", "InChange-Jiang（25级）", "Himekawa"]
         )
         XCTAssertEqual(
             ContributorsCatalog.developers[2].name.unicodeScalars.map(\.value),
@@ -15,11 +15,12 @@ final class ContributorsCatalogTests: XCTestCase {
 
         XCTAssertEqual(
             ContributorsCatalog.developers.compactMap(\.qq),
-            ["468766131", "330771794", "257314409", "3148336396", "605606366", "32142587", "2719904894"]
+            ["468766131", "330771794", "257314409", "3148336396", "605606366", "32142587", "2719904894", "1705945565"]
         )
     }
 
     func testDeveloperContactAndAvatarStayOnAndroidQQContract() {
+        XCTAssertEqual(ContributorsCatalog.developers.last?.description, "iOS开发与维护")
         let developer = ContributorsCatalog.developers[0]
 
         XCTAssertEqual(developer.avatarURL?.host, "q1.qlogo.cn")

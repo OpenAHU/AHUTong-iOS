@@ -156,45 +156,80 @@ struct AHUTongScheduleWidget: Widget {
 struct CourseLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CourseActivityAttributes.self) { context in
-            HStack(spacing: 12) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(context.state.courseName).font(.headline).lineLimit(1)
-                    Text(context.state.location).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                Text(context.state.startDate, style: .timer)
-                    .font(.headline.monospacedDigit())
+            if !context.isStale {
+                CourseLiveActivityCard(state: context.state)
+                    .padding()
+                    .activitySystemActionForegroundColor(.blue)
+                    .widgetURL(URL(string: "ahutong://schedule"))
             }
-            .padding()
-            .activityBackgroundTint(Color(red: 247 / 255, green: 246 / 255, blue: 252 / 255))
-            .activitySystemActionForegroundColor(.blue)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: "calendar.badge.clock").foregroundStyle(.blue)
+                    if !context.isStale { Image(systemName: "calendar.badge.clock").foregroundStyle(.blue) }
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.state.courseName).font(.headline).lineLimit(1)
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.startDate, style: .timer).monospacedDigit()
+                    if !context.isStale { Text(context.state.courseName).font(.headline).lineLimit(1) }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(context.state.location).font(.caption).foregroundStyle(.secondary)
+                    if !context.isStale {
+                        HStack {
+                            Text(context.state.location).font(.caption).lineLimit(1)
+                            Spacer()
+                            CoursePreclassCountdown(state: context.state)
+                        }
+                    }
                 }
             } compactLeading: {
-                Image(systemName: "book.closed.fill").foregroundStyle(.blue)
+                if !context.isStale { Image(systemName: "book.closed.fill").foregroundStyle(.blue) }
             } compactTrailing: {
-                Text(context.state.startDate, style: .timer).monospacedDigit()
+                if !context.isStale {
+                    CourseCountdownText(state: context.state)
+                        .font(.caption.monospacedDigit()).frame(width: 62, alignment: .trailing)
+                }
             } minimal: {
-                Image(systemName: "book.closed.fill").foregroundStyle(.blue)
+                if !context.isStale { Image(systemName: "book.closed.fill").foregroundStyle(.blue) }
             }
             .widgetURL(URL(string: "ahutong://schedule"))
             .keylineTint(.blue)
         }
+    }
+}
+
+private struct CourseLiveActivityCard: View {
+    let state: CourseActivityAttributes.ContentState
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar.badge.clock").font(.title2).foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(state.courseName).font(.headline).lineLimit(1)
+                Text(state.location).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            CoursePreclassCountdown(state: state)
+        }
+    }
+}
+
+private struct CoursePreclassCountdown: View {
+    let state: CourseActivityAttributes.ContentState
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("距上课").font(.caption2).foregroundStyle(.secondary)
+            CourseCountdownText(state: state).font(.headline.monospacedDigit())
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct CourseCountdownText: View {
+    let state: CourseActivityAttributes.ContentState
+
+    var body: some View {
+        Text(timerInterval: state.countdownInterval(to: state.startDate), countsDown: true, showsHours: true)
+            .multilineTextAlignment(.trailing)
+            .contentTransition(.numericText(countsDown: true))
     }
 }
 
