@@ -20,4 +20,15 @@ final class LicenseCatalogTests: XCTestCase {
         XCTAssertEqual(entry.license, "Apache License 2.0")
         XCTAssertEqual(Set(entry.bundledDocuments), Set(["LICENSE", "NOTICE"]))
     }
+
+    func testMaterialIconsProvidesOfflineAttribution() throws {
+        let entry = try XCTUnwrap(IOSLicenseCatalog.entries.first { $0.name == "Material Icons" })
+        for resource in entry.bundledDocuments {
+            let url = try XCTUnwrap(
+                Bundle.main.url(forResource: resource, withExtension: nil),
+                "Missing bundled attribution: \(resource)"
+            )
+            XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).isEmpty)
+        }
+    }
 }

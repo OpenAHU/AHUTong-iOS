@@ -1,0 +1,17 @@
+Material Icons (Outlined)
+Copyright 2025 The Android Open Source Project
+Licensed under the Apache License, Version 2.0.
+See MaterialIcons-LICENSE.txt.
+
+Navigation reference: AHUTong Android 6164917dede45485ef67b7437d0bc3dee7644f53
+BottomNavBar.kt: Icons.Outlined.Home, TableChart, Build, Settings.
+
+Paths are converted verbatim from AndroidX Compose Material Icons 1.7.8
+Kotlin vector commands to SVG commands. No path or viewport geometry changed.
+All four assets retain the original 24 x 24 viewport.
+
+https://dl.google.com/dl/android/maven2/androidx/compose/material/material-icons-core/1.7.8/material-icons-core-1.7.8-sources.jar
+SHA-256: 14db888d2f698178799a4c18a58bb134b3e98063c6748c443b339044e0145432
+
+https://dl.google.com/dl/android/maven2/androidx/compose/material/material-icons-extended/1.7.8/material-icons-extended-1.7.8-sources.jar
+SHA-256: 77b7e782a519a3e074fc91e09d59334ac1b815edd87d2e89c0c9ca7c95678e93

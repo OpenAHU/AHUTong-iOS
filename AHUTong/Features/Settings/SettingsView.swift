@@ -613,6 +613,13 @@ struct IOSLicenseEntry: Identifiable, Equatable, Sendable {
 enum IOSLicenseCatalog {
     static let entries = [
         IOSLicenseEntry(
+            name: "Material Icons",
+            author: "The Android Open Source Project",
+            url: URL(string: "https://github.com/google/material-design-icons")!,
+            license: "Apache License 2.0",
+            bundledDocuments: ["MaterialIcons-NOTICE.txt", "MaterialIcons-LICENSE.txt"]
+        ),
+        IOSLicenseEntry(
             name: "GuiXu (Rust rewrite)",
             author: "Delsart 与 GuiXu Rust contributors",
             url: URL(string: "https://github.com/Yukon163/GuiXu/tree/rust-rewrite")!,

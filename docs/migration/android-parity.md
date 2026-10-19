@@ -8,7 +8,7 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 按用户七项顺序维护：审查 PR、登录/过期恢复、成绩考试、通知/APNs、缴费、UI/UX 和重签小组件；已补充原生导航、设置入口、按压反馈与简洁文案的本机复核，见 E-20261019-02 |
+| 当前焦点 | 按用户七项顺序维护：审查 PR、登录/过期恢复、成绩考试、通知/APNs、缴费、UI/UX 和重签小组件；已补充原生导航、设置入口、按压反馈与简洁文案的本机复核，见 E-20261019-02；四入口改为 Android 同款轮廓矢量，开屏改用 App 图标，开发默认完整动态效果，见 E-20261019-03 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
@@ -67,6 +67,7 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 | AIO 历史支付 worktree | `af388304f325ebe0f77286192e08633027072e91` | 历史 `ios-payment-production-parity` detached worktree；本轮未使用 |
 | iOS 本轮支付基线 | `458ed7f392963f6b7943e71655cbe1609854b363` | 从已推送 iOS 主线状态创建 `codex/feat/payment-production-parity` |
 | Android 本轮支付参考 | `2c33b0bb923f197f1d209cb58589a6b5d052cd9f` | PAY-01、PAY-02、PAY-03、PAY-05 的唯一生产协议参考；未使用旧 worktree 的 Android `2a30a54` |
+| Android 本轮导航图标参考 | `6164917dede45485ef67b7437d0bc3dee7644f53`（3.2.2） | 2026-10-19 按用户要求读取当前 AIO 固定版本的 `BottomNavBar.kt`；仅覆盖四个导航图标形状对照，其他功能的既有基线不变 |
 | Android 本轮 Session 参考 | `2c33b0bb923f197f1d209cb58589a6b5d052cd9f` | `AutoLoginInterceptor` 登录重定向语义、`TokenAuthenticator` 全局 mutex 与一次重试的唯一参考 |
 | iOS 本轮 Session 基线 | `d8be7da` | 从支付生产证据收口后的远端分支创建 `codex/fix/session-expiry-refresh` |
 | AIO | `031ed3c2c599240a62184d928c3bcfbb22866607` | 迁移 worktree 的 detached HEAD |
@@ -272,7 +273,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏；冷启动本地会话就绪即进入首页，网络校验不阻塞开屏；最终 UI smoke 见 E-20261014-01。 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 原生四标签、顺序/选中语义及无玻璃偏好入口复核见 `E-20261019-02` | 2026-10-19 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏；冷启动本地会话就绪即进入首页，网络校验不阻塞开屏；最终 UI smoke 见 E-20261014-01。 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 原生四标签、顺序/选中语义及无玻璃偏好入口复核见 `E-20261019-02`；本轮以 Android 实际路径修正四图标、App 图标开屏及默认动态效果，见 `E-20261019-03` | 2026-10-19 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
 | AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待真机验证 | 隐私 v4 同意后以官方可见 WebView 首登，也可点“暂不登录”进入体验账户并跨启动保持；账密/Cookie 只入 ThisDeviceOnly Keychain；教务过期时前台隐藏 WebView single-flight 续期。ADWMH 首次与后续均在前台隐藏 WebView 建立校方会话，即使没有历史 Cookie 也以同域原生 GET 获取验证码并接收新会话 Cookie，只将图片发往 `https://openahu.org/ocr/captcha` 识别并用同一 `/user/login` 续期，失败提示重试，不打开第二登录页。Keychain 会话快照统一使用 SDK 的扁平 Cookie 列表，仅在识别为原生 NDJSON 且转换非空时迁移旧 Cookie 存档，离线缓存不被空数组覆盖；写请求不重放；隐藏续期失败暂显示脱敏阶段 Toast；本地 Cookie 初始化后先开放缓存身份，再完成网络校验；退出、重新登录和体验切换使旧校验失效，避免异步恢复旧身份；临时隐藏续期失败及重复过期不再清理凭据，首次校验和业务读取保存轮换 Cookie，换账号隔离旧 Cookie | `CampusCardLoginClientTests` 覆盖登录字段与失败响应，`CampusSessionStoreTests` 新增旧快照迁移；373 个单元测试已通过，旧快照离线保护见 `E-20260924-01`；最终 macOS CI `35901490865` 全绿，取图修复与 OCR 诊断见 `E-20260924-02`、`E-20260924-03`；隐私 v4 与首次校园服务隐藏登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机仍待验证；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | 真实账户保留 cache-first/refresh/stale-cache，并同步不含学号的体验课表副本；体验账户绝不请求 CampusCoreAPI，可导入最大 1 MB/500 门课程的 v1 JSON，只接受当前/下学期并原子覆盖；Widget 继续读取本地快照；只解析明确的教学周字段，拒绝学期 ID/布尔值/无效数字；按账号和学期保存周数与日期锚点，离线按周一推进。 | `ExperienceScheduleStoreTests`、拒绝隐私 UI 路径与原课表回归待 macOS CI；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
@@ -475,6 +476,30 @@ xcodebuild "${maintenance_args[@]}" test \
 python3 scripts/verify-widget-bundle.py build/ux-review/AHUTong-ux-unsigned.ipa
 ```
 
+### E-20261019-03：Android 同款导航图标与 App 图标开屏
+
+- 参考范围：按用户要求在既有 AIO worktree 中初始化 Android，只读固定 gitlink `6164917dede45485ef67b7437d0bc3dee7644f53`（3.2.2）；`app/src/main/java/com/ahu/ahutong/ui/screen/BottomNavBar.kt` 第 40–45 行使用 `Icons.Outlined.Home`、`TableChart`、`Build`、`Settings`，选中和未选中路径相同。该 SHA 已追加基线表，仅覆盖本轮四图标，不替换其他契约的 Android 基线。
+- 实现：从 AndroidX Compose Material Icons 1.7.8 源码逐条转换路径为 24×24 SVG，作为模板资源交给原生 `TabView`；移除底栏的四个 SF Symbols 映射。容器、标签、顺序、系统 Liquid Glass 和选中反馈保持系统实现。来源 URL、源码包 SHA-256 和 Apache-2.0 文本随 App 离线打包，并加入许可证页。
+- 开屏：`a.circle.fill` 改为真实 `AppMark`，保持原来的加载状态条件，不人为增加开屏时长。深浅色 `ImageRenderer` 视图渲染用于视觉检查；真实慢校验启动用例验证缓存身份仍及时进入首页，不以离屏渲染代替真实启动时序。
+- 开发默认：iOS `AGENTS.md` 已记录本地开发与预览默认关闭“减弱动态效果”。普通预览用例先实际关闭 Simulator 开关；无障碍专项临时打开后也恢复关闭。最终读取 Simulator `com.apple.Accessibility.plist` 的 `ReduceMotionEnabled` 和 `ReduceMotionReduceSlideTransitionsPreference` 均为 0，记录在 `build/branding/simulator-motion.json`。生产 App 仍遵守设备无障碍设置。
+- 测试：本轮工具链仍为 Xcode 27.0 / iPhone 17 Pro / iOS 26.5。`Branding-unit-recheck.xcresult` 的 6 项单元测试全部通过（App 图标深浅色渲染、四模板图标入包/尺寸、入口顺序、许可证目录与离线文本）；`Branding.xcresult` 的 3 条 UI 全部通过：原生四入口与设置（48.394 秒）、真实系统减弱动态效果与恢复（69.221 秒）、慢校验不阻塞开屏（4.389 秒）。首轮 6 项单测中 1 项发现工程生成早于新许可证下载完成，导致漏入测试包；文件齐全后重新生成 XcodeGen 工程并复验全部 6 项通过。首轮结果保留，不将完整首轮写为全绿。
+- 可视证据：`build/branding/settings-ux-native-tab-1.png` 至 `-4.png` 为实际模拟器四入口截图，已核对选中/未选中的轮廓形状。最终深浅色开屏视图渲染为 `recheck-app-splash-light.png`、`recheck-app-splash-dark.png`，均已目视检查；首轮离屏暗色渲染图有图像未绘制完整的情况，保留原附件，以复验图为最终视觉证据。`native-tabs-full-motion.mp4` 为约 48 秒实际系统设置与原生四入口操作录像；不包含伪造的开屏等待。
+- 设备与包：重新生成工程后的 Release iphoneos 无签名构建成功，见 `build/branding/device-final-build.log`；App 包内离线许可证文件齐全。`AHUTong-branding-unsigned.ipa` 为 6,822,733 bytes，SHA-256 `a7878f5062d84880e7d49801fcf4ce7b15c497d68a0413ac83da07904f1b2654`，Widget 结构校验通过。旧维护包和旧 UI 包均保留原文件与校验和；本轮未更新 AIO gitlink。
+- 边界：未构建或修改 Android；仅对照其实际导航定义与对应矢量资源，不声称进行了新一轮整屏双端像素验收。真机业务与 iOS 27 验收边界沿用 E-20261019-01/02，严格完成数不变。
+
+复验命令（共同参数沿用 E-20261019-01 的 `maintenance_args`）：
+
+```bash
+xcodegen generate --spec project.yml
+xcodebuild "${maintenance_args[@]}" test \
+  -only-testing:AHUTongTests/AppTabTests \
+  -only-testing:AHUTongTests/AppBrandingTests \
+  -only-testing:AHUTongTests/LicenseCatalogTests \
+  -resultBundlePath build/branding/Branding-unit-recheck.xcresult
+# 三条 UI 的通过结果保留在首轮 Branding.xcresult，详见上述单项结果。
+python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned.ipa
+```
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -667,3 +692,4 @@ python3 scripts/verify-widget-bundle.py build/ux-review/AHUTong-ux-unsigned.ipa
 | 2026-10-14 | CARD-010 | 弱网首页优先预取付款码并取消慢余额请求；续期不等待余额验证；补齐内存年龄、后台清理和旧响应保护，按本机预览后推送/打包的顺序交付 | 最终本机 410 单测 + 3 UI 全绿，预览与边界见 `E-20261014-02` | 本分支 |
 | 2026-10-19 | AUTH-023 / ACA-006 / SYS-003 / UI-007 | 按用户七项顺序完成 PR 审查与维护：临时续期保留凭据、Cookie 轮换与账号隔离、成绩/考试缓存提示、校园时区和实际节次、小组件包与共享组检查、缴费键盘完成入口；校准完成计数，SYS-01 重开真机验证，更新 25 人问卷计划及失效手册 | 本机 423 单测；5 个受影响 UI 用例通过复验；Release iphoneos 构建与最终 IPA 结构校验通过，首轮失败及真机边界见 `E-20261019-01` | iOS `bd4335f` 与本次文档提交 |
 | 2026-10-19 | UI-008 / PREF-011 | 复核系统 TabView 四入口、无 Debug/玻璃设置、真实图标和账户位置；修复偏好行高亮越界，精简提示，删除不可达弹窗，小组件指引适应大字体 | 5 项设置单测、3 条 UI 分别通过；真实系统减弱动态效果及深色大字体截图/录屏、Release device 构建与新 IPA 结构校验见 `E-20261019-02`；真机边界保留 | 本次提交 |
+| 2026-10-19 | UI-009 / APP-003 | 按 Android 3.2.2 实际路径替换原生 Tab 的四个轮廓矢量，开屏改用 App 图标，补齐离线图标许可；开发与预览默认关闭减弱动态效果，专项后恢复关闭 | 6 单测复验全绿、3 UI 通过，真实导航截图/完整动态效果录像与深浅色开屏视图、最终 Release 及 IPA 见 `E-20261019-03`；保留首轮漏资源失败 | 本次提交 |

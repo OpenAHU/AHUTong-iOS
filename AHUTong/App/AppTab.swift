@@ -21,16 +21,16 @@ enum AppTab: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var systemImage: String {
+    var iconAssetName: String {
         switch self {
         case .home:
-            "house"
+            "TabHome"
         case .schedule:
-            "tablecells"
+            "TabTableChart"
         case .tools:
-            "wrench.and.screwdriver"
+            "TabBuild"
         case .settings:
-            "gearshape"
+            "TabSettings"
         }
     }
 }

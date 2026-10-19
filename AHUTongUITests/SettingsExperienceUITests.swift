@@ -5,6 +5,8 @@ final class SettingsExperienceUITests: XCTestCase {
 
     @MainActor
     func testNativeTabsSettingsStructureAndConciseCopy() {
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        setReduceMotion(false, control: openMotionSettings(settings))
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
         app.launchArguments = ["--demo-consent", "--demo-session", "-theme.color", "blue"]
@@ -77,13 +79,12 @@ final class SettingsExperienceUITests: XCTestCase {
     func testPressFeedbackWithSystemReduceMotion() {
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         var reduceMotion = openMotionSettings(settings)
-        let original = reduceMotion.value as? String
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
         app.launchArguments = ["--demo-consent", "--demo-session", "-theme.color", "blue"]
         defer {
             reduceMotion = openMotionSettings(settings)
-            setReduceMotion(original == "1", control: reduceMotion)
+            setReduceMotion(false, control: reduceMotion)
             app.launch()
             XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
             app.tabBars.buttons["设置"].tap()

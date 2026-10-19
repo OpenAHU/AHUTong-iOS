@@ -105,3 +105,22 @@ PR #3 精确尖端的官方 CI 仍是 `action_required`。本轮本机测试针�
 | 小组件指引解释 iOS 固定组件限制且仅中等高度 | 保留三个添加步骤、扩展保留和共享不可用提示；支持滚动及中/大高度，适应大字体。 |
 
 代码层面删除了无法触发的 `showsIslandExplanation` 状态及关联弹窗。导航和反馈逻辑已经集中；`SettingsView.swift` 仍合并设置、偏好、许可证与贡献者等视图，后续可按页面拆文件，本轮未进行结构重写。
+
+## 导航图标、开屏与开发动态效果
+
+用户指出导航图标形状不理想，并要求核对 Android、开屏使用实际 App 图标、本地开发默认不减弱动态效果。上一轮核对的是图标语义与原生容器，没有核对 Android 的具体矢量路径；本轮以实际资源为准修正。
+
+本次在同一 worktree 中按需浅拉 Android，只作只读参考，固定为 AIO gitlink `6164917dede45485ef67b7437d0bc3dee7644f53`（3.2.2）。`BottomNavBar.kt` 的四个入口选中与未选中均使用同一个 `Icons.Outlined` 图标：
+
+| 入口 | Android 图标 | iOS 模板矢量资源 |
+| --- | --- | --- |
+| 主页 | `Icons.Outlined.Home` | `TabHome` |
+| 课表 | `Icons.Outlined.TableChart` | `TabTableChart` |
+| 小工具 | `Icons.Outlined.Build` | `TabBuild` |
+| 设置 | `Icons.Outlined.Settings` | `TabSettings` |
+
+iOS 资源由 AndroidX Compose Material Icons 1.7.8 源码中的路径命令逐条转为 SVG，保留 24×24 视口和原始几何；不再使用语义相近的 SF Symbols。原生 `TabView`、标签顺序、选中状态、系统材质与交互继续由系统提供。图标离线许可证与来源说明已加入 App 的许可证页。
+
+开屏 `a.circle.fill` 改为现有的 `AppMark`，与设置页及 AppIcon 使用同一图像；保持原加载条件，不增加等待时间。深浅色开屏渲染作为独立视图证据，不冒充真实冷启动录像。
+
+本地开发与 UI 预览默认将 Simulator 的“减弱动态效果”关闭，已写入 iOS `AGENTS.md`。无障碍专项仍实际开启验证，结束后恢复关闭；App 继续遵守用户设备的无障碍设置，不在产品代码中强制覆盖。复验证据登记在 `E-20261019-03`。
