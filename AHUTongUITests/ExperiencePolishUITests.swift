@@ -4,10 +4,10 @@ import XCTest
 final class ExperiencePolishUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
-    private func launch() -> XCUIApplication {
+    private func launch(additionalArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
-        app.launchArguments = ["--demo-consent", "--demo-session", "-schedule.preview-next", "NO"]
+        app.launchArguments = ["--demo-consent", "--demo-session", "-schedule.preview-next", "NO"] + additionalArguments
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
         return app
@@ -37,8 +37,8 @@ final class ExperiencePolishUITests: XCTestCase {
         XCTAssertEqual(first.frame.width, first.frame.height, accuracy: 1)
         capture(app, "schedule-circle-week-1")
         let tenth = app.buttons["schedule.week.10"]
-        // Each selection centers its circle in the horizontal selector.
-        for week in [5, 7, 9, 10] {
+        // Advance through visible weeks instead of assuming week 5 fits initially.
+        for week in 2...10 {
             let indicator = app.buttons["schedule.week.\(week)"]
             XCTAssertTrue(indicator.isHittable)
             indicator.tap()
@@ -63,6 +63,40 @@ final class ExperiencePolishUITests: XCTestCase {
         app.buttons["campus-card.qr-collapse"].tap()
         XCTAssertTrue(balance.waitForExistence(timeout: 4))
         XCTAssertEqual(balance.frame.height, collapsedHeight, accuracy: 1)
+    }
+
+    func testHeaderActionsRemainUsableWithNativeMaterials() {
+        let app = launch(additionalArguments: ["-debug.gray.home_edit", "enabled"])
+        app.tabBars.buttons["课表"].tap()
+        let currentWeek = app.buttons["回到当前周"]
+        let settings = app.buttons["schedule.settings"]
+        let refresh = app.buttons["schedule.refresh"]
+        for button in [currentWeek, settings, refresh] {
+            XCTAssertTrue(button.waitForExistence(timeout: 4))
+            XCTAssertTrue(button.isHittable)
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+        }
+        capture(app, "schedule-native-header-buttons")
+        app.buttons["schedule.week.2"].tap()
+        currentWeek.tap()
+        XCTAssertTrue(app.buttons["schedule.week.1"].isSelected)
+        refresh.tap()
+        XCTAssertTrue(app.buttons["schedule.course.demo-3"].waitForExistence(timeout: 4))
+        settings.tap()
+        XCTAssertTrue(app.switches["schedule.settings.overview"].waitForExistence(timeout: 4))
+        app.buttons["schedule.settings.done"].tap()
+
+        app.tabBars.buttons["小工具"].tap()
+        let edit = app.buttons["tools.edit-home"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 4))
+        XCTAssertTrue(edit.isHittable)
+        XCTAssertGreaterThanOrEqual(edit.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(edit.frame.height, 44)
+        capture(app, "tools-native-header-button")
+        edit.tap()
+        XCTAssertTrue(app.staticTexts["添加小工具"].waitForExistence(timeout: 4))
+        app.buttons["完成"].tap()
     }
 
     func testDeveloperPopoverDismissalResumesItsRowAndDoubleTapOpensQQ() {

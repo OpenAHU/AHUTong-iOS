@@ -435,7 +435,7 @@ struct ScheduleView: View {
                     }
                 }
             }
-            HStack(spacing: 0) {
+            HStack(spacing: 4) {
                 scheduleAction("location", "回到当前周") {
                     if previewNextSemester {
                         previewNextSemester = false
@@ -448,8 +448,6 @@ struct ScheduleView: View {
                 scheduleAction("gearshape", "课表设置", identifier: "schedule.settings") { showSettings = true }
                 scheduleAction("arrow.clockwise", "刷新课表", identifier: "schedule.refresh") { Task { await model.refresh(previewNext: previewNextSemester) } }
             }
-            .padding(2)
-            .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
             .padding(.trailing, 8)
         }
     }
@@ -489,9 +487,7 @@ struct ScheduleView: View {
         identifier: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: 20)).frame(width: 38, height: 38) }
-            .buttonStyle(.plain)
-            .accessibilityLabel(label)
+        NativeHeaderIconButton(systemName: icon, accessibilityLabel: label, action: action)
             .accessibilityIdentifier(identifier ?? "schedule.action.\(label)")
     }
 

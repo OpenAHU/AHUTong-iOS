@@ -8,7 +8,7 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.2 后续维护：原生设置与校园码恢复；补充首页刷新、可配置深浅色课表 Widget、本科培养方案、校园卡账单/消费统计；贡献名单补齐 zirui.xu 及全部年级；Siri 语音匹配与重签配置面板仍有实机验收边界。证据见 E-20261019-07/08/09 |
+| 当前焦点 | 1.0.2 后续维护：原生设置、课表/小工具原生材质按钮与校园码恢复；补充首页刷新、可配置深浅色课表 Widget、本科培养方案、校园卡账单/消费统计；贡献名单补齐 zirui.xu 及全部年级；Siri 语音匹配与重签配置面板仍有实机验收边界。证据见 E-20261019-07/08/09/10 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
@@ -57,6 +57,7 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 9. 2026-09-23 用户要求彻底删除 iOS Debug 页面与 App 信息卡隐藏入口；设置首页使用真实 App 图标。2026-09-24 用户进一步明确账户信息与真实账号登录保留在设置首页，仅隐私选择及登录偏好进入偏好设置。
 10. 设置域所有可点击行必须在跳转或执行前提供可感知的按压态；iOS 使用轻触觉、明暗高亮和短缩放补足交互反馈，开启“减弱动态效果”时禁用缩放但不得移除非动态反馈。静态布局仍以 Android 为准。
 11. 2026-10-19 用户进一步要求更多 iOS 原生 UI，明确指出设置通知按钮卡顿、iOS 26+ 课表设置缺少玻璃材质。设置首页/偏好使用系统 `Form`、`NavigationLink` 和真实 `Toggle`；系统开关保留原生操作与反馈，导航/动作行继续保留轻触觉及按压反馈。课表设置采用系统半高 sheet 和工具栏，不用实色背景覆盖系统 Liquid Glass；不提供玻璃开关。此条覆盖对应页面的 Android 静态组件复刻限制。
+12. 2026-10-19 用户要求课表、小工具右上角按钮使用原生材质：iOS 26+ 采用系统 `GlassButtonStyle`，iOS 17–25 使用系统 Material；保留图标语义、功能和 VoiceOver 名称，不新增材质开关。空昵称贡献者的年级按 Android 记录为 22级。
 
 ## 2. 固定基线
 
@@ -320,6 +321,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | --- | --- | --- |
 | APP-01 / SET-01 | 设置首页/偏好原生 Form/Toggle，Siri 行与其他行使用系统一致布局，保留账户首页与按压反馈 | 正常签名模拟器宿主及原生控件 UI 已通过，见 E-20261019-07/08 |
 | SCH-02 | 课表设置原生 Toggle/工具栏，移除遮挡系统材质的实色背景；课程详情同样保留系统 sheet | iOS 26.5 已实际观察背景折射/透出并保存截图；iOS 27 无本机运行时 |
+| APP-01 / SCH-02 | 课表的当前周/设置/刷新及小工具的编辑入口共用原生材质图标按钮；iOS 26+ 为系统玻璃圆钮，iOS 17–25 为系统毛玻璃 | 最低系统保持 iOS 17，见 E-20261019-10；编辑入口仍遵循既有首页编辑灰度 |
 | CARD-01 / HOME-01 | 校园码双通道恢复，12 秒传输超时、失败后重新打开/显式重试、15 秒内存复用、可插值展开高度与异步位图 | 不保证校方接口持续可用；真实扫码/长期会话仍需设备验收 |
 | SYS-02 | 关闭通知零网络，开启先查权限/缓存，系统开关及时反馈并防止重复提交 | 仍为本地通知，未增加 APNs |
 | HOME-01 | 下拉刷新课表/周次/天气/余额及校园码；课表更新后刷新 Widget 与快捷指令快照；前台余额 30 秒刷新，课表进入/回前台按 60 秒节流 | 不后台轮询；二维码显示时优先保码；失败保留旧课表并说明 |
@@ -634,6 +636,15 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 2026-10-19，iPhone 17 Pro QA / iOS 26.5，`build/native-ui/contributors-final.xcresult`：6 项单元测试、1 项 UI 测试全部通过。覆盖完整个人资料链接/头像契约、九人随机分两排无遗漏、两排独立暂停计时、新成员及 Himekawa 昵称年级、系统贡献浮窗、关闭恢复滚动与双击 QQ 的未安装反馈；默认减弱动态效果关闭。新增头像地址 HEAD 返回 HTTP 200 / image/jpeg。最终无复制按钮的界面截图位于 `build/native-ui/evidence/contributors-final/`。
 - 上一提交 `96e5679` 的云端 [四组 CI](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39262041058)、[Release Archive](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39262036452) 和 [unsigned IPA](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39262036461) 已全部成功，确认 Widget 编译兼容修复在云端 Xcode 26 通过。本切片保持 1.0.2（3），用户暂缓 IPA 调试。
 
+### E-20261019-10：课表与小工具的原生材质按钮
+
+- 四个顶部动作共用 `NativeHeaderIconButton`：iOS 26+ 通过 `#available` 使用系统 `.buttonStyle(.glass)` 与圆形按钮边框，由系统处理 Liquid Glass、按压和辅助功能表现；移除原课表实色胶囊背景。iOS 17–25 使用 `.regularMaterial` 圆形背景，并提供按下时明暗反馈和轻触觉；兼容样式无缩放动画，遵守减弱动态效果要求。参考 [Apple GlassButtonStyle](https://developer.apple.com/documentation/swiftui/primitivebuttonstyle/glass)。
+- 图标与动作保持当前周、课表设置、刷新课表和编辑首页。编辑首页仍受 `home_edit` 灰度控制；UI 演示测试通过已有启动覆盖明确启用，不改变生产灰度范围。按钮保留 VoiceOver 中文名称，验证实际可点击范围至少 44 × 44pt；首次默认玻璃尺寸仅 36pt 的失败已用于修正内容尺寸，未降低断言。
+- 空昵称贡献者对应 QQ `257314409`，固定 Android `595e63c` 的 `DeveloperViewModel.kt` 明确为 22级；iOS 保留零宽昵称与 `（22级）` 后缀，不替换为真实姓名。
+- 最终验收：iPhone 17 Pro QA / iOS 26.5 的 `build/native-ui/native-header-acceptance.xcresult`，6 项名单/滚动单元测试、2 项 UI 测试全部通过，包含四个动作、真实 44pt 触控范围、编辑首页及单双位周指示器。深色按钮动作另在 `native-header-dark.xcresult` 的 `testHeaderActionsRemainUsableWithNativeMaterials` 通过；该早期结果包的周次可见性断言失败已由最终全绿包复验，不将早期整包记为成功。
+- 旧周次测试预设第 5 周一定在首屏，与扩大按钮触控范围后的可见宽度不符，改为逐周选择 2–10 并保留圆形、选中状态与尺寸断言；新编辑入口测试按实际可见“添加小工具”标题判断，不假定 SwiftUI VStack 一定暴露为单一 Other 节点。失败结果包保留在 `build/native-ui/`，未通过降低触控尺寸要求或跳过用例规避问题。
+- 视觉证据：`build/native-ui/evidence/schedule-native-header-light.png`、`schedule-native-header-dark.png`、`tools-native-header-light.png` 与 `tools-native-header-dark.png`。默认减弱动态效果关闭，深色检查结束后恢复 QA 模拟器为浅色。本机仅有 iOS 26.5 运行时；iOS 17–25 分支已通过最低部署版本 17.0 的编译检查，未声称完成旧系统运行验证。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -723,6 +734,7 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 
 ## 14. 变更日志
 
+- 2026-10-19：课表与小工具顶部四个动作使用原生材质圆形按钮，iOS 26+ 系统 Liquid Glass、iOS 17–25 系统 Material；核对空昵称贡献者为 22级，验证记录见 E-20261019-10。
 - 2026-10-19：贡献名单新增 zirui.xu（QQ 1793838025，24级），全部既有昵称补齐 Android 对应年级，Himekawa 按用户指定标为 24级；补齐双击个人资料页链接参数，保持简洁浮窗；名单、随机滚动与原生浮窗/QQ 交互回归见 E-20261019-09。
 - 2026-10-19：完成原生设置/课表系统 sheet、校园码双通道恢复与尺寸动画，清理无调用 UI；补充首页刷新、可配置高对比 Widget、本科培养方案及校园卡账单/统计，真实只读查询通过，明确 Siri 语音匹配与 Widget 重签验收边界；重新盘点 Android `595e63c`，修正全量对齐措辞（E-20261019-07/08）。
 

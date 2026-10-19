@@ -31,7 +31,8 @@ struct ToolsView: View {
                 VStack(spacing: 24) {
                     AndroidHeader(title: "小工具") {
                         if homeEditEnabled {
-                            AndroidIconButton(systemName: "pencil", accessibilityLabel: "编辑首页", action: onEditHome)
+                            NativeHeaderIconButton(systemName: "pencil", accessibilityLabel: "编辑首页", action: onEditHome)
+                                .accessibilityIdentifier("tools.edit-home")
                         }
                     }
 
