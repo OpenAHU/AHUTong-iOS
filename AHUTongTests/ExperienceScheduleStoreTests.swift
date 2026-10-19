@@ -3,6 +3,15 @@ import XCTest
 @testable import AHUTong
 
 final class ExperienceScheduleStoreTests: XCTestCase {
+    func testSavingOnlyNextSemesterDoesNotInventCurrentSemesterWeekAnchor() async throws {
+        let store = ExperienceScheduleStore(store: InMemoryDataStore())
+        try await store.save(courses: [Self.course()], semester: Semester.current().next,
+                             currentWeek: 1, updatesCurrentWeek: false)
+        let snapshot = await store.snapshot()
+        XCTAssertEqual(snapshot.updatedAt, .distantPast)
+        XCTAssertEqual(snapshot.coursesBySemester[Semester.current().next.rawValue], [Self.course()])
+    }
+
     func testImportsValidCurrentSemesterAndDeduplicatesCourses() async throws {
         let store = ExperienceScheduleStore(store: InMemoryDataStore())
         let semester = Semester.current()

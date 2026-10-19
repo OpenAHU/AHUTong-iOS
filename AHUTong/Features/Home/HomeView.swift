@@ -160,50 +160,77 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var currentWeek = 1
     @Published private(set) var errorMessage: String?
     @Published private(set) var referenceDate = Date()
+    private var currentWeekIsKnown = false
 
     private let repository: ScheduleRepository
-    private let api: any CampusCoreAPI
+    private let weekRepository: ScheduleWeekRepository
+    private let now: @Sendable () -> Date
 
-    init(api: any CampusCoreAPI, userID: String) {
-        self.api = api
+    init(
+        api: any CampusCoreAPI, userID: String,
+        store: any DataStore = AppPersistence.migratingDefaults(),
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.now = now
+        let cache = UserScopedStore(store: store, userID: userID)
         repository = ScheduleRepository(
             remote: RustScheduleRemoteDataSource(api: api),
-            cache: UserScopedStore(store: AppPersistence.migratingDefaults(), userID: userID)
+            cache: cache
+        )
+        weekRepository = ScheduleWeekRepository(
+            api: api, cache: cache,
+            semester: Semester.current(date: now(), calendar: ScheduleCalendar.campus), now: now
         )
     }
 
     func load(demo: Bool) async {
         if demo {
+            currentWeekIsKnown = true
             courses = DemoDataState.current == .normal ? ScheduleViewModel.demoCourses : []
             currentWeek = 1
             referenceDate = DemoDataState.referenceDate
             return
         }
-        let semester = Semester.current()
+        let semester = Semester.current(date: now(), calendar: ScheduleCalendar.campus)
+        let cached = await weekRepository.cached()
+        currentWeekIsKnown = !cached.isFallback
+        currentWeek = cached.week
+        referenceDate = cached.referenceDate
         do {
-            async let snapshot = repository.load(semester: semester)
-            async let week = api.currentWeek()
-            let result = try await snapshot
+            let result = try await repository.load(semester: semester)
             courses = result.courses
-            currentWeek = (try? await week) ?? 1
             errorMessage = nil
+            if let position = try? await weekRepository.refresh() {
+                currentWeekIsKnown = true
+                currentWeek = position.week
+                referenceDate = position.referenceDate
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     var todayCourses: [Course] {
-        let weekday = (Calendar.current.component(.weekday, from: referenceDate) + 5) % 7 + 1
+        guard currentWeekIsKnown else { return [] }
+        let weekday = (ScheduleCalendar.campus.component(.weekday, from: referenceDate) + 5) % 7 + 1
         return courses.filter { $0.weekday == weekday && $0.occurs(inWeek: currentWeek) }
             .sorted { $0.startPeriod < $1.startPeriod }
     }
 
     var summary: HomeCourseSummary {
-        HomeCourseSummary.make(courses: todayCourses, now: referenceDate)
+        HomeCourseSummary.make(courses: todayCourses, now: referenceDate, calendar: ScheduleCalendar.campus)
+    }
+
+    func advanceDate() {
+        guard !AppRuntime.isDemoSession, currentWeekIsKnown else { return }
+        let position = ScheduleWeekSnapshot(week: currentWeek, referenceDate: referenceDate).resolved(at: now())
+        currentWeek = position.week
+        referenceDate = position.referenceDate
     }
 }
 
 struct HomeView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var weatherModel = WeatherViewModel()
     @StateObject private var model: HomeViewModel
@@ -285,6 +312,12 @@ struct HomeView: View {
         }
         .onChange(of: layout) { _, newValue in
             Task { try? await layoutStore.save(newValue) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.advanceDate() }
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
+            model.advanceDate()
         }
         .onAppear {
             if requestEdit && homeEditEnabled {

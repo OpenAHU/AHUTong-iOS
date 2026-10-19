@@ -20,7 +20,12 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: macos-26
-    timeout-minutes: 30
+    name: Test ${{ matrix.suite }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [unit, ui-navigation, ui-services, ui-settings]
 
     steps:
       - name: Check out repository
@@ -45,6 +50,7 @@ jobs:
           workspaces: Vendor/sdk
 
       - name: Test Rust SDK
+        if: matrix.suite == 'unit'
         run: cargo test --manifest-path Vendor/sdk/Cargo.toml --all-features
 
       - name: Block live campus and payment hosts during automated tests
@@ -59,51 +65,52 @@ jobs:
           xcodegen --version
           xcodegen generate --spec project.yml
 
-      - name: Select an available iOS Simulator
+      - name: Create an isolated iPhone Simulator
         shell: bash
         run: |
+          set -euo pipefail
           runtime_identifier="$(
             xcrun simctl list runtimes available --json |
-              jq -r '[.runtimes[] | select(.identifier | contains("iOS"))][-1].identifier'
+              jq -r '[.runtimes[] | select(.identifier | contains("iOS"))][-1].identifier // empty'
           )"
-          device_type_identifier="$(
-            xcrun simctl list devicetypes --json |
-              jq -r '([.devicetypes[] | select(.name == "iPhone 13 Pro")][0].identifier) // empty'
-          )"
-          simulator_udid="$(
-            xcrun simctl list devices available --json |
-              jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[]][0].udid // empty'
-          )"
-
-          if [[ -n "$device_type_identifier" && -n "$runtime_identifier" ]]; then
-            existing_13_pro="$(
-              xcrun simctl list devices available --json |
-                jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name == "iPhone 13 Pro")][0].udid // empty'
-            )"
-            if [[ -n "$existing_13_pro" ]]; then
-              simulator_udid="$existing_13_pro"
-            else
-              simulator_udid="$(xcrun simctl create "AHUTong iPhone 13 Pro" "$device_type_identifier" "$runtime_identifier")"
-            fi
-          fi
-
-          if [[ -z "$simulator_udid" || "$simulator_udid" == "null" ]]; then
-            echo "No available iOS Simulator was found." >&2
-            exit 1
-          fi
-
+          test -n "$runtime_identifier"
+          simulator_udid="$(xcrun simctl create 'AHUTong CI' com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "$runtime_identifier")"
           echo "SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
-          xcrun simctl list devices available | grep "$simulator_udid" || true
+          xcrun simctl boot "$simulator_udid"
+          xcrun simctl bootstatus "$simulator_udid" -b
+          xcrun simctl ui "$simulator_udid" appearance light
 
       - name: Build and test
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
+          test_options=()
+          case '${{ matrix.suite }}' in
+            unit)
+              test_options=(-only-testing:AHUTongTests)
+              ;;
+            ui-navigation)
+              for test in testAndroidParityPrimaryScreens testScheduleSupportsHorizontalWeekPaging testDeclinedPrivacyUsesScheduleOnlyExperienceAccount testNativeNavigationBarEdgeAndContentPopGestures testCompactHomeWeatherOpensWeatherInsteadOfSchedule; do
+                test_options+=("-only-testing:AHUTongUITests/AppShellUITests/$test")
+              done
+              ;;
+            ui-services)
+              for test in testAndroidParityLoginAndReminderSystemStates testAndroidParityLoadingEmptyAndErrorStates testAndroidParityPaymentsAndOperations testNetworkRechargeAndCMBPreference; do
+                test_options+=("-only-testing:AHUTongUITests/AppShellUITests/$test")
+              done
+              test_options+=(-only-testing:AHUTongUITests/PaymentLocalParityUITests -only-testing:AHUTongUITests/CampusCardPriorityUITests)
+              ;;
+            ui-settings)
+              test_options=(-only-testing:AHUTongUITests -skip-testing:AHUTongUITests/AppShellUITests -skip-testing:AHUTongUITests/PaymentLocalParityUITests -skip-testing:AHUTongUITests/CampusCardPriorityUITests)
+              ;;
+          esac
           xcodebuild \
             -project AHUTong.xcodeproj \
             -scheme AHUTong \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -resultBundlePath "$RUNNER_TEMP/AHUTong.xcresult" \
+            -parallel-testing-enabled NO \
+            "${test_options[@]}" \
             test
 
       - name: Upload UI parity screenshots and test result
@@ -119,7 +126,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: AHUTong-ui-parity-xcresult-${{ github.run_number }}
+          name: AHUTong-${{ matrix.suite }}-xcresult-${{ github.run_number }}
           path: |
             ${{ runner.temp }}/AHUTong.xcresult
             ${{ runner.temp }}/UIParityAttachments

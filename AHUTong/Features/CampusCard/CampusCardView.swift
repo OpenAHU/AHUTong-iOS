@@ -25,12 +25,28 @@ final class CampusCardViewModel: ObservableObject {
     private let api: any CampusCoreAPI
     private let cacheKey: String
     private let defaults: UserDefaults
+    private let now: @Sendable () -> Date
+    // The API does not supply an expiry time. Reuse a prefetched code only briefly.
+    private static let maximumQRCodeAge: TimeInterval = 30
+    private var qrLoadedAt: Date?
+    private var qrRequestTask: Task<String, Error>?
+    private var balanceRequestTask: Task<Double, Error>?
+    private var latestQRRequestID: UUID?
     private var latestBalanceRequestID: UUID?
 
-    init(api: any CampusCoreAPI, userID: String, defaults: UserDefaults = .standard) {
+    init(
+        api: any CampusCoreAPI, userID: String, defaults: UserDefaults = .standard,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.api = api
         self.defaults = defaults
+        self.now = now
         cacheKey = Self.cacheKey(for: userID)
+    }
+
+    deinit {
+        qrRequestTask?.cancel()
+        balanceRequestTask?.cancel()
     }
 
     static func cacheKey(for userID: String) -> String {
@@ -49,8 +65,16 @@ final class CampusCardViewModel: ObservableObject {
     }
 
     func load(demo: Bool, refresh: Bool = false) async {
+        if case .loading = qrState { return }
         if case .loaded = balanceState, !refresh { return }
         if demo {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--demo-slow-card-balance") {
+                balanceState = .loading(nil)
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+            }
+            #endif
             switch DemoDataState.current {
             case .normal, .empty:
                 defaults.set(126.35, forKey: cacheKey)
@@ -63,43 +87,79 @@ final class CampusCardViewModel: ObservableObject {
             return
         }
         let requestID = UUID()
+        balanceRequestTask?.cancel()
         latestBalanceRequestID = requestID
         let cached = cachedBalance
         balanceState = .loading(cached)
+        let task = Task { [api] in try await api.cardBalance(allowsInteractiveLogin: false) }
+        balanceRequestTask = task
         do {
-            let value = try await api.cardBalance(allowsInteractiveLogin: false)
+            let value = try await task.value
             guard latestBalanceRequestID == requestID else { return }
+            balanceRequestTask = nil
             defaults.set(value, forKey: cacheKey)
             balanceState = .loaded(value)
         } catch {
             guard latestBalanceRequestID == requestID else { return }
+            balanceRequestTask = nil
             balanceState = .failed(error.localizedDescription, cached)
         }
+    }
+
+    func prefetchQRCode(demo: Bool) async {
+        await loadQRCode(demo: demo)
+        if case .failed = qrState { await load(demo: demo) }
     }
 
     func loadQRCode(demo: Bool, force: Bool = false) async {
         if case .loading = qrState { return }
         if !force {
             switch qrState {
-            case .loaded, .failed:
-                return
+            case .loaded:
+                if let qrLoadedAt, (0..<Self.maximumQRCodeAge).contains(now().timeIntervalSince(qrLoadedAt)) {
+                    return
+                }
+            case .failed: return
             case .idle, .loading:
                 break
             }
         }
+        // Opening or refreshing a payment code takes precedence over a passive balance read.
+        balanceRequestTask?.cancel()
+        balanceRequestTask = nil
+        latestBalanceRequestID = nil
+        let requestID = UUID()
+        latestQRRequestID = requestID
+        qrLoadedAt = nil
         qrState = .loading
+        let task = Task(priority: .userInitiated) { [api] in
+            if demo { return "AHUTONG-DEMO-PAYMENT-CODE" }
+            return try await api.cardQRCode()
+        }
+        qrRequestTask = task
         do {
-            let payload: String
-            if demo {
-                payload = "AHUTONG-DEMO-PAYMENT-CODE"
-            } else {
-                payload = try await api.cardQRCode()
-            }
+            let payload = try await task.value
+            guard latestQRRequestID == requestID else { return }
+            qrRequestTask = nil
+            qrLoadedAt = now()
             qrState = .loaded(payload)
-            if !demo { await load(demo: false, refresh: true) }
+            await load(demo: demo, refresh: true)
         } catch {
+            guard latestQRRequestID == requestID else { return }
+            qrRequestTask = nil
             qrState = .failed(error.localizedDescription)
         }
+    }
+
+    func invalidateQRCode() {
+        latestQRRequestID = nil
+        qrRequestTask?.cancel()
+        qrRequestTask = nil
+        qrLoadedAt = nil
+        qrState = .idle
+        latestBalanceRequestID = nil
+        balanceRequestTask?.cancel()
+        balanceRequestTask = nil
     }
 
     func refreshQRCodeAndBalance(demo: Bool) async {
@@ -113,6 +173,7 @@ final class CampusCardViewModel: ObservableObject {
 }
 
 struct CampusCardPanel: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: CampusCardViewModel
     @State private var showsQRCode = false
@@ -134,7 +195,21 @@ struct CampusCardPanel: View {
         .frame(height: showsQRCode ? nil : 140)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .task { await model.load(demo: demo) }
+        .task { await model.prefetchQRCode(demo: demo) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await model.prefetchQRCode(demo: demo) }
+            } else if phase == .background {
+                model.invalidateQRCode()
+            }
+        }
+        .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
+            guard scenePhase == .active, showsQRCode || showsFullQRCode else { return }
+            Task { await model.loadQRCode(demo: demo) }
+        }
+        .onDisappear {
+            if !showsFullQRCode { model.invalidateQRCode() }
+        }
         .fullScreenCover(isPresented: $showsFullQRCode) {
             ZStack {
                 Color.black.opacity(0.82).ignoresSafeArea()

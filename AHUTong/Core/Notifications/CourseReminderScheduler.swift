@@ -49,7 +49,7 @@ actor SystemNotificationScheduler: NotificationScheduling {
             content.title = request.title
             content.body = request.body
             content.sound = .default
-            let components = Calendar.current.dateComponents(
+            let components = ScheduleCalendar.campus.dateComponents(
                 [.year, .month, .day, .hour, .minute, .timeZone],
                 from: request.date
             )
@@ -60,17 +60,11 @@ actor SystemNotificationScheduler: NotificationScheduling {
 }
 
 struct CourseReminderPlanner: Sendable {
-    private let startTimes = [
-        1: (8, 0), 2: (8, 50), 3: (9, 50), 4: (10, 40), 5: (11, 30),
-        6: (14, 0), 7: (14, 50), 8: (15, 50), 9: (16, 40), 10: (17, 30),
-        11: (19, 0), 12: (19, 50), 13: (20, 40)
-    ]
-
     func requests(
         courses: [Course],
         currentWeek: Int,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = ScheduleCalendar.campus
     ) -> [CourseReminderRequest] {
         let weekday = calendar.component(.weekday, from: now)
         let monday = calendar.date(byAdding: .day, value: -((weekday + 5) % 7), to: calendar.startOfDay(for: now)) ?? now
@@ -79,8 +73,7 @@ struct CourseReminderPlanner: Sendable {
             let week = currentWeek + dayOffset / 7
             let dayOfWeek = dayOffset % 7 + 1
             return courses.filter { $0.weekday == dayOfWeek && $0.occurs(inWeek: week) }.compactMap { course in
-                guard let time = startTimes[course.startPeriod],
-                      let start = calendar.date(bySettingHour: time.0, minute: time.1, second: 0, of: day),
+                guard let start = ScheduleCalendar.startTime(period: course.startPeriod, on: day, calendar: calendar),
                       let reminder = calendar.date(byAdding: .minute, value: -10, to: start),
                       reminder > now else { return nil }
                 return CourseReminderRequest(
@@ -112,7 +105,7 @@ actor CourseReminderCoordinator {
         courses: [Course],
         currentWeek: Int,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = ScheduleCalendar.campus
     ) async throws -> Bool {
         if !enabled {
             try await scheduler.replaceCourseReminders(with: [])

@@ -339,11 +339,8 @@ actor CampusAuthenticatedClient {
                     retryPolicy: retryPolicy
                 )
             }
-            if retryPolicy.allowsAutomaticRetry {
-                if url.host?.lowercased() != "adwmh.ahu.edu.cn" {
-                    await campusAPI.invalidateStoredSession()
-                }
-            }
+            // An expired downstream session after one renewal does not prove
+            // credentials were rejected. Preserve them for the next attempt.
             throw CampusWebError.unauthorized
         }
         let acceptedRedirect = !followsRedirects && (300..<400).contains(response.statusCode)

@@ -16,6 +16,10 @@ struct ScheduleWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ScheduleWidgetEntry) -> Void) {
+        if context.isPreview {
+            completion(placeholder(in: context))
+            return
+        }
         let now = Date()
         completion(ScheduleWidgetEntry(date: now, snapshot: ScheduleWidgetSnapshotStore.loadSharedSnapshot().resolved(at: now)))
     }
@@ -50,6 +54,8 @@ struct AHUTongScheduleWidgetView: View {
                 status("登录后显示课表", symbol: "person.crop.circle.badge.exclamationmark")
             case .expired:
                 status("登录已失效", symbol: "exclamationmark.arrow.circlepath")
+            case .sharingUnavailable:
+                status("当前安装无法共享课表，请打开安大通查看添加指引", symbol: "square.stack.3d.up.slash")
             case .empty:
                 status("本周暂无课程", symbol: "calendar.badge.checkmark")
             case .ready:
@@ -65,7 +71,7 @@ struct AHUTongScheduleWidgetView: View {
     }
 
     private var compactCourses: some View {
-        let systemWeekday = Calendar.current.component(.weekday, from: entry.date)
+        let systemWeekday = ScheduleCalendar.campus.component(.weekday, from: entry.date)
         let weekday = systemWeekday == 1 ? 7 : systemWeekday - 1
         let remaining = entry.snapshot.courses.filter {
             $0.weekday == weekday && endTime(period: $0.endPeriod, on: entry.date) > entry.date
@@ -87,25 +93,24 @@ struct AHUTongScheduleWidgetView: View {
     }
 
     private func startTime(period: Int, on date: Date) -> Date {
-        let values = [1: (8, 0), 2: (8, 50), 3: (9, 50), 4: (10, 40), 5: (11, 30), 6: (14, 0), 7: (14, 50), 8: (15, 50), 9: (16, 40), 10: (17, 30), 11: (19, 0), 12: (19, 50), 13: (20, 40)]
-        let value = values[period] ?? (0, 0)
-        return Calendar.current.date(bySettingHour: value.0, minute: value.1, second: 0, of: date) ?? date
+        ScheduleCalendar.startTime(period: period, on: date) ?? date
     }
 
     private func endTime(period: Int, on date: Date) -> Date {
-        Calendar.current.date(byAdding: .minute, value: 45, to: startTime(period: period, on: date)) ?? date
+        ScheduleCalendar.endTime(period: period, on: date) ?? date
     }
 
     private var scheduleGrid: some View {
-        Grid(horizontalSpacing: 4, verticalSpacing: 4) {
+        let days = entry.snapshot.courses.contains { $0.weekday > 5 } ? 1...7 : 1...5
+        return Grid(horizontalSpacing: 4, verticalSpacing: 4) {
             GridRow {
-                ForEach(1...5, id: \.self) { day in
+                ForEach(days, id: \.self) { day in
                     Text("周\(chineseWeekday(day))").font(.caption2).frame(maxWidth: .infinity)
                 }
             }
             ForEach(Array(entry.snapshot.courses.prefix(family == .systemLarge ? 10 : 5))) { course in
                 GridRow {
-                    ForEach(1...5, id: \.self) { day in
+                    ForEach(days, id: \.self) { day in
                         if day == course.weekday {
                             Text(course.name)
                                 .font(.caption2.bold())

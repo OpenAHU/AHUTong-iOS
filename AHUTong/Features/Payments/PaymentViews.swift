@@ -134,6 +134,7 @@ struct CardRechargeView: View {
                 }
             }
         }
+        .paymentKeyboardDismissal()
         .task {
             await coordinator.resumePendingOrder()
             await accountModel.load()
@@ -363,6 +364,7 @@ struct BathroomPaymentView: View {
             showsPasswordDialog = false
         }
         .paymentValidationAlert($validationMessage)
+        .paymentKeyboardDismissal()
     }
 
     private var lookupCard: some View {
@@ -727,6 +729,7 @@ struct ElectricityPaymentView: View {
             Text("您确定要将累计充值金额清零吗？此操作不可撤销。")
         }
         .paymentValidationAlert($validationMessage)
+        .paymentKeyboardDismissal()
     }
 
     private var locationCard: some View {
@@ -1132,6 +1135,25 @@ struct AndroidPaymentDialog<Content: View, Actions: View>: View {
             .frame(maxWidth: 350)
             .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .padding(24)
+        }
+    }
+}
+
+extension View {
+    /// Number and phone pads have no Return key. Keep confirmation controls
+    /// reachable without requiring a successful interactive scroll gesture.
+    func paymentKeyboardDismissal() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil, from: nil, for: nil
+                    )
+                }
+                .accessibilityIdentifier("payment.keyboard.done")
+            }
         }
     }
 }

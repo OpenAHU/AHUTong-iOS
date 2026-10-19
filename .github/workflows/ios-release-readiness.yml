@@ -150,6 +150,7 @@ jobs:
           test -x "$widget/AHUTongWidget"
           test -f "$app/PrivacyInfo.xcprivacy"
           test -f "$widget/PrivacyInfo.xcprivacy"
+          python3 scripts/verify-widget-bundle.py "$app"
           plutil -lint "$app/Info.plist" "$app/PrivacyInfo.xcprivacy"
           plutil -lint "$widget/Info.plist" "$widget/PrivacyInfo.xcprivacy"
           if strings "$app/AHUTong" | grep -E 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' >/dev/null; then

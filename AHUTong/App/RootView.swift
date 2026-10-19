@@ -24,13 +24,13 @@ struct RootView: View {
     var body: some View {
         Group {
             if !onboardingModel.isLoaded {
-                AndroidSplashView()
+                AppSplashView()
             } else if !onboardingModel.consent.isComplete {
                 NavigationStack {
                     OnboardingView(model: onboardingModel)
                 }
             } else if appModel.sessionState == .loading {
-                AndroidSplashView()
+                AppSplashView()
             } else if appModel.sessionState == .signedOut {
                 LoginView(appModel: appModel, onboardingModel: onboardingModel)
             } else {
@@ -40,7 +40,11 @@ struct RootView: View {
                             destination(for: tab)
                         }
                         .tabItem {
-                            Label(tab.title, systemImage: tab.systemImage)
+                            Label {
+                                Text(tab.title)
+                            } icon: {
+                                Image(tab.iconAssetName).renderingMode(.template)
+                            }
                                 .accessibilityIdentifier("tab.\(tab.rawValue)")
                         }
                         .tag(tab)
@@ -200,20 +204,19 @@ private struct AndroidParityRootBackground: View {
     }
 }
 
-private struct AndroidSplashView: View {
+struct AppSplashView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 24) {
-            ZStack {
-                Capsule(style: .continuous)
-                    .fill(AndroidParityPalette.surface(colorScheme))
-                Image(systemName: "a.circle.fill")
-                    .font(.system(size: 104, weight: .bold))
-                    .foregroundStyle(AndroidParityPalette.brand)
-            }
-            .frame(width: 136, height: 136)
-            .padding(4)
+            Image("AppMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 136, height: 136)
+                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .padding(4)
+                .accessibilityLabel("安大通应用图标")
+                .accessibilityIdentifier("splash.app-icon")
 
             Text("安大通")
                 .font(.largeTitle)
@@ -225,4 +228,8 @@ private struct AndroidSplashView: View {
 }
 #Preview {
     RootView()
+}
+
+#Preview("开屏") {
+    AppSplashView()
 }

@@ -66,6 +66,7 @@ final class AppModel: ObservableObject {
     private let experienceScheduleStore: ExperienceScheduleStore
     private let defaults: UserDefaults
     private let accountCacheCleaner: @Sendable () async -> Void
+    private var sessionGeneration = UUID()
     static let experienceEnabledKey = "session.experience-enabled"
 
     init(
@@ -97,8 +98,15 @@ final class AppModel: ObservableObject {
         privacyDecision: PrivacyConsentDecision = .accepted,
         demoSession: Bool = false
     ) async {
+        let generation = UUID()
+        sessionGeneration = generation
         if demoSession {
             sessionState = .authenticated(User(name: "测试同学", studentID: "AB220001"))
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--demo-slow-session-validation") {
+                try? await Task.sleep(for: .seconds(10))
+            }
+            #endif
             return
         }
         guard privacyDecision == .accepted else {
@@ -117,13 +125,16 @@ final class AppModel: ObservableObject {
         }
         do {
             guard let snapshot = try await sessionStore.load() else {
+                guard sessionGeneration == generation else { return }
                 sessionState = .signedOut
                 return
             }
             do {
                 try await campusAPI.initialize(cookiesJSON: snapshot.cookiesJSON)
+                guard sessionGeneration == generation else { return }
                 if CampusCookieSnapshotPolicy.isLegacyNativeDump(snapshot.cookiesJSON) {
                     let flatCookies = try await campusAPI.cookiesFlat()
+                    guard sessionGeneration == generation else { return }
                     guard let decoded = try? JSONDecoder().decode(
                         [CampusCookie].self, from: Data(flatCookies.utf8)
                     ), !decoded.isEmpty else {
@@ -133,37 +144,50 @@ final class AppModel: ObservableObject {
                         user: snapshot.user, cookiesJSON: flatCookies
                     ))
                 }
+                guard sessionGeneration == generation else { return }
+                // The local identity and cookies are ready. Network validation may
+                // take tens of seconds and must not hold the launch screen open.
+                reauthenticationMessage = nil
+                sessionState = .authenticated(snapshot.user)
                 do {
-                    _ = try await campusAPI.currentWeek()
+                    try await campusAPI.validateSession(scope: .academic)
                 } catch CampusCoreError.unauthorized {
+                    guard sessionGeneration == generation else { return }
                     try await refreshCoordinator.refresh(scope: .academic) { [campusAPI] in
                         try await campusAPI.refreshSession(scope: .academic)
                     }
+                    guard sessionGeneration == generation else { return }
                     do {
-                        _ = try await campusAPI.currentWeek()
+                        try await campusAPI.validateSession(scope: .academic)
                     } catch CampusCoreError.unauthorized {
-                        await campusAPI.invalidateStoredSession()
-                        throw CampusCoreError.credentialsRejected
+                        guard sessionGeneration == generation else { return }
+                        throw CampusCoreError.sessionRefreshDeferred
                     }
                 }
                 let refreshedSnapshot = try await sessionStore.load()
+                guard sessionGeneration == generation else { return }
                 reauthenticationMessage = nil
                 sessionState = .authenticated(refreshedSnapshot?.user ?? snapshot.user)
             } catch CampusCoreError.credentialsUnavailable {
+                guard sessionGeneration == generation else { return }
                 await requireReauthentication()
             } catch CampusCoreError.credentialsRejected {
+                guard sessionGeneration == generation else { return }
                 await rejectCredentials(for: snapshot.user.studentID)
             } catch {
                 // Transport failures and 5xx responses are not proof that the
                 // Keychain session is invalid. Preserve offline access.
+                guard sessionGeneration == generation else { return }
                 sessionState = .authenticated(snapshot.user)
             }
         } catch {
+            guard sessionGeneration == generation else { return }
             sessionState = .signedOut
         }
     }
 
     func completeWebLogin(_ result: CampusWebAuthenticationResult) async throws {
+        sessionGeneration = UUID()
         guard let credentials = result.credentials else {
             throw CampusWebAuthenticationError.credentialsUnavailable
         }
@@ -173,7 +197,10 @@ final class AppModel: ObservableObject {
             password: credentials.password
         )
         let previous = try? await sessionStore.load()
-        let existingCookies = previous.flatMap {
+        let sameAccount = previous.flatMap {
+            StudentIDCanonicalizer.canonical($0.user.studentID) == canonicalID ? $0 : nil
+        }
+        let existingCookies = sameAccount.flatMap {
             try? JSONDecoder().decode([CampusCookie].self, from: Data($0.cookiesJSON.utf8))
         } ?? []
         let merged = CampusCookieMerger.merge(existing: existingCookies, incoming: result.cookies)
@@ -193,7 +220,9 @@ final class AppModel: ObservableObject {
         }
         do {
             try await credentialStore.save(normalizedCredentials)
-            try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: cookies))
+            // Validation may rotate the school cookies; keep the resulting jar.
+            let validatedCookies = try await campusAPI.dumpCookies()
+            try await sessionStore.save(CampusSessionSnapshot(user: user, cookiesJSON: validatedCookies))
         } catch {
             try? await credentialStore.removeCredentials(for: canonicalID)
             try? await sessionStore.clear()
@@ -237,6 +266,7 @@ final class AppModel: ObservableObject {
     }
 
     func enterExperienceMode(preserveSchedule: Bool = true) async {
+        sessionGeneration = UUID()
         let snapshot = try? await sessionStore.load()
         if preserveSchedule, let studentID = snapshot?.user.studentID {
             await experienceScheduleStore.preserveAccountCache(userID: studentID)
@@ -256,12 +286,14 @@ final class AppModel: ObservableObject {
     }
 
     func prepareForRealLogin() async {
+        sessionGeneration = UUID()
         defaults.set(false, forKey: Self.experienceEnabledKey)
         reauthenticationMessage = nil
         sessionState = .signedOut
     }
 
     func signOut() async {
+        sessionGeneration = UUID()
         if case let .authenticated(user) = sessionState {
             try? await credentialStore.removeCredentials(for: user.studentID)
         }
@@ -289,12 +321,14 @@ final class AppModel: ObservableObject {
     }
 
     func requireReauthentication() async {
+        sessionGeneration = UUID()
         try? await sessionStore.clear()
         reauthenticationMessage = "登录信息需要更新，请重新登录一次"
         sessionState = .signedOut
     }
 
     private func rejectCredentials(for studentID: String) async {
+        sessionGeneration = UUID()
         try? await credentialStore.removeCredentials(for: studentID)
         try? await sessionStore.clear()
         reauthenticationMessage = "保存的登录信息已失效，请重新登录"

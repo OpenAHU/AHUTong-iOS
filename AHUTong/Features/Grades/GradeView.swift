@@ -21,6 +21,7 @@ final class GradeViewModel: ObservableObject {
     @Published private(set) var selectedProfileID = ""
     @Published private(set) var rank: CampusGradeRankInfo?
     @Published private(set) var profileErrors: [String: String] = [:]
+    @Published private(set) var refreshMessage: String?
     private let api: any CampusCoreAPI
     private let cache: JSONStore<GradeCache>
     private var reports: [String: CampusGradeReport] = [:]
@@ -41,6 +42,7 @@ final class GradeViewModel: ObservableObject {
     func load(demo: Bool = false) async {
         state = .loading
         profileErrors = [:]
+        refreshMessage = nil
         if demo {
             switch DemoDataState.current {
             case .normal:
@@ -92,7 +94,11 @@ final class GradeViewModel: ObservableObject {
             profileErrors = loadedErrors
             apply(fresh)
         } catch {
-            if cached == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
+            if cached == nil {
+                state = .failed(AppErrorState(message: error.localizedDescription))
+            } else {
+                refreshMessage = "刷新失败，当前显示上次保存的成绩。\(error.localizedDescription)"
+            }
         }
     }
 
@@ -191,6 +197,12 @@ struct GradeView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     header
+                    if let message = model.refreshMessage {
+                        Label(message, systemImage: "exclamationmark.arrow.circlepath")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("grades.cached-warning")
+                    }
                     if !isSearching { profileSelector }
                     if case let .loaded(report) = model.state {
                         if !isSearching {

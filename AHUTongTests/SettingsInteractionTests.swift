@@ -50,4 +50,21 @@ final class SettingsInteractionTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: "evaluation.preset.v1"))
         XCTAssertTrue(defaults.bool(forKey: "unrelated"))
     }
+
+    func testRetiredDemoSwitchAndFixedClockAreRemovedWithoutTouchingSchedule() throws {
+        let suite = "retired-demo-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "debug.mock.enabled")
+        defaults.set("loading", forKey: "debug.mock.scenario")
+        defaults.set(1_784_023_200, forKey: "debug.mock.time")
+        defaults.set("{}", forKey: "debug.mock.endpoint.schedule")
+        defaults.set("enabled", forKey: "debug.gray.home_edit")
+        defaults.set(true, forKey: "schedule.show-all")
+
+        RetiredPreferenceCleaner.clean(defaults: defaults)
+
+        XCTAssertFalse(defaults.dictionaryRepresentation().keys.contains { $0.hasPrefix("debug.") })
+        XCTAssertTrue(defaults.bool(forKey: "schedule.show-all"))
+    }
 }

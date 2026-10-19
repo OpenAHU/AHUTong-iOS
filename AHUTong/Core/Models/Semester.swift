@@ -61,7 +61,7 @@ struct Semester: Codable, Equatable, Hashable, Sendable {
         return nil
     }
 
-    static func current(date: Date = Date(), calendar: Calendar = .current) -> Semester {
+    static func current(date: Date = Date(), calendar: Calendar = ScheduleCalendar.campus) -> Semester {
         let year = calendar.component(.year, from: date)
         let month = calendar.component(.month, from: date)
         let startYear = month < 9 ? year - 1 : year
