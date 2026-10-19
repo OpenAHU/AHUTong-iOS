@@ -289,6 +289,7 @@ struct ScheduleView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: ScheduleViewModel
     @State private var selectedWeek = 1
+    @State private var loadedSemesterPreview: Bool?
     @State private var selectedCourse: Course?
     @State private var showSettings = false
     @State private var showsScheduleImporter = false
@@ -338,7 +339,10 @@ struct ScheduleView: View {
             .scrollIndicators(.hidden)
         }
         .task(id: previewNextSemester) {
-            selectedWeek = 1
+            if loadedSemesterPreview != previewNextSemester {
+                selectedWeek = 1
+                loadedSemesterPreview = previewNextSemester
+            }
             await model.load(demo: AppRuntime.isDemoSession, previewNext: previewNextSemester)
         }
         .onChange(of: model.currentWeek) { oldWeek, newWeek in
