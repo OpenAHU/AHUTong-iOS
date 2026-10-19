@@ -119,10 +119,15 @@ struct CampusCardPanel: View {
     @State private var showsFullQRCode = false
     @State private var previousBrightness: CGFloat?
     private let demo: Bool
+    private let paymentCodeRequestID: UUID?
     private let onRecharge: () -> Void
 
-    init(api: any CampusCoreAPI, userID: String, demo: Bool, onRecharge: @escaping () -> Void) {
+    init(
+        api: any CampusCoreAPI, userID: String, demo: Bool,
+        paymentCodeRequestID: UUID? = nil, onRecharge: @escaping () -> Void
+    ) {
         self.demo = demo
+        self.paymentCodeRequestID = paymentCodeRequestID
         self.onRecharge = onRecharge
         _model = StateObject(wrappedValue: CampusCardViewModel(api: api, userID: userID))
     }
@@ -135,6 +140,11 @@ struct CampusCardPanel: View {
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .task { await model.load(demo: demo) }
+        .task(id: paymentCodeRequestID) {
+            guard paymentCodeRequestID != nil else { return }
+            showsQRCode = true
+            await model.loadQRCode(demo: demo, force: true)
+        }
         .fullScreenCover(isPresented: $showsFullQRCode) {
             ZStack {
                 Color.black.opacity(0.82).ignoresSafeArea()

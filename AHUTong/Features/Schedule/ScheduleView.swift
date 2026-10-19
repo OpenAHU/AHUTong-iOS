@@ -73,6 +73,7 @@ final class ScheduleViewModel: ObservableObject {
     private let semester: Semester
     private let accessMode: ScheduleAccessMode
     private let experienceStore: ExperienceScheduleStore
+    private let shortcutStore: ScheduleShortcutStore
 
     init(
         api: any CampusCoreAPI,
@@ -83,6 +84,7 @@ final class ScheduleViewModel: ObservableObject {
         self.api = api
         self.accessMode = accessMode
         self.experienceStore = experienceStore
+        shortcutStore = ScheduleShortcutStore(userID: userID)
         let store = AppPersistence.migratingDefaults()
         let scopedStore = UserScopedStore(store: store, userID: userID)
         currentRepository = ScheduleRepository(
@@ -130,7 +132,8 @@ final class ScheduleViewModel: ObservableObject {
                 semester: previewNext ? semester.next : semester
             )
             try Task.checkCancellation()
-            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? 1)
+            let loadedWeek = previewNext ? nil : (try? await api.currentWeek())
+            currentWeek = previewNext ? 1 : (loadedWeek ?? 1)
             source = result.source
             state = .loaded(result.courses)
             try? await experienceStore.save(
@@ -139,7 +142,13 @@ final class ScheduleViewModel: ObservableObject {
                 currentWeek: currentWeek,
                 updatesCurrentWeek: !previewNext
             )
-            if !previewNext { await updateSystemIntegrations(courses: result.courses) }
+            if !previewNext {
+                try? await shortcutStore.record(
+                    courses: result.courses, semester: semester,
+                    currentWeek: loadedWeek, source: result.source
+                )
+                await updateSystemIntegrations(courses: result.courses)
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -162,14 +171,21 @@ final class ScheduleViewModel: ObservableObject {
             try Task.checkCancellation()
             source = result.source
             state = .loaded(result.courses)
-            currentWeek = previewNext ? 1 : ((try? await api.currentWeek()) ?? currentWeek)
+            let loadedWeek = previewNext ? nil : (try? await api.currentWeek())
+            currentWeek = previewNext ? 1 : (loadedWeek ?? currentWeek)
             try? await experienceStore.save(
                 courses: result.courses,
                 semester: previewNext ? semester.next : semester,
                 currentWeek: currentWeek,
                 updatesCurrentWeek: !previewNext
             )
-            if !previewNext { await updateSystemIntegrations(courses: result.courses) }
+            if !previewNext {
+                try? await shortcutStore.record(
+                    courses: result.courses, semester: semester,
+                    currentWeek: loadedWeek, source: result.source
+                )
+                await updateSystemIntegrations(courses: result.courses)
+            }
         } catch is CancellationError {
             return
         } catch {

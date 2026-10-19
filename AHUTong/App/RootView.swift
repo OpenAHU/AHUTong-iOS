@@ -9,6 +9,9 @@ struct RootView: View {
     @StateObject private var grayGate = GrayFeatureGateModel()
     @StateObject private var toastCenter = AppToastCenter()
     @State private var restoredConsentKey = ""
+    @StateObject private var shortcutNavigation = ShortcutNavigation.shared
+    @State private var homeNavigationID = UUID()
+    @State private var paymentCodeRequestID: UUID?
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -39,6 +42,7 @@ struct RootView: View {
                         NavigationStack {
                             destination(for: tab)
                         }
+                        .id(tab == .home ? homeNavigationID.uuidString : tab.rawValue)
                         .tabItem {
                             Label(tab.title, systemImage: tab.systemImage)
                                 .accessibilityIdentifier("tab.\(tab.rawValue)")
@@ -63,9 +67,16 @@ struct RootView: View {
             await restoreForCurrentConsent()
         }
         .onChange(of: onboardingModel.consent) { _, _ in
-            Task { await restoreForCurrentConsent() }
+            Task {
+                await restoreForCurrentConsent()
+                handleShortcutRequest()
+            }
         }
         .onOpenURL { url in
+            if let destination = ShortcutDestination(url: url) {
+                shortcutNavigation.request(destination)
+                return
+            }
             guard url.scheme == "ahutong" else { return }
             if url.host == "schedule" {
                 selectedTab = .schedule
@@ -73,10 +84,18 @@ struct RootView: View {
         }
         .tint(themeTint)
         .onChange(of: appModel.sessionState) { _, state in
+            switch state {
+            case .authenticated: break
+            default: paymentCodeRequestID = nil
+            }
             if case .experience = state, !availableTabs.contains(selectedTab) {
                 selectedTab = .schedule
             }
+            handleShortcutRequest()
             Task { await reloadGrayGate() }
+        }
+        .onChange(of: shortcutNavigation.pendingRequest, initial: true) { _, _ in
+            handleShortcutRequest()
         }
         .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
             Task { await reloadGrayGate() }
@@ -105,7 +124,11 @@ struct RootView: View {
     private func destination(for tab: AppTab) -> some View {
         switch tab {
         case .home:
-            HomeView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled) {
+            HomeView(
+                appModel: appModel,
+                homeEditEnabled: grayGate.homeEditEnabled,
+                paymentCodeRequestID: paymentCodeRequestID
+            ) {
                 selectedTab = .schedule
             }
         case .schedule:
@@ -118,6 +141,24 @@ struct RootView: View {
         case .settings:
             SettingsView(onboardingModel: onboardingModel, appModel: appModel)
         }
+    }
+
+    private func handleShortcutRequest() {
+        guard onboardingModel.consent.isComplete,
+              let request = shortcutNavigation.pendingRequest else { return }
+        switch appModel.sessionState {
+        case .loading, .signedOut:
+            // Keep a cold-start request until setup and a real login finish.
+            return
+        case .experience:
+            selectedTab = .settings
+            toastCenter.show("付款码需要登录真实校园账号，请先登录")
+        case .authenticated:
+            paymentCodeRequestID = request.id
+            homeNavigationID = UUID()
+            selectedTab = .home
+        }
+        shortcutNavigation.consume(request)
     }
 
     private var themeTint: Color {

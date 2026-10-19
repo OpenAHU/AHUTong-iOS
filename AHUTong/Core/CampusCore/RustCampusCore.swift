@@ -169,8 +169,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
 
     func currentWeek() async throws -> Int {
         let data = try await authenticatedRequest(path: "/schedule/current-week")
-        let object = try JSONSerialization.jsonObject(with: data)
-        return Self.findWeek(in: object) ?? 1
+        return try TeachingWeekParser.parse(data)
     }
 
     func exams() async throws -> [CampusExam] {
@@ -326,10 +325,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         switch scope {
         case .academic:
             let data = try await request(path: "/schedule/current-week")
-            let object = try JSONSerialization.jsonObject(with: data)
-            guard Self.findWeek(in: object) != nil else {
-                throw CampusCoreError.invalidResponse
-            }
+            _ = try TeachingWeekParser.parse(data)
         case .campusCard:
             _ = try cardParser.balance(from: try await request(path: "/ycard/balance"))
         }
@@ -429,19 +425,6 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         }
     }
 
-    private static func findWeek(in value: Any) -> Int? {
-        if let number = value as? NSNumber { return number.intValue }
-        if let string = value as? String, let week = Int(string) { return week }
-        if let dictionary = value as? [String: Any] {
-            for key in ["week", "currentWeek", "teachWeek"] {
-                if let week = findWeek(in: dictionary[key] as Any) { return week }
-            }
-            for nested in dictionary.values {
-                if let week = findWeek(in: nested) { return week }
-            }
-        }
-        return nil
-    }
 }
 
 struct RustScheduleRemoteDataSource: ScheduleRemoteDataSource {

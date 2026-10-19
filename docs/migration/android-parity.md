@@ -13,8 +13,9 @@
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
 | 严格完成定义 | 16 / 25（64.0%）；AUTH-02、CARD-01、CONTENT-01 的首次无感校园服务登录仍待 macOS 和授权账号真机验证，PREF-01 及 PAY-01～05 保留各自验证边界 |
-| 当前分支 | `codex/ios-authorization-prep` |
-| 最近更新 | 2026-09-24 |
+| 当前分支 | `codex/ios-shortcuts-payment-schedule` |
+| 最近更新 | 2026-10-19 |
+| 本轮 iOS 增强 | SYS-03：App Intents 打开付款码、查询指定日期本机课表；单独记录，不增加 Android 对齐的 25 个切片分母；Sentry 按用户要求后续再接入 |
 
 ## 1. 目标与边界
 
@@ -194,6 +195,7 @@ iOS/
 | 文件打开 / 保存相册 | Quick Look、Share Sheet、PhotoKit 权限与降级路径 |
 | APK 更新 | 不迁移；使用 App Store / TestFlight |
 
+
 ## 6. 关键决策
 
 | ID | 决策 | 当前状态 | 影响 / 解除条件 |
@@ -222,6 +224,8 @@ iOS/
 | P7 | 发布 | Release Archive、签名、权限文案、隐私清单、TestFlight/App Store 清单完整 | 工程收口（OPS-01 完成；正式许可证、付费签名/TestFlight 不属于当前 Personal Team 方案） |
 
 ## 8. 功能迁移矩阵
+
+快捷指令验证证据 `E-20261019-01`：本轮新增 SYS-03，属于 iOS 平台增强，不改变 Android 25 个保留切片的完成口径。`ScheduleShortcutTests` 18 项覆盖指定日期/精确周次、周日跨周、已同步空课表与未同步/损坏数据、学期前后边界、跨时区/非公历设备、缓存新鲜度、延迟缓存不覆盖新同步、账号切换/退出、体验账户和首次设置；同时修复当前周接口无法解析时静默退回第 1 周及把状态码当周次的问题。Xcode 27.0（27A266a）在 iOS 26.5 的 `AHUTong Shortcuts QA` 模拟器上，使用本地运行签名通过 406 个单元测试、3 个快捷指令 UI smoke（冷启动、从其他 Tab/二级页面重复进入、体验账户拦截），既有 `AppShellUITests/testAndroidParityPrimaryScreens` 亦通过。首次未签名测试包只有既有 Keychain fixture 因缺少 entitlement 返回 -34018；改用本地运行签名后全量单测通过，不修改或跳过该测试。未签名 iphoneos Release 构建成功，产物包含两个 App Intents、两个 App Shortcuts、必填日期参数、文字输出、中文本地化短语与带“安大通”名称的非空 Siri SSU 语料；三张专项 UI 截图已目视检查。使用方法和离线/日期范围见 `docs/shortcuts.md`。物理 iPhone 的实际重签包发现、中文 Siri 调用、锁屏身份验证、真实校园二维码与前台自动续期仍需用户设备验收；未接入 Sentry 或其他新增统计 SDK，未执行扣款。
 
 单次手动登录改造待验证证据 `E-20260924-05`：用户明确要求只在 App 官方登录页手动输入一次，ADWMH 首次会话与后续过期一律在前台隐藏完成。iOS 移除“必须已有校园卡 Cookie”的门槛，隐藏 WebView 加载校方页面后可从空 Cookie 请求验证码并接收校方新会话 Cookie，再将当次图片送已披露的远端 OCR，向校方提交并用余额只读接口验证；只读校园卡/失物招领请求自动续期一次，写请求不自动重放。失败保留原凭据、展示脱敏原因并允许重试，不自动打开第二登录页。隐私政策升级 v4，原 v3 同意须重新确认；iOS commit `0daa63f` 的 CI `35959882196` 通过 388 个单元测试与 10 个 UI 测试；未签名 IPA #123 run `35959882205`（6,764,221 bytes，SHA-256 `DBEA710E81011A32380BBF466AE6E8E307AE42BA517F19CBC13BD270F9BB4BD7`）和 Release Archive `35959882197` 成功。授权 iPhone 真机仍待验证。
 
@@ -294,6 +298,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证 | 2026-09-24 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 已完成 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整 | `ScheduleWidgetSnapshotTests` 5 项含跨周推进；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证 | 2026-09-24 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护及 ActivityKit 锁屏与灵动岛倒计时；用户设置保留，Debug 测试页已删除 | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归 | 2026-09-23 |
+| SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-01`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过 | 2026-09-23 |
 
 ### 8.1 全量复查收口（2026-07-15）
@@ -578,3 +583,4 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 2026-09-24 | CARD-007 / AUTH-019 | 真机 Toast 明确失败于获取校方验证码图片；隐藏 WebView 继续建立同域会话，图片改为带该会话 Cookie 的原生 GET，禁止跟随重定向并合并响应 Cookie，再将图片送远端 OCR。失败 Toast 细分为缺少会话、网络、重定向、HTTP 状态和非图片 | Android `develop` 的 `/remind/authcode` 原生 GET 契约；URLProtocol 本地取图与 Cookie 测试、`git diff --check`；macOS CI `35956666651` 384 单测、10 UI 全绿；真机已进入远端 OCR，最终自动续期仍待验证 | iOS `f250654` |
 | 2026-09-24 | CARD-008 / AUTH-020 | #121 真机反馈显示验证码图片已成功获取，故障转移到远端 OCR；按图片格式选择 multipart MIME，JPEG 对齐 Android `image/jpg`，OCR 等待从 10 秒增至 20 秒、隐藏总超时为 30 秒，并细分安全错误 Toast | Android `develop` `AhuTong` 的 HTTPS `/ocr/captcha`、`result` 字段与 `image/jpg` 上传；URLProtocol 本地 OCR 失败分类测试；最终 CI `35956666651` 384 单测、10 UI 全绿；#122 真机曾遇临时网络失败，随后 Safari 已恢复，用户确认无需继续修复 | iOS `b2009ef` |
 | 2026-09-24 | CARD-009 / AUTH-021 | 用户明确将“一次手动输入”限定为 App 官方首次登录；取消校园服务首次需历史 Cookie/手填验证码的门槛，前台隐藏 WebView 从首次 ADWMH 请求起使用 Keychain 凭据、同域取图及远端 OCR，失败提示重试而不弹第二登录页。隐私政策升级 v4 并要求重新确认，读请求最多重试一次，写请求不自动重放 | 无 Cookie 建立验证码会话、纯策略、首屏余额/付款码、失物招领和隐私版本测试；CI `35959882196` 388 单测、10 UI 全绿，IPA #123 与 Archive 成功；授权真机待验证 | iOS `0daa63f` |
+| 2026-10-19 | SYS-03 / SCH-013 | 增加 App Intents 付款码快捷打开和指定日期本机课表查询，严格区分无课、无数据及学期越界；账号隔离快照与体验课表查询、可靠周次解析、冷/热启动路由和中文 Siri 语料随包交付；Sentry 留待后续 | Xcode 27.0 本地 406 单测、3 专项 UI、既有主界面 smoke 通过；iphoneos Release/动作元数据/中文短语检查通过，物理机侧载与 Siri 待验，见 `E-20261019-01` | iOS 本次提交 |
