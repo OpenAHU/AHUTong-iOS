@@ -43,10 +43,21 @@ final class ScheduleShortcutTests: XCTestCase {
         let morning = course(id: "early", period: 1, location: "")
         let later = course(id: "late", period: 6)
         let value = query(snapshot(courses: [later, morning, morning]), "2026-09-14")
-        XCTAssertTrue(value.text.contains("共2门课程"))
+        XCTAssertEqual(value.text.components(separatedBy: "\n").count, 4)
         XCTAssertTrue(value.text.contains("地点待公布"))
-        XCTAssertLessThan(value.text.range(of: "第1—2节")!.lowerBound, value.text.range(of: "第6—7节")!.lowerBound)
-        XCTAssertTrue(value.text.contains("上次同步"))
+        XCTAssertLessThan(value.text.range(of: "1–2节")!.lowerBound, value.text.range(of: "6–7节")!.lowerBound)
+        XCTAssertTrue(value.text.contains("同步于"))
+    }
+
+    func testCompactSpokenResultUsesCampusDateWeekAndActualSyncTime() {
+        let calendar = CampusScheduleCalendar.calendar
+        let sync = calendar.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 17, minute: 26))!
+        let value = ShortcutScheduleSnapshot.make(
+            semester: semester, courses: [course(day: 2)], currentWeek: 7,
+            referenceDate: sync, updatedAt: sync
+        )!
+        XCTAssertEqual(query(value, "2026-10-20").text,
+                       "2026.10.20 第7周周二\n1–2节 测试课程 博学南楼 A301\n同步于10.19 17:26")
     }
 
     func testMalformedCoursesAreNotReportedAsAnEmptyDay() {

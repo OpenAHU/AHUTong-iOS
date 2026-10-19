@@ -52,6 +52,32 @@
           }
         }
       }
+    },
+    "打开${applicationName}付款": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "打开${applicationName}付款"
+            ]
+          }
+        }
+      }
+    },
+    "打开${applicationName}校园码": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "打开${applicationName}校园码"
+            ]
+          }
+        }
+      }
     }
   },
   "version": "1.1"

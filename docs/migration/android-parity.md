@@ -8,12 +8,12 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.1 集成维护、实时活动与快捷指令：保留原生导航和会话修复，修复课表 Tab 返回回跳并拆分 CI；设置新增快捷指令系统入口与简洁引导，见 E-20261019-04/05 |
+| 当前焦点 | 1.0.2 交互优化与功能集成：校园码展开/放大、圆形周指示器、设置 Tab 返回根页、偏好中的 Siri 引导、随机双排贡献者头像；实时活动与会话维护一并集成，见 E-20261019-04/05/06 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前分支 | `codex/ios-integration-1.0.1` |
+| 当前分支 | `codex/ios-integration-1.0.2` |
 | 最近更新 | 2026-10-19 |
 
 ## 1. 目标与边界
@@ -297,9 +297,19 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 的路径、面包屑、LFS、下载完整性、凭据边界与 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者；设置行统一轻触觉、明暗和短缩放，减弱动态效果保留非动态反馈；本轮修正偏好入口高亮越界并精简数据清理/更新文案 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；原生入口与反馈实际模拟器复核见 `E-20261019-02` | 2026-10-19 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整；本轮修正共享容器缺失状态、统一签名共享组、组件预览和周末列，重签后列表缺失仍待设备确认 | `ScheduleWidgetSnapshotTests` 6 项含跨周推进与共享容器缺失；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；可滚动、可展开的小组件指引及大字体复核见 `E-20261019-02` | 2026-10-19 |
-| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护及 ActivityKit 锁屏与灵动岛倒计时；用户设置保留，Debug 测试页已删除；提醒统一校园时区，ActivityKit 按真实结束节次计算；系统上课/下课双倒计时在后台跨上课继续更新，独立偏好、同课复用、当天与八小时边界；当前没有 APNs | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
+| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天与八小时边界保留；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录 | 2026-10-19 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 单测及三组 UI 独立运行并分别保存结果，避免整套 30 分钟超时；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
+
+2026-10-19 1.0.2 对上述矩阵的增量更新（覆盖对应旧界面描述，验证见 E-20261019-06）：
+
+| 切片 | 本轮更新 | 状态边界 |
+| --- | --- | --- |
+| CARD-01 / HOME-01 | 校园码弹簧展开，二维码最高 150pt；减弱动态效果保留淡入与反馈 | 客户端实现；真实扫码仍待设备验收 |
+| SCH-02 | 等宽高圆形周指示器，单双位数字同尺寸，Dynamic Type 同步放大 | 模拟器 UI 回归 |
+| PREF-01 | Siri 入口移入偏好；设置 Tab 返回根页；Himekawa 与随机双排头像，单击暂停/显示贡献、双击 QQ | 保留既有贡献；物理机轻触觉待验 |
+| SYS-02 | 岛卡仅课前显示，上课结束；不保留课中/课后卡片；通知独立 | 后台预算不足会提前结束，未接入 APNs；强制终止场景待实机 |
+| SYS-03 | Siri 手动开关/系统设置入口、内置付款短语与无应用名快捷指令创建引导；课表紧凑回复 | 本机数据边界保留；系统 Siri 语音识别待实机 |
 
 ### 8.1 全量复查收口（2026-07-15）
 
@@ -521,7 +531,7 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 本机验证：独立 `AHUTong Integration 1.0.1 QA` 模拟器，Xcode 27 / iOS 26.5；425 单测 + 3 UI 全部通过，结果见 `build/integration-1.0.1/Maintenance.xcresult`；CI YAML、shell 语法和 AppShell 用例分组覆盖检查通过。不在真实账号模拟器上运行自动化。
 
 
-### E-20261019-05：1.0.1 功能集成与快捷指令引导
+### E-20261019-05：1.0.1 阶段功能集成与快捷指令引导（由 1.0.2 继续交付）
 
 - 集成精确源提交：维护 PR #4 `fcd4fb9`（包含 #3 `cc3dd5f`）、实时活动 `89975b7`、快捷指令 PR #5 `5f92a1c`。其余远端历史功能分支均已被原 `main` 包含；所有其他本地 iOS worktree 已只读复核，无额外未提交功能。#2 保持未合并。
 - 冲突处理：保留严格教学周解析、按账号/学期的离线周锚点、旧请求隔离、二维码优先预取与过期刷新、Android 同款原生 Tab 图标、设置反馈；快捷指令快照接入同一可靠周次和注入存储。实时活动复用校园时区和真实节次，不重新引入设备时区或时刻表副本。
@@ -532,6 +542,19 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 最终中文系统按钮 UI 通过 `Guide-branding.xcresult` 复验，截图 `build/integration-1.0.1/shortcuts-guide.png` 已目视检查；`device-final-build.log` 为最终 Release iphoneos 构建成功证据。两项带系统身份验证的 App Intents、两个 App Shortcuts、必填日期和中文 NLU 元数据检查通过。
 - 最终本机包 `build/integration-1.0.1/AHUTong-1.0.1-2-unsigned.ipa`：6,942,774 bytes；SHA-256 `793f8afa8a0fbbda3ac02bde0901e523648c46203f1ec2a7a85d32d99b13032a`；ZIP 完整性和 Widget BundleID、版本、可执行文件、共享组结构检查通过。此为未签名包，重签后仍需保留 Widget 并复验签名与 App Group。
 - 本机 Xcode 27 / iOS 26.5 独立模拟器：`Integrated.xcresult` 456 单测 + 9 UI 全部通过，覆盖后台跨上课倒计时、独立偏好、付款码冷/热启动与体验拦截、设置引导、日期和 Tab 返回；`Final-recheck.xcresult` 补充校园默认时区/离线快照断言后 457 单测 + 1 设置 UI 通过；真实账号此前的成绩/考试刷新、校园卡与网费只读查询、前后台及冷启动保持登录均已检查；自然隔天过期、实际重签后的 Widget/Siri 与物理机实时活动仍需设备验收。浴室/房间余额按用户要求未测试。
+
+### E-20261019-06：1.0.2 交互优化、Siri 引导与开发者页面
+
+- 首页校园卡从余额到校园码使用弹簧展开及淡入，内联二维码从 138pt 增至最高 150pt，并随卡片宽度收缩；减弱动态效果使用短淡入，保留反馈。原小于 300pt 的紧凑面板边界继续有效。
+- 课表周数字使用等宽高 44pt 的 `Circle`，随 Dynamic Type 同步放大；单双位数字不再改变外形。原生 `TabView` 保留，再次选择设置时重建设置根导航栈；课表所选周状态不受影响。
+- “Siri 与快捷指令”移入偏好设置，提供系统 App 设置跳转、Siri 手动开关说明与原生 `ShortcutsLink`。新增“打开安大通付款”“打开安大通校园码”，保留“打开安大通付款码”。Apple 要求 App Shortcut 短语包含 applicationName，故无应用名的“打开校园码”由用户新建同名快捷指令承载，页面说明如何添加“打开付款码”动作并命名。
+- 课表输出为 `2026.10.20 第7周周二`、逐门节次/课程/地点、`同步于10.19 17:26`；仍区分无数据、无课、超出学期、同步时间未知，保持账号隔离与校园时区。
+- 新增 Himekawa（QQ 1705945565，贡献“iOS开发与维护”），保留全部既有贡献内容与 QQ 头像/联系 URL。每次进入随机分两排，第一排向左、第二排向右，以 12pt/s 循环；单击反馈并暂停该排、展示贡献，提供继续按钮，双击打开 QQ，未安装时显示号码。减弱动态效果/VoiceOver 改为手动横向浏览，VoiceOver 另有“打开 QQ”操作；离开页面与非前台暂停计时。
+- 用户进一步要求岛卡只用于课前：调度拒绝课中课程，上课截止即结束活动，不显示下课倒计时、课程进度或结束卡片。前台截止任务与 ActivityKit 状态观察共同清理；后台申请有限执行时间，在预算耗尽前提前结束，避免进入课中后继续占位。`staleDate` 是内容失效边界，不冒充系统自动结束 API；目前没有 APNs，进程被强制终止后的准点移除仍属物理设备边界。普通课前通知与此偏好独立。
+- 旧用例调整：Siri 入口位于设置首页、固定贡献者视觉列表、课表的“共几门课程/上次同步”长文断言已被本轮需求替代；本次用户改动也明确淘汰了“课中继续下课倒计时”的旧断言，替换为前台系统结束状态与后台截止消失测试。数据、安全与账号隔离断言保留。历史测试时间预算问题仍记录在 E-20261019-05。
+- 本机 `Final.xcresult` 的 461 单测和 13 UI 通过；最新课前策略 `Preclass-recheck.xcresult` 的 462 单测、前台截止/后台消失/独立偏好测试通过。UI 首轮定位/手势假设失败保留于 `Polish.xcresult` 和 `Polish-recheck.xcresult`，未把失败轮计为通过。云端旧提交 `a9f9b8a` 的设置组倒计时定位与服务组菜单选中等待失败已保留，修正岛卡元素定位和菜单选中后置条件，最终 CI 与产物另行记录。
+- 已获用户明确允许，在登录过的 iPhone 17 Pro 上保留数据和 Keychain 覆盖更新；真实会话仍有效，首页、校园码展开和偏好中的 Siri 引导已手动检查，没有执行充值、卸载、清空或在该设备运行自动化重置。
+- 平台说明：[Apple WWDC25 短语要求](https://developer.apple.com/videos/play/wwdc2025/244/)、[快捷指令通过名称运行](https://support.apple.com/zh-cn/HT209055)、[Siri App 权限路径](https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/)。App 与 Widget 统一为 1.0.2 (3)，不改变 AIO gitlink。
 
 ## 12. 风险与阻断项
 
@@ -735,3 +758,5 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 | 2026-10-19 | SYS-005 | 合入付款码和指定日期课表 App Intents；保留维护分支的周次验证、缓存锚点、请求隔离和二维码预取 | 原分支 `5f92a1c`，集成回归见 E-20261019-05 | 本次集成 |
 
 | 2026-10-19 | REL-002 / SYS-03 / PREF-012 | 集成维护、实时活动与快捷指令；设置新增原生系统快捷指令入口和简洁引导；App/Widget 升为 1.0.1 (2) | 见 E-20261019-05 | 本次提交 |
+
+| 2026-10-19 | UI-010 / PREF-013 / SYS-006 / REL-003 | 校园码展开与放大、课表正圆周次、设置返回根页、偏好内 Siri 引导、紧凑课表回复与随机双排头像；新增 Himekawa；岛卡改为仅课前显示，App/Widget 统一 1.0.2 (3) | 实现及验证见 E-20261019-06；旧断言按新需求更新，保留失败记录与真机边界 | 本次提交 |

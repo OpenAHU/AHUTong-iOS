@@ -134,8 +134,8 @@ final class AppShellUITests: XCTestCase {
         contributors.tap()
         XCTAssertTrue(app.descendants(matching: .any)["contributors.screen"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["加入我们"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["s1nk"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["MuxYang（25级）"].exists)
+        XCTAssertTrue(app.buttons["contributors.avatar.468766131"].firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["contributors.avatar.1705945565"].firstMatch.exists)
         waitForRendering()
         capture("16-contributors", app: app)
 

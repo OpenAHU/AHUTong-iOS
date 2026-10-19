@@ -300,6 +300,7 @@ final class ScheduleViewModel: ObservableObject {
 }
 
 struct ScheduleView: View {
+    @ScaledMetric(relativeTo: .headline) private var weekIndicatorSize: CGFloat = 44
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: ScheduleViewModel
@@ -415,9 +416,9 @@ struct ScheduleView: View {
                                 Text("\(week)")
                                     .font(.headline.bold())
                                     .foregroundStyle(selectedWeek == week ? Color.white : Color.primary)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Capsule())
+                                    .frame(width: weekIndicatorSize, height: weekIndicatorSize)
+                                    .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Circle())
+                                    .contentShape(Circle())
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("schedule.week.\(week)")

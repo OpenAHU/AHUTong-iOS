@@ -36,7 +36,7 @@ struct AHUTongShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: OpenPaymentCodeIntent(),
-            phrases: ["打开\(.applicationName)付款码", "用\(.applicationName)打开付款码"],
+            phrases: ["打开\(.applicationName)付款", "打开\(.applicationName)付款码", "用\(.applicationName)打开付款码", "打开\(.applicationName)校园码"],
             shortTitle: "打开付款码",
             systemImageName: "qrcode"
         )

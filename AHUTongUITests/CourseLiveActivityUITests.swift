@@ -43,7 +43,7 @@ final class CourseLiveActivityUITests: XCTestCase {
     }
 
     @MainActor
-    func testCourseCountdownContinuesInBackgroundAcrossClassStart() throws {
+    func testPreclassActivityDisappearsByClassStartInBackground() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-session", "--demo-live-activity"]
@@ -59,40 +59,50 @@ final class CourseLiveActivityUITests: XCTestCase {
         let status = app.staticTexts["live-activity.fixture.status"]
         XCTAssertTrue(status.waitForExistence(timeout: 8))
         XCTAssertEqual(status.label, "已创建")
+        let screenFrame = app.frame
         XCUIDevice.shared.press(.home)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        // Expand the island on the dedicated iPhone 17 Pro QA device.
-        springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).press(forDuration: 1.5)
-        let endCountdown = springboard.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", "距下课")).firstMatch
-        XCTAssertTrue(endCountdown.waitForExistence(timeout: 8))
-        capture("live-activity-before-start", springboard: springboard)
-        // Widget accessibility labels are archived snapshots. Read the actual
-        // rendered timer pixels rather than expecting those labels to tick.
-        let initialTimers = try renderedCountdowns(springboard)
-        Thread.sleep(forTimeInterval: 3)
-        let backgroundCaptureTime = Date()
-        let backgroundTimers = try renderedCountdowns(springboard)
-        XCTAssertLessThan(backgroundTimers[0], initialTimers[0], "上课倒计时应在后台继续变化")
-        XCTAssertLessThan(backgroundTimers[1], initialTimers[1], "下课倒计时应在后台继续变化")
-        capture("live-activity-counting-in-background", springboard: springboard)
-        // OCR can itself take tens of seconds on a hosted runner. Wait only
-        // until the deadline observed in the screenshot, not a fixed delay
-        // after recognition. Keep the fixture alive through slow captures.
-        let classStart = backgroundCaptureTime.addingTimeInterval(TimeInterval(backgroundTimers[0]))
-        Thread.sleep(forTimeInterval: max(0, classStart.timeIntervalSinceNow + 3))
+        capture("live-activity-collapsed", springboard: springboard)
+        // SpringBoard sometimes exposes extra windows in physical pixels on CI.
+        // Its application frame then exceeds the logical screen, so normalized
+        // application coordinates can miss the island entirely. Target the
+        // observed island element, with a logical-screen coordinate fallback.
+        let island = springboard.descendants(matching: .any).matching(identifier: "regular.view").firstMatch
+        if island.waitForExistence(timeout: 5) {
+            island.press(forDuration: 1.5)
+        } else {
+            springboard.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: screenFrame.midX, dy: screenFrame.height * 0.037))
+                .press(forDuration: 1.5)
+        }
         let startCountdown = springboard.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS %@", "距上课")).firstMatch
-        XCTAssertTrue(startCountdown.exists)
-        XCTAssertTrue(endCountdown.exists)
-        let afterStartTimers = try renderedCountdowns(springboard)
-        XCTAssertEqual(afterStartTimers[0], 0, "越过上课时间后，上课倒计时必须停在零")
-        capture("live-activity-after-start", springboard: springboard)
-        Thread.sleep(forTimeInterval: 3)
-        let laterTimers = try renderedCountdowns(springboard)
-        XCTAssertEqual(laterTimers[0], 0, "上课倒计时不能开始正向计时")
-        XCTAssertLessThan(laterTimers[1], afterStartTimers[1], "上课后，下课倒计时必须继续变化")
-        capture("live-activity-after-start-still-counting", springboard: springboard)
+        XCTAssertTrue(startCountdown.waitForExistence(timeout: 8))
+        capture("live-activity-before-start", springboard: springboard)
+        let capturedAt = Date()
+        let timers = try renderedCountdowns(springboard)
+        XCTAssertGreaterThan(timers[0], 0)
+        let deadline = capturedAt.addingTimeInterval(TimeInterval(timers[0]) + 8)
+        XCTAssertTrue(startCountdown.waitForNonExistence(timeout: max(5, deadline.timeIntervalSinceNow)))
+        XCTAssertFalse(springboard.staticTexts["距下课"].exists)
+        capture("live-activity-dismissed-in-background", springboard: springboard)
+    }
+
+    @MainActor
+    func testPreclassActivityEndsAtStartWhileAppRemainsForeground() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-session", "--demo-live-activity"]
+        app.launch()
+        defer { app.terminate() }
+        let status = app.staticTexts["live-activity.fixture.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        XCTAssertEqual(status.label, "已创建")
+        expectation(for: NSPredicate(format: "label == %@", "已结束"), evaluatedWith: status)
+        waitForExpectations(timeout: 110)
+        capture("live-activity-ended-system-state", springboard: app)
+        XCUIDevice.shared.press(.home)
+        capture("live-activity-absent-after-class-start", springboard: XCUIApplication(bundleIdentifier: "com.apple.springboard"))
     }
 
     @MainActor
@@ -109,10 +119,10 @@ final class CourseLiveActivityUITests: XCTestCase {
                   text.range(of: #"^\d{1,2}:\d{2}(:\d{2})?$"#, options: .regularExpression) != nil else { return nil }
             return (observation.boundingBox, text)
         }
-        // The two countdowns occupy the bottom numeric row of the expanded island.
-        let timers = matches.sorted { $0.0.minY < $1.0.minY }.prefix(2).sorted { $0.0.midX < $1.0.midX }
-        XCTAssertEqual(timers.count, 2, "Expanded island must render both countdowns")
-        guard timers.count == 2 else { throw CountdownRecognitionError.missingTimers }
+        // The preclass countdown is below the status-bar clock in the expanded island.
+        let timers = matches.sorted { $0.0.minY < $1.0.minY }.prefix(1).sorted { $0.0.midX < $1.0.midX }
+        XCTAssertEqual(timers.count, 1, "Expanded island must render the preclass countdown")
+        guard timers.count == 1 else { throw CountdownRecognitionError.missingTimers }
         return timers.map { value in
             value.1.split(separator: ":").reduce(0) { $0 * 60 + (Int($1) ?? 0) }
         }

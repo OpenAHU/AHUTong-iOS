@@ -1,9 +1,12 @@
 import XCTest
 
 final class PaymentLocalParityUITests: XCTestCase {
+    override func setUpWithError() throws { continueAfterFailure = false }
+
     @MainActor
     func testElectricityPasswordErrorAndChargeHistoryInteraction() {
         let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
         app.launchArguments = ["--demo-consent", "--demo-session"]
         app.launch()
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
@@ -103,10 +106,14 @@ final class PaymentLocalParityUITests: XCTestCase {
     ) {
         let menu = app.buttons[identifier]
         XCTAssertTrue(menu.waitForExistence(timeout: 3))
+        expectation(for: NSPredicate(format: "enabled == true AND hittable == true"), evaluatedWith: menu)
+        waitForExpectations(timeout: 8)
         menu.tap()
         let choice = app.buttons[option]
         XCTAssertTrue(choice.waitForExistence(timeout: 3))
         choice.tap()
+        expectation(for: NSPredicate(format: "label CONTAINS %@", option), evaluatedWith: menu)
+        waitForExpectations(timeout: 5)
     }
 
     @MainActor

@@ -11,6 +11,7 @@ struct RootView: View {
     @State private var restoredConsentKey = ""
     @StateObject private var shortcutNavigation = ShortcutNavigation.shared
     @State private var homeNavigationID = UUID()
+    @State private var settingsNavigationID = UUID()
     @State private var paymentCodeRequestID: UUID?
 
     init(
@@ -37,12 +38,12 @@ struct RootView: View {
             } else if appModel.sessionState == .signedOut {
                 LoginView(appModel: appModel, onboardingModel: onboardingModel)
             } else {
-                TabView(selection: $selectedTab) {
+                TabView(selection: tabSelection) {
                     ForEach(availableTabs) { tab in
                         NavigationStack {
                             destination(for: tab)
                         }
-                        .id(tab == .home ? homeNavigationID.uuidString : tab.rawValue)
+                        .id(navigationID(for: tab))
                         .tabItem {
                             Label {
                                 Text(tab.title)
@@ -123,7 +124,29 @@ struct RootView: View {
             Task { await rescheduleCourseRemindersIfNeeded() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await rescheduleCourseRemindersIfNeeded() } }
+            Task {
+                if phase == .active {
+                    await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: true)
+                    await rescheduleCourseRemindersIfNeeded()
+                } else if phase == .background {
+                    await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: false)
+                }
+            }
+        }
+    }
+
+    private var tabSelection: Binding<AppTab> {
+        Binding(get: { selectedTab }, set: { tab in
+            if tab == .settings { settingsNavigationID = UUID() }
+            selectedTab = tab
+        })
+    }
+
+    private func navigationID(for tab: AppTab) -> String {
+        switch tab {
+        case .home: homeNavigationID.uuidString
+        case .settings: settingsNavigationID.uuidString
+        default: tab.rawValue
         }
     }
 
@@ -158,6 +181,7 @@ struct RootView: View {
             // Keep a cold-start request until setup and a real login finish.
             return
         case .experience:
+            settingsNavigationID = UUID()
             selectedTab = .settings
             toastCenter.show("付款码需要登录真实校园账号，请先登录")
         case .authenticated:

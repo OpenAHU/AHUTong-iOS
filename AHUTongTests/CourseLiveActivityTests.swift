@@ -4,14 +4,18 @@ import XCTest
 final class CourseLiveActivityTests: XCTestCase {
     private let planner = CourseLiveActivityPlanner()
 
-    func testSelectsOngoingCourseBeforeLaterCourse() throws {
-        let plan = try XCTUnwrap(planner.nextCourse(
+    func testOngoingClassSuppressesActivitiesEvenWhenAnotherClassIsUpcoming() {
+        XCTAssertNil(planner.nextCourse(
             courses: [course(id: "later", startPeriod: 3), course(id: "ongoing")],
             currentWeek: 1, now: date(hour: 8, minute: 30), calendar: calendar
         ))
-        XCTAssertTrue(plan.courseID.hasPrefix("ongoing|"))
-        XCTAssertEqual(plan.startDate, date(hour: 8))
-        XCTAssertEqual(plan.endDate, date(hour: 9, minute: 35))
+    }
+
+    func testActivityIsOnlyEligibleBeforeStartAndNotDuringOrAfterClass() {
+        XCTAssertNotNil(planner.nextCourse(courses: [course()], currentWeek: 1, now: date(hour: 7, minute: 59), calendar: calendar))
+        for now in [date(hour: 8), date(hour: 8, minute: 30), date(hour: 9, minute: 35)] {
+            XCTAssertNil(planner.nextCourse(courses: [course()], currentWeek: 1, now: now, calendar: calendar))
+        }
     }
 
     func testEndUsesLastPeriodIncludingLongBreaks() throws {
@@ -36,14 +40,14 @@ final class CourseLiveActivityTests: XCTestCase {
         ))
     }
 
-    func testDoesNotStartAnActivityThatExpiresBeforeClassEnds() {
+    func testActivityLifetimeOnlyNeedsToReachClassStart() {
         XCTAssertNil(planner.nextCourse(
             courses: [course(startPeriod: 11)], currentWeek: 1,
             now: date(hour: 7), calendar: calendar
         ))
         XCTAssertNotNil(planner.nextCourse(
             courses: [course(startPeriod: 11)], currentWeek: 1,
-            now: date(hour: 13), calendar: calendar
+            now: date(hour: 11), calendar: calendar
         ))
     }
 
@@ -66,7 +70,7 @@ final class CourseLiveActivityTests: XCTestCase {
         XCTAssertEqual(plan.endDate, date(hour: 9, minute: 35))
     }
 
-    func testCountdownIntervalsPreserveBothDeadlinesAcrossCoding() throws {
+    func testPreclassDeadlineAndCompatibilityFieldsSurviveCoding() throws {
         let state = CourseActivityAttributes.ContentState(
             courseName: "课程", location: "A101", startDate: date(hour: 8), endDate: date(hour: 9, minute: 35)
         )
@@ -76,6 +80,9 @@ final class CourseLiveActivityTests: XCTestCase {
         XCTAssertEqual(restored.countdownInterval(to: restored.startDate).upperBound, date(hour: 8))
         XCTAssertEqual(restored.countdownInterval(to: restored.endDate).upperBound, date(hour: 9, minute: 35))
         XCTAssertLessThan(restored.countdownInterval(to: restored.startDate).lowerBound, date(hour: 7))
+        XCTAssertTrue(restored.isBeforeClass(at: date(hour: 7, minute: 59)))
+        XCTAssertFalse(restored.isBeforeClass(at: date(hour: 8)))
+        XCTAssertFalse(restored.isBeforeClass(at: date(hour: 10)))
     }
 
     func testEnablingWithoutEligibleCourseKeepsPreferenceAndClearsOldActivity() async throws {

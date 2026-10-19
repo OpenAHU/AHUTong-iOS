@@ -173,6 +173,8 @@ final class CampusCardViewModel: ObservableObject {
 }
 
 struct CampusCardPanel: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var inlineQRSize: CGFloat = 150
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: CampusCardViewModel
@@ -195,11 +197,18 @@ struct CampusCardPanel: View {
 
     var body: some View {
         Group {
-            if showsQRCode { qrCard } else { balanceCard }
+            if showsQRCode {
+                qrCard.transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            } else {
+                balanceCard.transition(.opacity)
+            }
         }
         .frame(height: showsQRCode ? nil : 140)
         .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.38, dampingFraction: 0.86), value: showsQRCode)
+        .sensoryFeedback(.selection, trigger: showsQRCode)
+        .onGeometryChange(for: CGFloat.self) { min(150, max(100, $0.size.width - 32)) } action: { inlineQRSize = $0 }
         .task { await model.prefetchQRCode(demo: demo) }
         .task(id: paymentCodeRequestID) {
             guard paymentCodeRequestID != nil else { return }
@@ -274,7 +283,9 @@ struct CampusCardPanel: View {
     private var qrCard: some View {
         VStack(spacing: 0) {
             HStack {
-                Button { showsQRCode = false } label: { Image(systemName: "arrow.left") }
+                Button { showsQRCode = false } label: { Image(systemName: "arrow.left").frame(width: 44, height: 44) }
+                    .accessibilityLabel("收起校园码")
+                    .accessibilityIdentifier("campus-card.qr-collapse")
                 Spacer()
                 if case .loaded = model.qrState {
                     Button { showsFullQRCode = true } label: {
@@ -287,7 +298,7 @@ struct CampusCardPanel: View {
             .foregroundStyle(.primary)
             .frame(height: 48)
 
-            qrImage(size: 138)
+            qrImage(size: inlineQRSize)
 
             balanceText
                 .font(.title2.bold())
@@ -295,7 +306,7 @@ struct CampusCardPanel: View {
                 .frame(maxWidth: .infinity)
 
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 20)
         .frame(maxWidth: .infinity)

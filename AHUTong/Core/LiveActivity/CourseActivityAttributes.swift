@@ -8,6 +8,8 @@ struct CourseActivityAttributes: ActivityAttributes {
         let startDate: Date
         let endDate: Date
 
+        func isBeforeClass(at date: Date) -> Bool { date < startDate }
+
         func countdownInterval(to target: Date) -> ClosedRange<Date> {
             // Bounded native timers stop at the deadline. Passing pauseTime
             // would pause immediately rather than schedule a future pause.

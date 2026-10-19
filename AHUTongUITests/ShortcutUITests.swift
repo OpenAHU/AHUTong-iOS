@@ -11,20 +11,23 @@ final class ShortcutUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
         app.tabBars.buttons["设置"].tap()
-        let entry = app.buttons["settings.shortcuts"]
+        XCTAssertFalse(app.buttons["settings.shortcuts"].exists)
+        app.buttons["settings.preferences"].tap()
+        let entry = app.buttons["preferences.shortcuts"]
         if !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 4))
         entry.press(forDuration: 0.5)
-        XCTAssertTrue(app.staticTexts["打开付款码"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.staticTexts["查询指定日期课表"].exists)
-        XCTAssertTrue(app.staticTexts["“打开安大通付款码”"].exists)
-        XCTAssertTrue(app.staticTexts["“用安大通查询课表”"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["shortcuts.open"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["先允许 Siri 调用"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["shortcuts.siri-settings"].exists)
         XCTAssertTrue(app.buttons["shortcuts.open"].label.contains("安大通"))
-        attachScreenshot(app, "settings-shortcuts-guide")
+        attachScreenshot(app, "preferences-shortcuts-permission")
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["只说“打开校园码”"].waitForExistence(timeout: 4))
+        attachScreenshot(app, "preferences-shortcuts-voice-phrases")
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["shortcuts.discovery-help"].isHittable)
-        attachScreenshot(app, "settings-shortcuts-guide-help")
+        XCTAssertTrue(app.staticTexts["查询指定日期课表"].exists)
+        attachScreenshot(app, "preferences-shortcuts-guide-help")
     }
 
     func testPaymentCodeURLOnColdStart() {

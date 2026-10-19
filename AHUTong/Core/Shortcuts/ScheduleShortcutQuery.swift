@@ -99,7 +99,7 @@ struct ScheduleShortcutResult: Equatable, Sendable {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "yyyy年M月d日 EEEE"
+        formatter.dateFormat = "yyyy.MM.dd"
         let heading = formatter.string(from: day)
         guard let snapshot,
               snapshot.courses.allSatisfy(\.isStructurallyValid),
@@ -124,21 +124,23 @@ struct ScheduleShortcutResult: Equatable, Sendable {
         }
         let freshness: String
         if let updatedAt = snapshot.updatedAt {
-            formatter.dateFormat = "M月d日 HH:mm"
-            freshness = "依据本机课表，上次同步：\(formatter.string(from: updatedAt))。如有调课，请在安大通刷新。"
+            formatter.dateFormat = "MM.dd HH:mm"
+            freshness = "同步于\(formatter.string(from: updatedAt))"
         } else {
-            freshness = "依据本机缓存课表。如有调课，请在安大通刷新。"
+            freshness = "本机缓存课表 · 同步时间未知"
         }
+        let dayHeading = "\(heading) 第\(week)周周\(["一", "二", "三", "四", "五", "六", "日"][weekday - 1])"
         guard !courses.isEmpty else {
-            return Self(status: .noClasses, text: "\(heading)，第\(week)周，当天没有课程。\n\(freshness)")
+            return Self(status: .noClasses, text: "\(dayHeading)\n当天没有课程\n\(freshness)")
         }
         let lines = courses.map { course in
             let location = course.location.trimmingCharacters(in: .whitespacesAndNewlines)
-            return "第\(course.startPeriod)—\(course.endPeriod)节，\(course.name)，\(location.isEmpty ? "地点待公布" : location)"
+            let periods = course.startPeriod == course.endPeriod ? "\(course.startPeriod)" : "\(course.startPeriod)–\(course.endPeriod)"
+            return "\(periods)节 \(course.name) \(location.isEmpty ? "地点待公布" : location)"
         }
         return Self(
             status: .courses,
-            text: (["\(heading)，第\(week)周，共\(courses.count)门课程。"] + lines + [freshness]).joined(separator: "\n")
+            text: ([dayHeading] + lines + [freshness]).joined(separator: "\n")
         )
     }
 }
