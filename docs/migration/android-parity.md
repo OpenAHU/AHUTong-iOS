@@ -13,7 +13,7 @@
 | 客户端实现覆盖 | 25 / 25（100%）；不再将教学评价计入当前 iOS 产品范围 |
 | Android 生产行为对齐 | 25 / 25（100%）；仅统计当前 iOS 保留的功能切片 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前分支 | `codex/fix/ios-maintenance-20261019` |
+| 当前分支 | `codex/ios-integration-1.0.1` |
 | 最近更新 | 2026-10-19 |
 
 ## 1. 目标与边界
@@ -298,6 +298,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者；设置行统一轻触觉、明暗和短缩放，减弱动态效果保留非动态反馈；本轮修正偏好入口高亮越界并精简数据清理/更新文案 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；原生入口与反馈实际模拟器复核见 `E-20261019-02` | 2026-10-19 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整；本轮修正共享容器缺失状态、统一签名共享组、组件预览和周末列，重签后列表缺失仍待设备确认 | `ScheduleWidgetSnapshotTests` 6 项含跨周推进与共享容器缺失；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；可滚动、可展开的小组件指引及大字体复核见 `E-20261019-02` | 2026-10-19 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已完成 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护及 ActivityKit 锁屏与灵动岛倒计时；用户设置保留，Debug 测试页已删除；提醒统一校园时区，ActivityKit 按真实结束节次计算；当前没有 APNs | `CourseReminderPlannerTests` 含跨周规划，ActivityKit App/Widget device 编译、IPA/Archive 与最终 CI 见 `E-20260715-04`；物理机投递保留为部署回归；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
+| SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-01`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 单测及三组 UI 独立运行并分别保存结果，避免整套 30 分钟超时；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 
 ### 8.1 全量复查收口（2026-07-15）
@@ -511,6 +512,23 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 实际后台截图：距上课 `0:37 → 0:31`，距下课 `2:07 → 2:01`；越过上课后前者保持 `0:00`，后者继续 `1:14 → 1:10`，课程进度随时间推进。无账号、无网络和无 APNs 参与此 UI fixture；fixture 仅 Debug 加显式测试启动参数可用，不提供用户 Debug 入口。
 - 首轮 UI 发现 `pauseTime` 会立即暂停，已移除；测试启动/点击/辅助功能快照问题已根据截图与界面树修正，最终证据采用上述独立通过的用例。物理 iPhone 的锁屏、常亮屏刷新节奏、灵动岛和系统权限仍需真机回归。
 
+### E-20261019-04：合并前回归修复
+
+- PR #4 包含 #3 的精确尖端 `cc3dd5f`；#2 按用户要求暂不合并。
+- 修复课表 `.task` 随 Tab 重现而无条件重置第 1 周；仅首次加载或切换学期重置，Tab 返回保留用户所选周。
+- 增加 `StartupScheduleUITests.testSelectedWeekSurvivesTabReentry`，覆盖选第 2 周、切换设置、回到课表、日期保持及回到当前周。
+- CI 拆为 `unit`、`ui-navigation`、`ui-services`、`ui-settings` 四个独立任务，关闭测试并行以隔离共享偏好，使用独立 iPhone 17 Pro；每组 40 分钟并分别保留 xcresult。新增 UI 类自动进入 settings 分组。
+- 本机验证：独立 `AHUTong Integration 1.0.1 QA` 模拟器，Xcode 27 / iOS 26.5；425 单测 + 3 UI 全部通过，结果见 `build/integration-1.0.1/Maintenance.xcresult`；CI YAML、shell 语法和 AppShell 用例分组覆盖检查通过。不在真实账号模拟器上运行自动化。
+
+
+### E-20261019-05：1.0.1 功能集成与快捷指令引导
+
+- 集成精确源提交：维护 PR #4 `fcd4fb9`（包含 #3 `cc3dd5f`）、实时活动 `89975b7`、快捷指令 PR #5 `5f92a1c`。其余远端历史功能分支均已被原 `main` 包含；所有其他本地 iOS worktree 已只读复核，无额外未提交功能。#2 保持未合并。
+- 冲突处理：保留严格教学周解析、按账号/学期的离线周锚点、旧请求隔离、二维码优先预取与过期刷新、Android 同款原生 Tab 图标、设置反馈；快捷指令快照接入同一可靠周次和注入存储。实时活动复用校园时区和真实节次，不重新引入设备时区或时刻表副本。
+- 设置首页新增“Siri 与快捷指令”入口，引导页包含两个动作、简短口令、日期选择、本机数据来源和系统 `ShortcutsLink`，支持滚动与 Dynamic Type，沿用设置按压反馈；无 Debug/玻璃开关。
+- App 与 Widget 同步 `1.0.1 (2)`。本次为实机测试用未签名 IPA，不上传商店、不改变 AIO gitlink，不进行真实支付。
+- 本机 Xcode 27 / iOS 26.5 独立模拟器：`Integrated.xcresult` 456 单测 + 9 UI 全部通过，覆盖后台跨上课倒计时、独立偏好、付款码冷/热启动与体验拦截、设置引导、日期和 Tab 返回；最终补充校园默认时区/离线快照断言与设置回归结果待记录；真实账号此前的成绩/考试刷新、校园卡与网费只读查询、前后台及冷启动保持登录均已检查；自然隔天过期、实际重签后的 Widget/Siri 与物理机实时活动仍需设备验收。浴室/房间余额按用户要求未测试。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -705,17 +723,11 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 | 2026-10-19 | UI-008 / PREF-011 | 复核系统 TabView 四入口、无 Debug/玻璃设置、真实图标和账户位置；修复偏好行高亮越界，精简提示，删除不可达弹窗，小组件指引适应大字体 | 5 项设置单测、3 条 UI 分别通过；真实系统减弱动态效果及深色大字体截图/录屏、Release device 构建与新 IPA 结构校验见 `E-20261019-02`；真机边界保留 | 本次提交 |
 | 2026-10-19 | UI-009 / APP-003 | 按 Android 3.2.2 实际路径替换原生 Tab 的四个轮廓矢量，开屏改用 App 图标，补齐离线图标许可；开发与预览默认关闭减弱动态效果，专项后恢复关闭 | 6 单测复验全绿、3 UI 通过，真实导航截图/完整动态效果录像与深浅色开屏视图、最终 Release 及 IPA 见 `E-20261019-03`；保留首轮漏资源失败 | 本次提交 |
 
-### E-20261019-04：合并前回归修复
-
-- PR #4 包含 #3 的精确尖端 `cc3dd5f`；#2 按用户要求暂不合并。
-- 修复课表 `.task` 随 Tab 重现而无条件重置第 1 周；仅首次加载或切换学期重置，Tab 返回保留用户所选周。
-- 增加 `StartupScheduleUITests.testSelectedWeekSurvivesTabReentry`，覆盖选第 2 周、切换设置、回到课表、日期保持及回到当前周。
-- CI 拆为 `unit`、`ui-navigation`、`ui-services`、`ui-settings` 四个独立任务，关闭测试并行以隔离共享偏好，使用独立 iPhone 17 Pro；每组 40 分钟并分别保留 xcresult。新增 UI 类自动进入 settings 分组。
-- 本机验证：独立 `AHUTong Integration 1.0.1 QA` 模拟器，Xcode 27 / iOS 26.5；425 单测 + 3 UI 全部通过，结果见 `build/integration-1.0.1/Maintenance.xcresult`；CI YAML、shell 语法和 AppShell 用例分组覆盖检查通过。不在真实账号模拟器上运行自动化。
-
 
 | 2026-10-19 | SCH-008 / OPS-003 | 修复课表 Tab 重入回跳并拆分 CI，保留 #3 包含关系和 #2 暂缓决定 | 独立模拟器单测、启动/日期/Tab 回归，见 E-20261019-04 | 本次提交 |
 
 | 2026-10-19 | SYS-004 | 合入实时活动双倒计时、后台持续计时与独立偏好，沿用校园日历与真实节次 | 分支证据 E-20261019-LIVE-01，集成回归待验证 | `89975b7` 与本次集成 |
 
 | 2026-10-19 | SYS-005 | 合入付款码和指定日期课表 App Intents；保留维护分支的周次验证、缓存锚点、请求隔离和二维码预取 | 原分支 `5f92a1c`，集成回归待验证 | 本次集成 |
+
+| 2026-10-19 | REL-002 / SYS-03 / PREF-012 | 集成维护、实时活动与快捷指令；设置新增原生系统快捷指令入口和简洁引导；App/Widget 升为 1.0.1 (2) | 见 E-20261019-05 | 本次提交 |

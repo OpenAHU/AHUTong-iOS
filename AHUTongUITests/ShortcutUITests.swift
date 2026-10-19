@@ -4,6 +4,28 @@ import XCTest
 final class ShortcutUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testSettingsExplainsBothShortcutsAndProvidesSystemLink() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
+        app.tabBars.buttons["设置"].tap()
+        let entry = app.buttons["settings.shortcuts"]
+        if !entry.isHittable { app.swipeUp() }
+        XCTAssertTrue(entry.waitForExistence(timeout: 4))
+        entry.press(forDuration: 0.5)
+        XCTAssertTrue(app.staticTexts["打开付款码"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["查询指定日期课表"].exists)
+        XCTAssertTrue(app.staticTexts["“打开安大通付款码”"].exists)
+        XCTAssertTrue(app.staticTexts["“用安大通查询课表”"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["shortcuts.open"].firstMatch.exists)
+        attachScreenshot(app, "settings-shortcuts-guide")
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["shortcuts.discovery-help"].isHittable)
+        attachScreenshot(app, "settings-shortcuts-guide-help")
+    }
+
     func testPaymentCodeURLOnColdStart() {
         let app = XCUIApplication()
         app.terminate()

@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 struct SettingsView: View {
@@ -30,6 +31,15 @@ struct SettingsView: View {
                     .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
                     .padding(.horizontal, 16)
                     .accessibilityIdentifier("settings.preferences")
+                    NavigationLink {
+                        ShortcutsGuideView().androidDetailScreen()
+                    } label: {
+                        AndroidSettingRow(label: "Siri 与快捷指令", systemImage: "square.stack.3d.up")
+                            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                    }
+                    .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 32))
+                    .padding(.horizontal, 16)
+                    .accessibilityIdentifier("settings.shortcuts")
                     section("关于")
                     settingsGroup {
                         NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
@@ -87,7 +97,7 @@ struct SettingsView: View {
         .alert("更新说明", isPresented: $showUpdateLog) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("改进登录续期、成绩与考试提示、缴费输入和小组件添加指引。")
+            Text("新增 Siri 快捷指令和课程倒计时，改进登录续期、课表与小组件体验。")
         }
         .alert("检查更新", isPresented: Binding(
             get: { updateResult != nil },
@@ -178,6 +188,57 @@ struct SettingsView: View {
 
     private func settingsGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 2, content: content).clipShape(RoundedRectangle(cornerRadius: 32)).padding(.horizontal, 16)
+    }
+}
+
+private struct ShortcutsGuideView: View {
+    var body: some View {
+        AndroidScreen {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    AndroidHeader(title: "Siri 与快捷指令")
+                    Text("用一句话打开付款码，或查询某天的课表。")
+                        .foregroundStyle(.secondary)
+                    ShortcutsLink()
+                        .shortcutsLinkStyle(.automaticOutline)
+                        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
+                        .accessibilityIdentifier("shortcuts.open")
+                    guideCard(
+                        "打开付款码", icon: "qrcode",
+                        phrase: "“打开安大通付款码”",
+                        detail: "打开 App 并展开校园卡付款码，需要登录真实账号。"
+                    )
+                    guideCard(
+                        "查询指定日期课表", icon: "calendar",
+                        phrase: "“用安大通查询课表”",
+                        detail: "添加动作后，将日期设为“当前日期”或“每次询问”，也可连接“朗读文本”。"
+                    )
+                    Text("课表依据本机最近同步或导入的数据，离线也可查询；临时调课请先在 App 中刷新。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("找不到动作？先打开一次安大通，再到系统“快捷指令”中搜索“安大通”。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("shortcuts.discovery-help")
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .accessibilityIdentifier("shortcuts.guide")
+    }
+
+    private func guideCard(_ title: String, icon: String, phrase: String, detail: String) -> some View {
+        AndroidCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(title, systemImage: icon).font(.headline)
+                Text(phrase).font(.headline).foregroundStyle(.tint)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+        }
     }
 }
 

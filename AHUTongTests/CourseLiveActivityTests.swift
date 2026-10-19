@@ -56,6 +56,16 @@ final class CourseLiveActivityTests: XCTestCase {
         XCTAssertNil(planner.nextCourse(courses: [course()], currentWeek: 1, now: now, calendar: utc))
     }
 
+    func testDefaultPlannerUsesCampusTimeEvenWhenDeviceUsesUTC() throws {
+        let previous = NSTimeZone.default
+        NSTimeZone.default = TimeZone(secondsFromGMT: 0)!
+        defer { NSTimeZone.default = previous }
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-12T23:30:00Z"))
+        let plan = try XCTUnwrap(planner.nextCourse(courses: [course()], currentWeek: 1, now: now))
+        XCTAssertEqual(plan.startDate, date(hour: 8))
+        XCTAssertEqual(plan.endDate, date(hour: 9, minute: 35))
+    }
+
     func testCountdownIntervalsPreserveBothDeadlinesAcrossCoding() throws {
         let state = CourseActivityAttributes.ContentState(
             courseName: "课程", location: "A101", startDate: date(hour: 8), endDate: date(hour: 9, minute: 35)
