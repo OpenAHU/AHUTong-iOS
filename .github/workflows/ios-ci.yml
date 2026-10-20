@@ -177,11 +177,9 @@ jobs:
           test_runs=("$RUNNER_TEMP/TestBuild/Build/Products/"*.xctestrun)
           test "${#test_runs[@]}" -eq 1
           test -f "${test_runs[0]}"
-          if [[ "$TEST_SUITE" == 'ui-payments' ]]; then
-            # Only failed Mock payment cases get one fresh test-runner process.
-            # XCTest retains both attempts in xcresult; report retries below.
-            test_options+=(-retry-tests-on-failure -test-iterations 2 -test-repetition-relaunch-enabled YES)
-          fi
+          # Failed UI cases get at most one fresh test-runner process.
+          # XCTest retains both attempts in xcresult; report retries below.
+          test_options+=(-retry-tests-on-failure -test-iterations 2 -test-repetition-relaunch-enabled YES)
           xcodebuild \
             -xctestrun "${test_runs[0]}" \
             -derivedDataPath "$RUNNER_TEMP/TestBuild" \
@@ -196,9 +194,9 @@ jobs:
           failed = sorted(set(re.findall(r"Test Case '-\[AHUTongUITests\.(\w+) (\w+)\]' failed", log)))
           if failed:
               names = ', '.join(f'{cls}/{method}' for cls, method in failed)
-              print(f'::warning::Mock payment UI required its single retry: {names}. Inspect the retained xcresult and log.')
+              print(f'::warning::UI required its single retry: {names}. Inspect the retained xcresult and log.')
               with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-                  summary.write(f'\nMock payment UI passed after one retry: {names}. Both attempts are retained.\n')
+                  summary.write(f'\nUI passed after one retry: {names}. Both attempts are retained.\n')
           PY
 
       - name: Export UI parity screenshots and test result

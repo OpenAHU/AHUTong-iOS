@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require every UI test to run exactly once, then emit xcodebuild selectors."""
+"""Assign every UI test to exactly one shard, then emit xcodebuild selectors."""
 
 import argparse
 from collections import Counter
