@@ -15,4 +15,13 @@
 - `-parallel-testing-enabled NO` 使各组 UI 用例串行运行。设置组包含最多用例；课程倒计时还需等待真实截止时间，不能通过缩短等待来保持同等覆盖。
 - 此样本安装 XcodeGen 仅需 3–6 秒，产物上传为 2–17 秒，都不是主要瓶颈。
 
-优先优化方向：将倒计时用例从设置组拆为独立分片，平衡各组耗时；随后评估一次 `build-for-testing`、多组 `test-without-building` 复用构建产物。保持全部测试覆盖和独立模拟器，不以跳过测试换取更短时间。README 或纯版本元数据变更可单独设计轻量检查，行为修改继续运行完整 UI 回归。本轮只记录分析，未改变 CI 覆盖范围。
+本次优化保留全部测试覆盖和独立模拟器，实施下述构建复用与均衡分组。
+
+
+## 构建复用与分组
+
+工作流现在先执行一次 `build-for-testing`，将 `Build/Products` 与 `.xctestrun` 打为 tar 包，随后各测试 job 下载同一运行的产物，使用 `test-without-building`。tar 保留执行权限与符号链接；测试端核对 Xcode 和 Simulator SDK 版本。测试 job 不再安装 XcodeGen、编译 Rust 或拉取子模块。
+
+单元测试保持全量运行；40 条 UI 测试分为导航 7、校园服务 3、支付 8、实时活动/快捷指令 9、设置/体验 13 条。分组按既有耗时平衡，不按条数平均。`.github/ci-test-shards.json` 定义分组，`python3 scripts/ci-test-shards.py validate` 强制每条 UI 用例恰好出现一次。增加测试类时必须分配分组；已按类分配的新方法自动进入同组。
+
+各组仍使用独立模拟器、组内串行；保留 509 条 Swift 单测、40 条 UI、25 条 Rust 测试、支付保护、截图与 xcresult。Python 检查由 16 条增至 22 条。共享构建包保留 1 天，测试证据保留 7 天。

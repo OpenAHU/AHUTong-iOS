@@ -1,0 +1,30 @@
+{
+  "ui-navigation": [
+    "AppShellUITests/testAndroidParityPrimaryScreens",
+    "AppShellUITests/testScheduleSupportsHorizontalWeekPaging",
+    "AppShellUITests/testDeclinedPrivacyUsesScheduleOnlyExperienceAccount",
+    "AppShellUITests/testNativeNavigationBarEdgeAndContentPopGestures",
+    "AppShellUITests/testCompactHomeWeatherOpensWeatherInsteadOfSchedule",
+    "PhoneBookUITests"
+  ],
+  "ui-services": [
+    "AppShellUITests/testAndroidParityLoginAndReminderSystemStates",
+    "AppShellUITests/testAndroidParityLoadingEmptyAndErrorStates",
+    "AppShellUITests/testNetworkRechargeAndCMBPreference"
+  ],
+  "ui-payments": [
+    "AppShellUITests/testAndroidParityPaymentsAndOperations",
+    "PaymentLocalParityUITests",
+    "CampusCardPriorityUITests",
+    "ReadOnlyServicesUITests",
+    "StartupScheduleUITests"
+  ],
+  "ui-live-activity": [
+    "CourseLiveActivityUITests",
+    "ShortcutUITests"
+  ],
+  "ui-settings": [
+    "SettingsExperienceUITests",
+    "ExperiencePolishUITests"
+  ]
+}
