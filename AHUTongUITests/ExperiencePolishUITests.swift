@@ -15,6 +15,38 @@ final class ExperiencePolishUITests: XCTestCase {
         return app
     }
 
+    func testWidgetInstallationGuideCanBeReadAndDismissed() {
+        // This in-memory demo session never logs in, logs out, or writes Keychain.
+        let app = launch(additionalArguments: ["--demo-session"])
+        app.tabBars.buttons["小工具"].tap()
+        let add = app.buttons["tools.widget-add"]
+        for _ in 0..<5 {
+            if add.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(add.isHittable)
+        add.tap()
+        let done = app.buttons["tools.widget-guide.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["添加课表小组件"].exists)
+        app.swipeUp()
+        let issue = app.descendants(matching: .any)["tools.widget-guide.sharing-issue"].firstMatch
+        if issue.exists {
+            let share = app.buttons["tools.widget-guide.share-check"]
+            for _ in 0..<3 {
+                if share.isHittable { break }
+                app.swipeUp()
+            }
+            XCTAssertTrue(share.isHittable)
+            share.tap()
+            XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
+            app.swipeDown()
+        }
+        capture(app, "widget-installation-guide")
+        done.tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 3))
+    }
+
     func testSettingsTabReturnsToRootAfterLeavingDetailViaShortcut() {
         let app = launch()
         app.tabBars.buttons["设置"].tap()

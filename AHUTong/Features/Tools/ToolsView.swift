@@ -64,8 +64,16 @@ struct ToolsView: View {
                         Label("点击左上角“编辑”或“+”", systemImage: "plus.circle")
                         Label("搜索“安大通课表”，选择尺寸并添加", systemImage: "rectangle.grid.2x2")
                         Label("长按已添加的课表，选“编辑小组件”调整深浅色", systemImage: "circle.lefthalf.filled")
-                        if ScheduleWidgetSnapshotStore.sharedContainerURL == nil {
-                            Label("当前安装无法同步课表，请安装支持小组件的签名版本。", systemImage: "exclamationmark.triangle")
+                        if let issue = ScheduleWidgetSnapshotStore.sharing.issue {
+                            Label(issue.guidance, systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("tools.widget-guide.sharing-issue")
+                            ShareLink(item: ScheduleWidgetSnapshotStore.sharing.diagnosticSummary) {
+                                Label("分享安装检查", systemImage: "square.and.arrow.up")
+                            }
+                            .accessibilityIdentifier("tools.widget-guide.share-check")
+                            Text("检查仅包含小组件和共享组配置，不含账号、课表或设备标识。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }

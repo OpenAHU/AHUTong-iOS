@@ -70,13 +70,11 @@ struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
 
 actor ScheduleWidgetSnapshotStore {
     static let shared = ScheduleWidgetSnapshotStore()
-    nonisolated static var appGroup: String {
-        Bundle.main.object(forInfoDictionaryKey: "AHUTongAppGroupIdentifier") as? String
-            ?? "group.com.openahu.ahutong.shared"
+    nonisolated static let sharing = WidgetSharingResolution.resolve(.bundled()) {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0)
     }
-
     nonisolated static var sharedContainerURL: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+        sharing.containerURL
     }
 
     private let fileURL: URL?
