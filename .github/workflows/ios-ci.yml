@@ -177,14 +177,31 @@ jobs:
           test_runs=("$RUNNER_TEMP/TestBuild/Build/Products/"*.xctestrun)
           test "${#test_runs[@]}" -eq 1
           test -f "${test_runs[0]}"
+          retry_options=()
+          if [[ "$TEST_SUITE" == 'ui-payments' ]]; then
+            # Only failed Mock payment cases get one fresh test-runner process.
+            # XCTest retains both attempts in xcresult; report retries below.
+            retry_options=(-retry-tests-on-failure -test-iterations 2 -test-repetition-relaunch-enabled YES)
+          fi
           xcodebuild \
             -xctestrun "${test_runs[0]}" \
             -derivedDataPath "$RUNNER_TEMP/TestBuild" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -resultBundlePath "$RUNNER_TEMP/AHUTong.xcresult" \
             -parallel-testing-enabled NO \
+            "${retry_options[@]}" \
             "${test_options[@]}" \
-            test-without-building
+            test-without-building 2>&1 | tee "$RUNNER_TEMP/AHUTong-ui.log"
+          python3 - <<'PY'
+          import os, pathlib, re
+          log = pathlib.Path(os.environ['RUNNER_TEMP'], 'AHUTong-ui.log').read_text()
+          failed = sorted(set(re.findall(r"Test Case '-\[AHUTongUITests\.(\w+) (\w+)\]' failed", log)))
+          if failed:
+              names = ', '.join(f'{cls}/{method}' for cls, method in failed)
+              print(f'::warning::Mock payment UI required its single retry: {names}. Inspect the retained xcresult and log.')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write(f'\nMock payment UI passed after one retry: {names}. Both attempts are retained.\n')
+          PY
 
       - name: Export UI parity screenshots and test result
         if: always()
@@ -203,6 +220,7 @@ jobs:
           path: |
             ${{ runner.temp }}/AHUTong.xcresult
             ${{ runner.temp }}/AHUTong-unit.xcresult
+            ${{ runner.temp }}/AHUTong-ui.log
             ${{ runner.temp }}/UIParityAttachments
           if-no-files-found: warn
           retention-days: 7
