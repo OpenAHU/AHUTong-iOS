@@ -27,10 +27,49 @@ def signed_entitlements(bundle):
     return plistlib.loads(result.stdout)
 
 
-def verify(app, require_signature):
+def profile_entitlements(bundle):
+    profile = bundle / "embedded.mobileprovision"
+    if not profile.exists():
+        return None
+    result = subprocess.run(
+        ["security", "cms", "-D", "-i", str(profile)],
+        check=True, capture_output=True,
+    )
+    return plistlib.loads(result.stdout).get("Entitlements", {})
+
+
+def verify_shared_group(configured, app_entitlements, widget_entitlements, app_profile, widget_profile):
+    team_key = "com.apple.developer.team-identifier"
+    group_key = "com.apple.security.application-groups"
+    team = app_entitlements.get(team_key)
+    if not team or team != widget_entitlements.get(team_key):
+        raise ValueError("App and Widget must have the same nonempty signing Team ID")
+    group = configured
+    if app_profile is not None and widget_profile is not None:
+        if any(profile.get(team_key) != team for profile in (app_profile, widget_profile)):
+            raise ValueError("Signing Team ID and provisioning profiles must agree")
+        common = set(app_profile.get(group_key, [])) & set(widget_profile.get(group_key, []))
+        common = {value for value in common if value.startswith("group.") and "*" not in value and "$(" not in value and not any(character.isspace() for character in value)}
+        if configured in common and configured in app_entitlements.get(group_key, []):
+            group = configured
+        elif len(common) == 1:
+            group = next(iter(common))
+        else:
+            raise ValueError("Profiles must allow the configured group or exactly one common App Group")
+    for entitlements, profile in ((app_entitlements, app_profile), (widget_entitlements, widget_profile)):
+        if group not in entitlements.get(group_key, []):
+            raise ValueError("Signed App/Widget do not both authorize the resolved App Group")
+        if profile is not None and group not in profile.get(group_key, []):
+            raise ValueError("Provisioning profile does not allow the resolved App Group")
+    return group
+
+
+def verify(app, require_signature, require_entitlements=False):
     app_info = read_plist(app / "Info.plist")
     candidates = []
     for bundle in (app / "PlugIns").glob("*.appex"):
+        if not bundle.is_dir():
+            continue
         info = read_plist(bundle / "Info.plist")
         if info.get("NSExtension", {}).get("NSExtensionPointIdentifier") == "com.apple.widgetkit-extension":
             candidates.append((bundle, info))
@@ -57,33 +96,22 @@ def verify(app, require_signature):
     appearance = next((value for value in widget_metadata.get("enums", []) if value.get("identifier") == "ScheduleWidgetAppearance"), {})
     if {case.get("identifier") for case in appearance.get("cases", [])} != {"system", "light", "dark"}:
         raise ValueError("Widget is missing its system/light/dark appearance options")
-    signing_teams = set()
     for bundle, info in ((app, app_info), (widget, widget_info)):
         executable = bundle / info["CFBundleExecutable"]
         if not executable.is_file():
             raise ValueError("A bundle is missing its executable")
-        if require_signature:
-            entitlements = signed_entitlements(bundle)
-            team = entitlements.get("com.apple.developer.team-identifier")
-            if not team:
-                raise ValueError("A signed App/Widget has no Team ID; App Intents may not register")
-            signing_teams.add(team)
-            if group not in entitlements.get("com.apple.security.application-groups", []):
-                raise ValueError("Signed App/Widget do not both retain the configured App Group")
-            profile = bundle / "embedded.mobileprovision"
-            if profile.exists():
-                result = subprocess.run(
-                    ["security", "cms", "-D", "-i", str(profile)],
-                    check=True, capture_output=True,
-                )
-                allowed = plistlib.loads(result.stdout).get("Entitlements", {}).get("com.apple.security.application-groups", [])
-                if group not in allowed:
-                    raise ValueError("Provisioning profile does not allow the configured App Group")
-    if require_signature and len(signing_teams) != 1:
-        raise ValueError("App and Widget must be signed by the same team")
+    if require_signature:
+        verify_shared_group(group, signed_entitlements(app), signed_entitlements(widget),
+                            profile_entitlements(app), profile_entitlements(widget))
+    elif require_entitlements:
+        for bundle in (app, widget):
+            if group not in signed_entitlements(bundle).get("com.apple.security.application-groups", []):
+                raise ValueError("Re-signable App/Widget must both preserve the configured App Group declaration")
     print("PASS: embedded Widget, bundle IDs, versions, executables, shared group and App Intents metadata")
     if require_signature:
         print("PASS: signatures and shared-group entitlements (profiles checked when present)")
+    elif require_entitlements:
+        print("PASS: ad-hoc signatures preserve App Group declarations; developer re-signing is still required")
     else:
         print("Structure checks only; repeat with --require-signature after re-signing")
 
@@ -92,10 +120,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact", type=Path, help=".app bundle or .ipa file")
     parser.add_argument("--require-signature", action="store_true")
+    parser.add_argument("--require-entitlements", action="store_true", help="Check re-signable ad-hoc App Group declarations, without requiring a developer team")
     args = parser.parse_args()
     try:
         if args.artifact.is_dir():
-            verify(args.artifact, args.require_signature)
+            verify(args.artifact, args.require_signature, args.require_entitlements)
         else:
             with tempfile.TemporaryDirectory(prefix="ahutong-widget-check-") as temporary:
                 root = Path(temporary).resolve()
@@ -104,10 +133,10 @@ def main():
                         if not (root / member.filename).resolve().is_relative_to(root):
                             raise ValueError("IPA contains an unsafe archive path")
                     archive.extractall(root)
-                apps = list((root / "Payload").glob("*.app"))
+                apps = [bundle for bundle in (root / "Payload").glob("*.app") if bundle.is_dir()]
                 if len(apps) != 1:
                     raise ValueError("Expected exactly one application in IPA Payload")
-                verify(apps[0], args.require_signature)
+                verify(apps[0], args.require_signature, args.require_entitlements)
     except (OSError, ValueError, KeyError, zipfile.BadZipFile, subprocess.CalledProcessError, plistlib.InvalidFileException) as error:
         # Never dump profiles or codesign output, which can contain device IDs.
         parser.exit(1, f"FAIL: {error if not isinstance(error, subprocess.CalledProcessError) else 'signature or profile validation failed'}\n")

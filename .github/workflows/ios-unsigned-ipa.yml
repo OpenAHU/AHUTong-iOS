@@ -79,19 +79,14 @@ jobs:
             exit 1
           fi
 
-          package_dir="$RUNNER_TEMP/AHUTong-unsigned"
           ipa_path="$RUNNER_TEMP/AHUTong-unsigned.ipa"
           checksum_path="$RUNNER_TEMP/AHUTong-unsigned.ipa.sha256"
 
-          mkdir -p "$package_dir/Payload"
-          ditto "$app_path" "$package_dir/Payload/$(basename "$app_path")"
-          ditto -c -k --sequesterRsrc --keepParent \
-            "$package_dir/Payload" \
-            "$ipa_path"
+          python3 scripts/package-resignable-ipa.py "$app_path" "$ipa_path"
 
           shasum -a 256 "$ipa_path" > "$checksum_path"
           unzip -t "$ipa_path"
-          python3 scripts/verify-widget-bundle.py "$ipa_path"
+          python3 scripts/verify-widget-bundle.py "$ipa_path" --require-entitlements
           unzip -l "$ipa_path"
 
           echo "ipa_path=$ipa_path" >> "$GITHUB_OUTPUT"
