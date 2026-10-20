@@ -8,13 +8,13 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.2 后续维护：原生设置、课表共享玻璃按钮组、紧凑且完整的课程详情与校园码恢复；补充首页刷新、可配置深浅色课表 Widget、本科培养方案、校园卡账单/消费统计；贡献名单补齐 zirui.xu 及全部年级；Siri 语音匹配与重签配置面板仍有实机验收边界。证据见 E-20261019-07/08/09/10/11/12 |
+| 当前焦点 | 1.0.2（4）Widget 重签维护：补齐 IPA 的 App Group 权限声明、唯一共同组适配和可分享安装检查；此前原生 UI、校园查询与账单功能保留。Sideloadly Windows + Developer Program 账号的最终授权仍待 iOS 27 真机复验，见 E-20261020-01；Siri 语音匹配未纳入本切片 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前分支 | `codex/ios-native-ui-campus-code`；起点为已集成 1.0.2 的官方 main `7897a54` |
-| 最近更新 | 2026-10-19 |
+| 当前分支 | `codex/ios-widget-resigning`；起点为已合入 PR #6 的官方 main `8b2916c` |
+| 最近更新 | 2026-10-20 |
 
 ## 1. 目标与边界
 
@@ -212,7 +212,7 @@ iOS/
 | D-004 | Rust 直连 FFI、本地 loopback HTTP 或 Swift `URLSession` 的主数据方案 | 已确定开发期方案 | C ABI 负责生命周期及 GuiXu 持久化/KV；业务请求继续使用带随机 token 的 localhost Rust server + Swift `URLSession`，只开放 loopback，保留未来逐接口直连 FFI 的替换边界 |
 | D-005 | 支付协议兼容逻辑部署位置 | 已按产品决策解除客户端实现阻塞 | 以 Android `2c33b0b` 的生产行为为准，允许 iOS 在 App 内执行同等签名与安全键盘映射。Android 已有的客户端协议签名常量只在私有兼容层中存在，值不进入回复、日志、文档或诊断；用户密码仍只短暂位于内存。服务端 broker 可作为未来架构升级，但不再是 PAY-01、PAY-02、PAY-03、PAY-05 的完成前置条件 |
 | D-006 | macOS CI、Simulator 设备矩阵与真机验证负责人 | 最终 Simulator、未签名 IPA 与 Release Archive 均通过 | 当前 CI `30697541236` 在 Xcode 26.6（17F113）、iPhone 13 Pro / iOS 26.5 Simulator 上通过 277 个单元测试与 10 个 UI 测试；Artifact `AHUTong-ui-parity-xcresult-87` 为 22,453,461 bytes。设备 run `30697541215` 与 Archive run `30697541230` 成功；物理 iPhone 13 Pro 的真实校园账号数据由用户验证 |
-| D-008 | 当前无付费 Apple Developer Program 账号时的真机分发方式 | 已确定开发期方案 | GitHub Actions 只生成未签名 IPA；Apple ID 不进入仓库或 GitHub Secrets；本机使用 Personal Team/Sideloadly 或 AltStore 签名，每 7 天刷新；该方式不等同于 TestFlight/App Store 发布 |
+| D-008 | 开发期真机分发与签名 | 开发期侧载，正式签名待定 | CI 生成待重签 IPA；Apple ID 不进入仓库或 GitHub Secrets。1.0.2（4）起用 ad-hoc 临时签名保留共享权限声明，仍需自有团队实际授权；Personal Team 限制与 Developer Program 账号分开处理，不把账号会员身份视为 App Group 已启用，不等同于 TestFlight/App Store 发布 |
 | D-007 | 崩溃上报、灰度、统计与广告方案 | 已确定当前方案 | 当前不集成第三方崩溃、统计或广告 SDK；灰度只向自有端点发送不可逆账号摘要并提供本地兜底；未来新增数据收集必须先更新隐私清单和用途评估 |
 | D-009 | Android 三个首启弹窗在 iOS 的同意语义 | 已确定开发期方案 | 隐私政策首先展示并记录接受/拒绝；接受即授权本机 Keychain 保存账密/Cookie 及前台 WebView 续期，但可暂不登录进入体验账户；拒绝也可进入课表体验账户；设置可撤回并删除凭据；免责声明仍需接受，社区说明为可选 |
 
@@ -300,7 +300,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；会话过期显示失败与手动登录入口，不因自动重试触发 WebView 或重放写请求 | 既有所有权/发布/删除单测及 UI smoke 在 CI `35867866032` 全绿；真实登录联调仍依赖 AUTH-02 真机验证 | 2026-09-23 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 的路径、面包屑、LFS、下载完整性、凭据边界与 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者；设置行统一轻触觉、明暗和短缩放，减弱动态效果保留非动态反馈；本轮修正偏好入口高亮越界并精简数据清理/更新文案 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；原生入口与反馈实际模拟器复核见 `E-20261019-02` | 2026-10-19 |
-| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整；本轮修正共享容器缺失状态、统一签名共享组、组件预览和周末列，重签后列表缺失仍待设备确认 | `ScheduleWidgetSnapshotTests` 6 项含跨周推进与共享容器缺失；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；可滚动、可展开的小组件指引及大字体复核见 `E-20261019-02` | 2026-10-19 |
+| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；1.0.2（4）修复待重签包缺少权限声明、适配双方唯一共同组，新增具体失败原因与安装检查分享 | 共享专项 20 项、打包检查 16 项、原生指引/分享 UI 1 项通过，Release iphoneos 与最终 IPA 权限声明检查通过；Windows Sideloadly 实机最终授权仍待复验，见 E-20261020-01 | 2026-10-20 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天与八小时边界保留；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录 | 2026-10-19 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 单测及三组 UI 独立运行并分别保存结果，避免整套 30 分钟超时；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
@@ -661,6 +661,18 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 修正后在用户指定 iPhone 17 Pro / iOS 26.5 上通过 `build/native-ui/retained-session-final.xcresult`：校园码展开/尺寸/收起、贡献浮窗/暂停/恢复/双击 QQ 共 2 项通过，0 失败。UI runner 通过测试专用 `AHUTONG_UI_RETAIN_SESSION` 保留真实登录，不传重置或 demo 参数，不改变生产代码；测试宿主编译亦通过。
 - 合并前 Release iphoneos / arm64 构建通过，App 与 Widget 均为 1.0.2 (3)、最低 iOS 17；双方 App Intents 元数据、共享组、隐私清单及扩展结构校验通过，4 项 Python 校验测试通过。最终合并提交与 IPA 校验记录随交付保存到忽略的构建目录。
 
+### E-20261020-01：Windows 重签后的 Widget 共享修复
+
+- 用户确认使用 Windows Sideloadly 直接安装，并拥有 Developer Program Apple ID；没有重签后 IPA。不再要求导出签名包作为继续开发的前提。目标仅为 Widget，未修改 Siri、未合并 #2，也未更新 AIO gitlink。
+- 对既有 `8b2916c` IPA 执行 codesign 检查，主 App 与 Widget 均无签名，也无可供重签工具读取的 App Group entitlement；旧结构检查未覆盖此项。新增 `package-resignable-ipa.py`，先为扩展、再为 App 添加仅声明共享组的 ad-hoc 签名，并验证压缩前后声明。没有开发者证书、Team ID 或描述文件，仍须实际开发者重签；CI 使用同一脚本和 `--require-entitlements` 门禁。
+- 共享容器优先使用配置组；仅当重签后双方描述文件属于同一团队且存在唯一共同组时尝试适配。候选最终必须通过系统 `containerURL`，不能把描述文件声明当作实际授权，不会回退到 App 私有目录。原组已获授权时不改用其他组；多组歧义、团队不同、扩展丢失、双方配置不同均明确失败。
+- 读取 embedded.mobileprovision 仅作为可缺失的侧载兼容线索；格式/大小不符时失败关闭，正常配置组路径不依赖该格式。遵循 [Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles) 的非稳定格式边界；未使用私有 entitlement API，也不尝试自行授予权限。
+- 小工具的现有添加指引显示具体共享失败原因，并提供系统 ShareLink 导出版本、App/Widget 标识、组与检查结果；不导出账号、Cookie、课程、设备标识、证书、完整描述文件或容器路径。Windows 无需导出签名 IPA，即可从安装内分享摘要。Developer 会员身份与本次签名已配置 App Groups 分开说明，步骤见 `docs/release/readiness.md`。
+- 仅在指定 iPhone 17 Pro `64F2DE05-3F35-4563-85C7-00378E4F42B8` / iOS 26.5 测试，未使用其他设备，未卸载、清空或执行重置。首次保留会话 UI 启动发现已为登录页，该失败保留在 `build/widget-sharing/guide.xcresult`；随后只用不写入 Keychain 的内存 demo session 检查指引与系统分享，不记录为真实账号成功。
+- 最终 `build/widget-sharing/unit-final.xcresult`：14 项组配置测试 + 6 项快照测试全部通过，包含主 App 与 Widget 分别从包中发现改名组并实际读写同一快照、拒绝多组/异团队/未授权与坏描述文件，以及摘要排除隐私字段。Python 16 项通过，包含原组/改名组的签名与描述文件约束、权限声明缺失和 AppleDouble 文件回归。
+- `build/widget-sharing/guide-memory-session.xcresult`：1 项原生指引 UI 通过，实际点击系统分享并关闭、返回指引再完成；截图在 `guide-memory-attachments/`。设备 Release 构建通过，App/Widget 统一 1.0.2（4）。首个打包试验因 ditto 将 AppleDouble `._*.app` 混入 Payload 触发检查失败；最终禁用资源叉/扩展属性并只识别真实 bundle 目录，同时新增回归和压缩后验证，不交付首个试验包。
+- 最终候选 `build/widget-sharing/AHUTong-1.0.2-4-widget-sharing-resignable.ipa` 通过包结构、双方 App Group 声明及签名完整性检查；原 `8b2916c` IPA 被新增门禁拒绝，证明补齐此前遗漏。最终 Sideloadly 签名能力、iOS 27 组件同步/配置仍需用户覆盖安装复验，不将 Simulator 或 ad-hoc 声明当作有效团队签名已通过。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -750,6 +762,7 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 
 ## 14. 变更日志
 
+- 2026-10-20：修复待重签 IPA 缺少 App Group 声明，增加唯一共同组适配与可分享安装检查；1.0.2（4）候选及测试见 E-20261020-01，最终 Windows Sideloadly / iOS 27 授权保留真机边界。
 - 2026-10-19：合并打包前修正校园码展开和滚动头像 UI 测试的瞬时几何/可点击竞态，保留尺寸和全部业务断言；Release 设备构建与 App/Widget 包结构检查通过，见 E-20261019-12。
 - 2026-10-19：课表三个顶部按钮合为共享系统玻璃胶囊；课程详情移除异常撑高，按内容自适应高度，完整显示长周次、地点与教师并支持无障碍大字体滚动，见 E-20261019-11。
 - 2026-10-19：课表与小工具顶部四个动作使用原生材质圆形按钮，iOS 26+ 系统 Liquid Glass、iOS 17–25 系统 Material；核对空昵称贡献者为 22级，验证记录见 E-20261019-10。
@@ -871,3 +884,5 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 | 2026-10-19 | REL-002 / SYS-03 / PREF-012 | 集成维护、实时活动与快捷指令；设置新增原生系统快捷指令入口和简洁引导；App/Widget 升为 1.0.1 (2) | 见 E-20261019-05 | 本次提交 |
 
 | 2026-10-19 | UI-010 / PREF-013 / SYS-006 / REL-003 | 校园码展开与放大、课表正圆周次、设置返回根页、与相邻卡片一致的偏好内 Siri 引导、紧凑课表回复与随机双排头像；贡献使用系统浮窗，关闭自动续滚；新增 Himekawa；岛卡改为仅课前显示，App/Widget 统一 1.0.2 (3) | 实现及验证见 E-20261019-06；旧断言按新需求更新，保留失败记录与真机边界 | 本次提交 |
+
+| 2026-10-20 | SYS-007 / REL-004 | 1.0.2（4）保留重签所需 App Group 声明、唯一共同组适配、具体失败提示与可分享安装摘要；CI 强制验证权限声明 | 20 Swift + 16 Python + 1 UI 通过，Release iphoneos 与最终 IPA 检查通过；Sideloadly 实机授权仍待复验，见 E-20261020-01 | 本次提交 |

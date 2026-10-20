@@ -70,19 +70,32 @@ Apple 的[能力支持取决于平台及会员类型](https://developer.apple.co
 - [ ] 固定正式 Bundle ID、签名团队、许可证、版本号、App Icon、支持与隐私政策链接。
 - [ ] 生成有签名的 Release Archive，并在 Organizer/App Store Connect 完成最终验证。
 
-## 重签后找不到课表小组件
+## 重签后的课表小组件
 
 安大通 Widget 是独立的 `PlugIns/AHUTongWidget.appex`。主 App 能启动不代表扩展被保留；[Sideloadly](https://sideloadly.io/) 提供移除部分或全部扩展的选项，[AltStore](https://faq.altstore.io/altstore-classic/app-ids) 也将扩展计入 App ID 使用量。安装时须保留课表扩展，并在主 App 首次打开后检查系统添加列表。
 
-在重签前检查包结构，重签导出后检查签名与共享权限：
+构建 `iphoneos` 后，必须用打包脚本保留 App/Widget 的 App Group 声明。直接压缩完全无签名的 `.app` 会丢失二进制中的权限声明，重签工具无法从原签名得知共享需求。脚本只使用 ad-hoc 临时签名，不使用开发者证书、不添加 Team ID 或描述文件；生成的 IPA 仍需开发者重签才能安装。
 
 ```bash
-python3 scripts/verify-widget-bundle.py AHUTong-unsigned.ipa
+python3 scripts/package-resignable-ipa.py /path/to/AHUTong.app AHUTong-unsigned.ipa
+python3 scripts/verify-widget-bundle.py AHUTong-unsigned.ipa --require-entitlements
 python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
 ```
 
-检查器核对扩展存在、App/Widget Bundle ID 前缀、版本号、可执行文件、双方配置的 App Group，以及签名和描述文件中的共享权限；不会打印描述文件、设备 UDID 或证书。结构检查通过不能替代 iOS 系统注册和真机添加验证。
+检查器核对扩展、标识、版本、App Intents 元数据和双方权限声明；重签检查还要求最终签名、描述文件和团队一致。重签保留原组时使用原组；改名时只接受双方描述文件中唯一的共同组，且最终签名都必须授权该组。不会打印描述文件、设备 UDID 或证书。CI 的 IPA 工作流使用同一脚本，并强制验证权限声明，避免仅检查包结构就放行。
 
 从源码使用自己团队签名时，设置 `AHUTONG_APP_GROUP` 为该团队已配置并且 App/Widget 都获授权的共享组；两份 entitlements 与两份 Info.plist 共用此变量。仅修改 Bundle ID 而丢失共享权限，会导致组件读不到课表。iOS 的 App/扩展需要共同获授权的 [App Group](https://developer.apple.com/documentation/xcode/configuring-app-groups)。
+
+### Windows Sideloadly + Developer Program 账号
+
+1. 使用新版测试包，保留 Widget 扩展，并沿用原安装标识覆盖更新；无需卸载或清空数据。
+2. 打开 App 刷新课表，然后检查桌面组件。原共享组不能访问时，App/Widget 会尝试识别同一签名团队的唯一共同授权组；仍须通过系统 `containerURL` 检查，不会改用无法共享的私有目录。
+3. 若仍不能同步，进入“小工具 → 添加桌面课表微件 → 添加”，查看具体原因并使用“分享安装检查”。摘要只包含版本、App/Widget 标识、共享组和检查结果；不包含账号、Cookie、课表、设备标识、证书或完整描述文件，不需要从 Windows 导出签名 IPA。
+4. `noCommonGroup` 表示两份描述文件未提供共同组，`accessDenied` 表示系统未允许访问所选组。Developer Program 会员身份本身不代表本次签名已配置 App Groups。在 Apple Developer 后台为本次安装的两个实际 App ID 启用同一个、属于自己团队的 App Group，并让签名工具重新生成匹配描述文件及双方 entitlement。不要直接假定原 `group.com.openahu.ahutong.shared` 已属于自己的团队。
+5. Sideloadly 官方将“自定义 app entitlements”列为 Developer Program 账号可用的 Patreon 功能；不能把“登录 Developer 账号”当作这项签名能力已启用的证据。若当前 Windows 签名流程无法保留/设置双方共享权限，可改用自己团队的 Xcode 签名或支持该配置的签名流程，不能靠 App 代码绕过系统权限。
+
+运行时对 `embedded.mobileprovision` 的读取仅用于侧载兼容候选和诊断；格式变化或缺失时回到配置组/明确不可用状态。Apple 提醒该格式不是稳定产品 API，因此不把读取成功当作签名验证，更不将其当作共享授权。正常签名和 App Store 构建直接使用配置组，无需读取描述文件。
+
+参考：[Apple 注册 App Group](https://developer.apple.com/help/account/identifiers/register-an-app-group/)、[启用 App ID 能力](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/)、[Provisioning Profiles 格式与边界](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)、[Sideloadly 更新记录](https://sideloadly.io/changelog)。
 
 若系统列表完全没有安大通，先排查扩展保留、扩展签名/标识和注册；若可添加但无数据，再检查共享权限和课表同步。当前本机运行时为 iOS 26.5，不能用模拟器测试替代用户报告的 iOS 27 真机结论。
