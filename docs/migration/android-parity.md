@@ -304,7 +304,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；1.0.2（4）修复待重签包缺少权限声明、适配双方唯一共同组，新增具体失败原因与安装检查分享 | 共享专项 20 项、打包检查 16 项、原生指引/分享 UI 1 项通过，Release iphoneos 与最终 IPA 权限声明检查通过；Windows Sideloadly 实机最终授权仍待复验，见 E-20261020-01 | 2026-10-20 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天、课前 10 分钟边界和圆角安全留白；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录；本轮 10 分钟边界、圆角布局及原生计时回归见 E-20261020-02 | 2026-10-20 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建，单测及五组 UI 复用同一产物、独立模拟器并分别保存结果；分组校验保证 UI 无遗漏或重复（E-20261020-04）；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建，导航组单测及五组 UI 复用同一产物、五台独立模拟器并分别保存结果；分组校验保证 UI 无遗漏或重复（E-20261020-04）；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 
 2026-10-19 1.0.2 对上述矩阵的增量更新（覆盖对应旧界面描述，验证见 E-20261019-06）：
 
@@ -699,9 +699,9 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 
 ### E-20261020-04：CI 构建复用与均衡分组
 
-- 将四次重复编译改为一次 `build-for-testing`；同一运行的单测与五组 UI 通过 `test-without-building` 复用 tar 产物。传输保留执行权限和符号链接，执行前核对 Xcode 与 Simulator SDK 版本。
+- 将四次重复编译改为一次 `build-for-testing`；同一运行的五组任务（导航组先运行全量单测）通过 `test-without-building` 复用 tar 产物。传输保留执行权限和符号链接，执行前核对 Xcode 与 Simulator SDK 版本。
 - 按既有运行耗时拆分导航、校园服务、支付、实时活动和设置，40 条 UI 用例均恰好分配一次；新增未分配、重命名和重复选择均使 CI 失败。保留独立模拟器、组内串行、真实倒计时等待、支付禁写、域名阻断、截图与 xcresult。
-- 本机分组校验及 22 项 Python 检查通过；云端构建复用与全量测试正在本分支验证，最终耗时记录到 `docs/ci.md`。
+- 本机分组校验及 22 项 Python 检查通过；跨目录恢复的 tar 产物运行 509 单测通过。云端首轮 `39406690279` 构建及所有分组复用成功，导航组两处交互同步失败：原生 Tab 切换等待过短、大字体 Popover 外点坐标落入菜单。保留断言并修正有界等待/导航栏外点，最终全量复验与耗时记录到 `docs/ci.md`。
 
 ## 12. 风险与阻断项
 

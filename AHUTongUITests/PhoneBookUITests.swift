@@ -52,7 +52,7 @@ final class PhoneBookUITests: XCTestCase {
         XCTAssertTrue(number.isHittable)
         capture("phone-native-single-number-confirmation", app: app)
         dismissConfirmation(app)
-        XCTAssertTrue(number.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(number.waitForNonExistence(timeout: 10))
     }
 
     @MainActor
@@ -64,7 +64,9 @@ final class PhoneBookUITests: XCTestCase {
             // iOS 26 anchors confirmationDialog as a native popover. It omits
             // the cancel row and provides a system outside-tap dismissal area.
             XCTAssertTrue(app.otherElements["PopoverDismissRegion"].exists)
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).tap()
+            // At accessibility text sizes the popover can cover the screen's
+            // vertical midpoint. The navigation bar stays outside the menu.
+            app.navigationBars["电话本"].coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.5)).tap()
         }
     }
 

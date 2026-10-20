@@ -63,7 +63,7 @@ def main():
             discover_tests(ROOT / "AHUTongUITests"),
         )
         if args.command == "matrix":
-            print(json.dumps({"suite": ["unit", *shards]}, separators=(",", ":")))
+            print(json.dumps({"suite": list(shards)}, separators=(",", ":")))
         elif args.command == "options":
             if args.suite == "unit":
                 print("-only-testing:AHUTongTests")

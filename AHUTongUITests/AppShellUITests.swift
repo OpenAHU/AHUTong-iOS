@@ -61,7 +61,9 @@ final class AppShellUITests: XCTestCase {
             case "schedule": XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 3))
             case "tools": XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
             case "settings":
-                XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 3))
+                // Cold shared CI hosts can return from the tab tap before the
+                // new navigation root has entered the accessibility tree.
+                XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 15))
                 XCTAssertTrue(app.buttons["settings.account-login"].exists)
                 XCTAssertTrue(app.buttons["settings.feedback"].waitForExistence(timeout: 3))
             default: XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 3))

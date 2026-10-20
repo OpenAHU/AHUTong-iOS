@@ -111,6 +111,7 @@ jobs:
           path: ${{ runner.temp }}
 
       - name: Restore products and verify toolchain
+        id: restore
         shell: bash
         run: |
           set -euo pipefail
@@ -129,6 +130,7 @@ jobs:
           echo 'AHUTONG_CI_DISABLE_LIVE_PAYMENT=1' >> "$GITHUB_ENV"
 
       - name: Create an isolated iPhone Simulator
+        id: simulator
         shell: bash
         run: |
           set -euo pipefail
@@ -143,7 +145,25 @@ jobs:
           xcrun simctl bootstatus "$simulator_udid" -b
           xcrun simctl ui "$simulator_udid" appearance light
 
-      - name: Run tests without rebuilding
+      - name: Run all Swift unit tests on the navigation simulator
+        if: matrix.suite == 'ui-navigation'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_runs=("$RUNNER_TEMP/TestBuild/Build/Products/"*.xctestrun)
+          test "${#test_runs[@]}" -eq 1
+          test -f "${test_runs[0]}"
+          xcodebuild \
+            -xctestrun "${test_runs[0]}" \
+            -derivedDataPath "$RUNNER_TEMP/TestBuild" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -resultBundlePath "$RUNNER_TEMP/AHUTong-unit.xcresult" \
+            -parallel-testing-enabled NO \
+            -only-testing:AHUTongTests \
+            test-without-building
+
+      - name: Run UI tests without rebuilding
+        if: ${{ !cancelled() && steps.restore.outcome == 'success' && steps.simulator.outcome == 'success' }}
         shell: bash
         env:
           TEST_SUITE: ${{ matrix.suite }}
@@ -180,6 +200,7 @@ jobs:
           name: AHUTong-${{ matrix.suite }}-xcresult-${{ github.run_number }}
           path: |
             ${{ runner.temp }}/AHUTong.xcresult
+            ${{ runner.temp }}/AHUTong-unit.xcresult
             ${{ runner.temp }}/UIParityAttachments
           if-no-files-found: warn
           retention-days: 7
