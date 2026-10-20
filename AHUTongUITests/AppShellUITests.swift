@@ -94,7 +94,9 @@ final class AppShellUITests: XCTestCase {
             let link = app.buttons[linkID]
             XCTAssertTrue(link.waitForExistence(timeout: 4))
             link.tap()
-            if marker == "school-calendar." {
+            if marker == "搜索电话或部门" {
+                XCTAssertTrue(app.searchFields[marker].waitForExistence(timeout: 4))
+            } else if marker == "school-calendar." {
                 let calendarState = app.descendants(matching: .any)
                     .matching(NSPredicate(format: "identifier BEGINSWITH %@", marker))
                     .firstMatch
@@ -407,7 +409,7 @@ final class AppShellUITests: XCTestCase {
             let link = app.buttons["tools.phone-book"]
             XCTAssertTrue(link.waitForExistence(timeout: 4))
             link.tap()
-            XCTAssertTrue(app.buttons["搜索电话或部门"].waitForExistence(timeout: 4))
+            XCTAssertTrue(app.searchFields["搜索电话或部门"].waitForExistence(timeout: 4))
             XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 3))
             XCTAssertTrue(app.navigationBars.buttons.firstMatch.exists)
             XCTAssertFalse(app.tabBars.firstMatch.isHittable)

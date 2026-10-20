@@ -77,18 +77,43 @@ struct CourseLiveActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    if !context.isStale { Image(systemName: "calendar.badge.clock").foregroundStyle(.blue) }
+                    if !context.isStale {
+                        Image(systemName: "book.closed.fill")
+                            .foregroundStyle(.blue)
+                            .padding(.leading, 8)
+                            .padding(.top, 4)
+                    }
                 }
-                DynamicIslandExpandedRegion(.center) {
-                    if !context.isStale { Text(context.state.courseName).font(.headline).lineLimit(1) }
+                DynamicIslandExpandedRegion(.trailing) {
+                    if !context.isStale {
+                        Text("即将上课")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 8)
+                            .padding(.top, 4)
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     if !context.isStale {
-                        HStack {
-                            Text(context.state.location).font(.caption).lineLimit(1)
-                            Spacer()
-                            CoursePreclassCountdown(state: context.state)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(context.state.courseName)
+                                .font(.headline)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                            HStack(alignment: .bottom, spacing: 12) {
+                                Text(context.state.location)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                Spacer(minLength: 8)
+                                CoursePreclassCountdown(state: context.state)
+                            }
                         }
+                        // Keep the lower row inside the island's curved edges.
+                        // The camera-side regions only contain short status items.
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                        .padding(.bottom, 16)
                     }
                 }
             } compactLeading: {
@@ -96,7 +121,7 @@ struct CourseLiveActivityWidget: Widget {
             } compactTrailing: {
                 if !context.isStale {
                     CourseCountdownText(state: context.state)
-                        .font(.caption.monospacedDigit()).frame(width: 62, alignment: .trailing)
+                        .font(.caption.monospacedDigit()).frame(width: 44, alignment: .trailing)
                 }
             } minimal: {
                 if !context.isStale { Image(systemName: "book.closed.fill").foregroundStyle(.blue) }
@@ -129,7 +154,9 @@ private struct CoursePreclassCountdown: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text("距上课").font(.caption2).foregroundStyle(.secondary)
-            CourseCountdownText(state: state).font(.headline.monospacedDigit())
+            CourseCountdownText(state: state)
+                .font(.headline.monospacedDigit())
+                .frame(width: 72, alignment: .trailing)
         }
         .accessibilityElement(children: .combine)
     }
@@ -139,7 +166,7 @@ private struct CourseCountdownText: View {
     let state: CourseActivityAttributes.ContentState
 
     var body: some View {
-        Text(timerInterval: state.countdownInterval(to: state.startDate), countsDown: true, showsHours: true)
+        Text(timerInterval: state.countdownInterval(to: state.startDate), countsDown: true, showsHours: false)
             .multilineTextAlignment(.trailing)
             .contentTransition(.numericText(countsDown: true))
     }

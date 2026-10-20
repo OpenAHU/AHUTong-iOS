@@ -3,6 +3,63 @@ import Vision
 
 final class CourseLiveActivityUITests: XCTestCase {
     @MainActor
+    func testCourseHoursAwayDoesNotCreateIsland() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-session", "--demo-live-activity", "--demo-live-activity-too-early"]
+        app.launch()
+        defer { app.terminate() }
+        let status = app.staticTexts["live-activity.fixture.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "label == %@", "未创建"), evaluatedWith: status)
+        waitForExpectations(timeout: 5)
+    }
+
+    @MainActor
+    func testExpandedIslandInsetsAndTenMinuteNativeCountdown() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-session", "--demo-live-activity", "--demo-live-activity-ten-minutes"]
+        app.launch()
+        defer {
+            app.terminate()
+            app.launchArguments.append("--demo-live-activity-clear")
+            app.launch()
+            _ = app.staticTexts["live-activity.fixture.status"].waitForExistence(timeout: 5)
+            app.terminate()
+        }
+        let status = app.staticTexts["live-activity.fixture.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        XCTAssertEqual(status.label, "已创建")
+        let screen = app.frame
+        XCUIDevice.shared.press(.home)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let island = springboard.descendants(matching: .any).matching(identifier: "regular.view").firstMatch
+        XCTAssertTrue(island.waitForExistence(timeout: 5))
+        island.press(forDuration: 1.5)
+        let title = springboard.staticTexts["数据库原理与应用"]
+        let location = springboard.staticTexts["博学南楼 B101"]
+        let timer = springboard.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "距上课")).firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(location.exists)
+        XCTAssertTrue(timer.exists)
+        XCTAssertGreaterThan(location.frame.minX, screen.minX + 24)
+        capture("island-rounded-corner-safe-layout", springboard: springboard)
+        // ActivityKit may expose the entire region as the combined AX frame.
+        // Verify the actual timer glyphs stay inside the rounded island.
+        let reading = try renderedTimerReadings(springboard)[0]
+        XCTAssertLessThan(reading.0.maxX, 0.94)
+        XCTAssertGreaterThan(reading.0.minX, 0.6)
+        let initial = reading.1
+        XCTAssertGreaterThan(initial, 540)
+        XCTAssertLessThanOrEqual(initial, 600)
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertLessThan(try renderedCountdowns(springboard)[0], initial)
+        capture("island-native-countdown-running", springboard: springboard)
+    }
+
+    @MainActor
     func testLiveActivityPreferenceDoesNotRequireCourseReminder() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -107,6 +164,11 @@ final class CourseLiveActivityUITests: XCTestCase {
 
     @MainActor
     private func renderedCountdowns(_ springboard: XCUIApplication) throws -> [Int] {
+        try renderedTimerReadings(springboard).map { $0.1 }
+    }
+
+    @MainActor
+    private func renderedTimerReadings(_ springboard: XCUIApplication) throws -> [(CGRect, Int)] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US"]
@@ -124,7 +186,7 @@ final class CourseLiveActivityUITests: XCTestCase {
         XCTAssertEqual(timers.count, 1, "Expanded island must render the preclass countdown")
         guard timers.count == 1 else { throw CountdownRecognitionError.missingTimers }
         return timers.map { value in
-            value.1.split(separator: ":").reduce(0) { $0 * 60 + (Int($1) ?? 0) }
+            (value.0, value.1.split(separator: ":").reduce(0) { $0 * 60 + (Int($1) ?? 0) })
         }
     }
 

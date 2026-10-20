@@ -103,7 +103,7 @@ struct ToolsView: View {
             case "grade": GradeView(appModel: appModel).androidDetailScreen()
             case "exam": ExamView(appModel: appModel).androidDetailScreen()
             case "network-recharge": NetworkRechargeView(appModel: appModel).androidDetailScreen()
-            case "phone-book": PhoneBookView().androidDetailScreen()
+            case "phone-book": PhoneBookView()
             case "school-calendar": SchoolCalendarView().androidDetailScreen()
             case "weather": WeatherView().androidDetailScreen()
             case "study-repository": StudyRepositoryView().androidDetailScreen()

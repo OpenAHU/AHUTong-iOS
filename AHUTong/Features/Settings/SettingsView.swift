@@ -449,7 +449,7 @@ private struct AndroidPreferencesView: View {
                 }
                 Section {
                     preferenceToggle(
-                        title: "课程倒计时岛卡", detail: "仅在课前显示，上课时结束",
+                        title: "课程倒计时岛卡", detail: "课前 10 分钟内显示，上课时结束",
                         isOn: Binding(get: { liveActivity }, set: { enabled in
                             liveActivity = enabled
                             Task { liveActivity = await model.setLiveActivity(enabled) }

@@ -41,15 +41,17 @@ struct AHUTongApp: App {
             return
         }
         let now = Date()
+        let leadTime: TimeInterval = arguments.contains("--demo-live-activity-too-early") ? 10_038
+            : arguments.contains("--demo-live-activity-ten-minutes") ? 600 : 90
         do {
             try await manager.reconcile(CourseLiveActivityPlan(
                 courseID: "live-activity-ui-fixture",
-                courseName: "实时活动倒计时验证",
-                location: "博学南楼 A101",
-                startDate: now.addingTimeInterval(90),
-                endDate: now.addingTimeInterval(10 * 60)
+                courseName: "数据库原理与应用",
+                location: "博学南楼 B101",
+                startDate: now.addingTimeInterval(leadTime),
+                endDate: now.addingTimeInterval(leadTime + 95 * 60)
             ))
-            liveActivityFixtureStatus = "已创建"
+            liveActivityFixtureStatus = Activity<CourseActivityAttributes>.activities.isEmpty ? "未创建" : "已创建"
             if let activity = Activity<CourseActivityAttributes>.activities.first(where: { $0.attributes.courseID == "live-activity-ui-fixture" }) {
                 for await state in activity.activityStateUpdates {
                     guard !Task.isCancelled else { return }

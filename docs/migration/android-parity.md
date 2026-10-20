@@ -8,13 +8,13 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.2 后续维护：原生设置、课表共享玻璃按钮组、紧凑且完整的课程详情与校园码恢复；补充首页刷新、可配置深浅色课表 Widget、本科培养方案、校园卡账单/消费统计；贡献名单补齐 zirui.xu 及全部年级；Siri 语音匹配与重签配置面板仍有实机验收边界。证据见 E-20261019-07/08/09/10/11/12 |
+| 当前焦点 | 修复灵动岛圆角裁切和过早出现：仅课前 10 分钟内创建；电话本使用原生列表、搜索、分类选择和拨号确认。验证见 E-20261020-01 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前分支 | `codex/ios-native-ui-campus-code`；起点为已集成 1.0.2 的官方 main `7897a54` |
-| 最近更新 | 2026-10-19 |
+| 当前分支 | `fix/island-phonebook-ui`；起点为官方 main `8b2916c` |
+| 最近更新 | 2026-10-20 |
 
 ## 1. 目标与边界
 
@@ -58,6 +58,7 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 10. 设置域所有可点击行必须在跳转或执行前提供可感知的按压态；iOS 使用轻触觉、明暗高亮和短缩放补足交互反馈，开启“减弱动态效果”时禁用缩放但不得移除非动态反馈。静态布局仍以 Android 为准。
 11. 2026-10-19 用户进一步要求更多 iOS 原生 UI，明确指出设置通知按钮卡顿、iOS 26+ 课表设置缺少玻璃材质。设置首页/偏好使用系统 `Form`、`NavigationLink` 和真实 `Toggle`；系统开关保留原生操作与反馈，导航/动作行继续保留轻触觉及按压反馈。课表设置采用系统半高 sheet 和工具栏，不用实色背景覆盖系统 Liquid Glass；不提供玻璃开关。此条覆盖对应页面的 Android 静态组件复刻限制。
 12. 2026-10-19 用户要求课表、小工具右上角按钮使用原生材质；进一步明确课表三个动作共用一块玻璃背景。课表采用原生 `ControlGroup`，iOS 26+ 共享系统 Liquid Glass 胶囊，iOS 17–25 共享系统 Material 胶囊；小工具独立编辑按钮保留系统玻璃圆钮。每个动作触控范围至少 44pt，保留图标、功能和 VoiceOver 名称，不新增材质开关。课程详情按内容收紧高度，地点/教师不被分隔线撑高，周次完整换行，大字体可滚动。空昵称贡献者的年级按 Android 记录为 22级。
+13. 2026-10-20 用户明确要求电话本使用原生 UI：使用系统 List、Picker、searchable、confirmationDialog 和导航栏，覆盖本页的 Android 外观复刻限制；保留原有条目、搜索与拨号确认，不复制自绘弹窗布局。
 
 ## 2. 固定基线
 
@@ -294,14 +295,14 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | PAY-04 | 招商银行校园卡充值 | `main/CmbCardRecharge.kt`、`YcardApi.kt`、`PreferencesManager.kt` | `Features/Payments/CMBRechargeView.swift` | P5 / CARD-01、AUTH-02 | 待验证 | 生产功能继续以 non-persistent WebView 承载真实校方页面，内存 Cookie 和内部导航严格限制到 `ycard.ahu.edu.cn`、`epay92.ahu.edu.cn`，招商银行外跳仅允许固定目标且不得携带校园凭据。隐藏验收模式改为原生 HEAD 链：不创建 WebView、不执行 JavaScript、不加载资源、不发送请求体、不自动跟随跳转；逐跳验证精确 HTTPS 主机、入口契约及扣款前路径，失败保持粘性并安全关闭 | `PaymentAcceptanceTests`、`NewPaymentFeatureTests`、隐藏 Debug UI 专项及实时官方入口探测全部通过，最终证据见 `E-20260801-01`。Simulator/Demo 只证明状态机，仍须授权账号和物理 iPhone 证据 | 2026-08-01 |
 | PAY-05 | 网费充值 | `main/NetworkRecharge.kt`、`NetworkRechargeViewModel.kt`、`YcardApi.kt` | `Features/Payments/NetworkRechargeView.swift` | P5 / AUTH-02、D-005 | 待真机验收 | 保持真实账户、套餐统计、快捷金额、服务端限额、Bearer/Cookie/Referer 与内存响应 Cookie；生产流程完成入口预热、账户查询、兼容签名建单、每订单动态安全键盘映射、最终提交和账户刷新，不再跳转学校官方页面 | `NewPaymentFeatureTests`、`YCardProductionPaymentGatewayTests` 覆盖预热/查询顺序、字段、签名、双订单动态材料隔离、成功刷新、拒绝、未知、跨启动恢复和去重；macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权网费账户小额真机验收 | 2026-08-01 |
 | INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、PhotoKit 保存照片及权限降级完整；黑色全屏、校历居中、右下保存/退出与加载/错误态按 Android 重做 | `SchoolCalendarRepositoryTests` 5 项覆盖缓存、回退、损坏恢复与照片保存 adapter；校历 UI 见 `E-20260714-01`，最终 device/权限文案编译见 `E-20260715-04` | 2026-07-15 |
-| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 9 类 57 个本地条目、搜索、校区号码与拨号确认完整；重新对照 Android 3.2.0 更新后的电话条目、注释和列表顺序，不申请通讯录权限 | 既有 `PhoneBookTests` 与双端证据见 `E-20260714-01`；最新 Android 基线复验见 `E-20260726-01` | 2026-07-26 |
+| INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 9 类 57 个本地条目与号码保留；2026-10-20 按用户要求采用原生 List、分类 Picker、searchable 和 confirmationDialog，移除自绘撑满屏幕的校区弹窗；号码按行显示并包含区号，不申请通讯录权限 | `PhoneBookTests` 与原生交互回归见 E-20261020-01；历史条目来源见 E-20260726-01 | 2026-10-20 |
 | INFO-03 | 天气 | `main/Weather.kt`、`WeatherViewModel.kt`、`data/weather/*` | `Features/Weather/` | P4 | 已完成 | 首入 GPS、拒绝后 IP 降级、城市搜索、实况/预报/小时/AQI/生活指数、账号隔离缓存及首页详细/紧凑卡完整；详情页始终显示 Android 3.2.0 全量信息，升级时删除已下线的旧六项隐藏偏好 | `WeatherRepositoryTests` 的旧偏好恢复、首页卡模式及确定性 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
 | CONTENT-01 | 失物招领只读 | `main/LostFound.kt`、`LostFoundViewModel.kt` | `Features/LostFound/` | P4 / AUTH-02 | 待真机验证 | 自动读取真实 campus/type/list 端点时会话过期先尝试隐藏续期，失败保留缓存和重试按钮，不拉起 ADWMH 可见 WebView；只读接口接受校方 `10000` 成功码，避免把“操作成功!”当成错误；分页、筛选和详情保留 | `CampusAuthenticatedClientTests` 的静默未授权与既有失物测试在 CI `35867866032` 通过；`LostFoundTests` 的 `10000` 本地夹具已在 CI `35898534602` 通过，见 `E-20260924-01`；无感续期见 `E-20260924-05`（CI `35959882196` 全绿）；真实登录联调仍依赖 AUTH-02 真机验证 | 2026-09-24 |
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；会话过期显示失败与手动登录入口，不因自动重试触发 WebView 或重放写请求 | 既有所有权/发布/删除单测及 UI smoke 在 CI `35867866032` 全绿；真实登录联调仍依赖 AUTH-02 真机验证 | 2026-09-23 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 的路径、面包屑、LFS、下载完整性、凭据边界与 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者；设置行统一轻触觉、明暗和短缩放，减弱动态效果保留非动态反馈；本轮修正偏好入口高亮越界并精简数据清理/更新文案 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；原生入口与反馈实际模拟器复核见 `E-20261019-02` | 2026-10-19 |
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子共享全学期课表快照，WidgetKit 小/中/大尺寸、未登录/过期/空状态、跨周 30 分钟时间线、当前/下一节强调和点击回 App 完整；本轮修正共享容器缺失状态、统一签名共享组、组件预览和周末列，重签后列表缺失仍待设备确认 | `ScheduleWidgetSnapshotTests` 6 项含跨周推进与共享容器缺失；本轮复核未签名 IPA `35884547808` 内含 `Payload/AHUTong.app/PlugIns/AHUTongWidget.appex`，不标“开发中”；签名安装/共享数据仍待用户设备验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；可滚动、可展开的小组件指引及大字体复核见 `E-20261019-02` | 2026-10-19 |
-| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天与八小时边界保留；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录 | 2026-10-19 |
+| SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天、课前 10 分钟边界和圆角安全留白；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录；本轮 10 分钟边界、圆角布局及原生计时回归见 E-20261020-01 | 2026-10-20 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 单测及三组 UI 独立运行并分别保存结果，避免整套 30 分钟超时；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 
@@ -371,7 +372,7 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 课表缓存隔离 | 大部分当前学期缓存带用户前缀，但 `next.schedule` 仍是共享键 | iOS 持久化协议从入口要求 `UserScopedStore`，当前/下一学期均不得绕过用户命名空间；GuiXu 物理键再做 SHA-256，数据库文件不出现学号或业务键明文；旧 UserDefaults/文件缓存只迁移一次 |
 | Debug 入口 | App 卡片连续点击 8 次后进入 Debug | 按 2026-09-23 用户决策彻底删除 iOS Debug 页面和八连点入口 |
 | 设置点击反馈 | Compose `clickable` 默认提供按压/波纹反馈 | 保持 Android 布局不变，SwiftUI 自定义 `ButtonStyle` 在触摸按下时提供高亮、0.985 缩放和轻触觉；减弱动态效果时只禁用缩放 |
-| 电话本 | Android 使用 `ACTION_DIAL`，双校区号码先弹窗选择；号码注释来自 2025 新生手册并含 2026 年 3 月更新 | iOS 保留 9 类 57 个条目及来源说明，统一补 0551 区号；所有号码（含单号码）先由确认菜单选择，再交给系统电话应用，不申请通讯录权限 |
+| 电话本 | Android 使用 `ACTION_DIAL`，双校区号码先弹窗选择；号码注释来自 2025 新生手册并含 2026 年 3 月更新 | iOS 保留 9 类 57 个条目及来源说明，统一补 0551 区号；按 2026-10-20 用户要求改为系统 List、Picker、searchable 和 confirmationDialog，号码纵向排列适应大字体；所有号码（含单号码）先确认，再交给系统电话应用，不申请通讯录权限 |
 | 校历 | Android 下载 `openahu.org/download/xiaoli.jpg` 到应用目录，支持手势缩放并可申请权限保存相册 | iOS 校验图片签名并原子缓存，损坏缓存自动清理、刷新失败显示旧缓存；使用 1–5 倍原生手势、Quick Look 和 ShareLink，不写相册，因此无需照片权限且拒绝权限时无功能损失 |
 | 学习资料 | Android 通过 GitHub Contents API 浏览 6 个学院仓库，jsDelivr/Raw 下载到外部应用目录，再以 Intent 打开 | iOS 保持同一仓库清单和分支，目录按仓库/路径缓存；文件流式下载到 Application Support、文件名哈希化，使用 Quick Look/ShareLink；公开 GitHub 限流或断网时回退已访问目录和已下载文件 |
 | 失物招领 | 图片上传未实现；发布/删除可能提前提示成功；“我的帖子”只过滤当前已加载数据 | 不复制缺陷；服务端确认后更新 UI，“我的帖子”使用可靠查询/分页语义 |
@@ -661,6 +662,18 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 修正后在用户指定 iPhone 17 Pro / iOS 26.5 上通过 `build/native-ui/retained-session-final.xcresult`：校园码展开/尺寸/收起、贡献浮窗/暂停/恢复/双击 QQ 共 2 项通过，0 失败。UI runner 通过测试专用 `AHUTONG_UI_RETAIN_SESSION` 保留真实登录，不传重置或 demo 参数，不改变生产代码；测试宿主编译亦通过。
 - 合并前 Release iphoneos / arm64 构建通过，App 与 Widget 均为 1.0.2 (3)、最低 iOS 17；双方 App Intents 元数据、共享组、隐私清单及扩展结构校验通过，4 项 Python 校验测试通过。最终合并提交与 IPA 校验记录随交付保存到忽略的构建目录。
 
+### E-20261020-01：岛卡圆角与十分钟边界、原生电话本
+
+- 基线为官方 iOS main `8b2916c`，分支 `fix/island-phonebook-ui`；AIO 使用独立 detached worktree `.worktree/ios-island-phonebook-fixes`，只初始化 iOS 与构建需要的两个依赖，未修改 AIO gitlink。
+- 岛卡规划与系统 Activity 创建入口共用 `0 < 距上课秒数 <= 600` 校验，超过十分钟或已上课的计划均清理；当天/周次/校区时区与课中抑制语义保留。原生计时区间同步缩为十分钟，采用分秒格式，继续由系统逐秒显示。
+- 展开岛卡将短状态放在摄像头两侧，课程标题与地点/倒计时放入底部区域，并加入水平/底部安全留白；压缩态倒计时收窄到分秒所需宽度。截图中课程名、地点与数字完整位于圆角内部。
+- 电话本改用原生 List、分类 Picker、searchable 与逐行 confirmationDialog。保留 9 类 57 个本地条目、部门/分类/号码全文搜索、0551 区号、单号与双校区拨号确认；长名称与号码纵向换行。确认弹层附着在触发的行，iOS 26 的原生浮窗由系统提供点外部关闭，未自绘尺寸或分隔线。
+- 本机 Xcode 27 / iOS 26.5 / 独立 iPhone 17 Pro QA：App、Widget、测试目标 `build-for-testing` 成功；`build/IslandPhoneBookUnits.xcresult` 19 项定向单测通过，覆盖 10 分钟整、提前 601 秒、2:47:18、上课/课中、时区、并发禁用、目录与号码契约。
+- 首轮 `build/IslandPhoneBookUI.xcresult` 中原生边缘/内容返回手势、远期计划不创建、后台在上课前消失共 3 项通过；另外 3 项失败的证据保留：倒计时组合辅助功能节点报告整个 region 的宽度，已改测 Vision 识别的真实数字像素；iOS 26 原生浮窗不显示取消行，已改走系统 `PopoverDismissRegion` 的外部点击关闭。未放宽倒计时递减和圆角内部留白要求。
+- `build/IslandPhoneBookUI2.xcresult` 中岛卡真实像素边距/原生倒计时递减及最大无障碍字号的原生分类/单号确认两项通过；搜索空态最初误断言固定“无结果”标题，实际系统标题包含搜索词，已按实际系统状态与零条目断言，`build/PhoneBookSearchValidation.xcresult` 回归通过。浅色截图见 `build/IslandPhoneBookUIAttachments2/`，包括 `DE87B980-8DB3-4338-A540-32AB3FC1D212.png` 岛卡和 `71FC2C0C-4A86-4596-8917-9274647D51B3.png` 双校区菜单。
+- 通过 `simctl ui appearance dark` 设置独立 QA 设备的真实系统深色模式后，`build/PhoneBookDarkValidation.xcresult` 两项电话本 UI 全部通过，包含分类、最大无障碍字号、双校区确认、外部关闭与空搜索；已逐张目视检查 `build/PhoneBookDarkAttachments/` 的列表/菜单/大字体截图，测试后恢复浅色。六个独立 UI 场景均已有通过证据（其中电话本两场景另在深色模式复验），不将保留的首轮失败结果标记为整套通过。
+- 本轮没有新增 APNs，也没有改变主线的后台预算策略。岛卡仍在打开 App/刷新课表时维护；没有承诺 App 不运行时自动于课前十分钟创建，后台预算耗尽时可提前结束。未执行真实拨号；物理 iPhone、iOS 17–25 与 iOS 27 运行时仍需后续回归。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -749,6 +762,8 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - [x] 形成 D-003、D-004 的明确结论，并保留可注入 Swift 数据层与未来直连 FFI 替换边界。
 
 ## 14. 变更日志
+
+- 2026-10-20：修复岛卡提前数小时出现与圆角裁切；仅在课前 10 分钟内创建，标题/地点/倒计时增加安全留白；电话本改用系统列表、搜索、分类和拨号确认，支持大字体。证据见 E-20261020-01。
 
 - 2026-10-19：合并打包前修正校园码展开和滚动头像 UI 测试的瞬时几何/可点击竞态，保留尺寸和全部业务断言；Release 设备构建与 App/Widget 包结构检查通过，见 E-20261019-12。
 - 2026-10-19：课表三个顶部按钮合为共享系统玻璃胶囊；课程详情移除异常撑高，按内容自适应高度，完整显示长周次、地点与教师并支持无障碍大字体滚动，见 E-20261019-11。
