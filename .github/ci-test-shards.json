@@ -4,27 +4,35 @@
     "AppShellUITests/testScheduleSupportsHorizontalWeekPaging",
     "AppShellUITests/testDeclinedPrivacyUsesScheduleOnlyExperienceAccount",
     "AppShellUITests/testNativeNavigationBarEdgeAndContentPopGestures",
-    "AppShellUITests/testCompactHomeWeatherOpensWeatherInsteadOfSchedule",
-    "PhoneBookUITests"
+    "AppShellUITests/testCompactHomeWeatherOpensWeatherInsteadOfSchedule"
   ],
   "ui-services": [
     "AppShellUITests/testAndroidParityLoginAndReminderSystemStates",
     "AppShellUITests/testAndroidParityLoadingEmptyAndErrorStates",
-    "AppShellUITests/testNetworkRechargeAndCMBPreference"
+    "AppShellUITests/testNetworkRechargeAndCMBPreference",
+    "PhoneBookUITests",
+    "ExperiencePolishUITests/testDeveloperPopoverDismissalResumesItsRowAndDoubleTapOpensQQ",
+    "ExperiencePolishUITests/testWidgetInstallationGuideCanBeReadAndDismissed"
   ],
   "ui-payments": [
     "AppShellUITests/testAndroidParityPaymentsAndOperations",
     "PaymentLocalParityUITests",
     "CampusCardPriorityUITests",
-    "ReadOnlyServicesUITests",
-    "StartupScheduleUITests"
+    "ReadOnlyServicesUITests"
   ],
   "ui-live-activity": [
     "CourseLiveActivityUITests",
-    "ShortcutUITests"
+    "ShortcutUITests",
+    "ExperiencePolishUITests/testHeaderActionsRemainUsableWithNativeMaterials"
   ],
   "ui-settings": [
     "SettingsExperienceUITests",
-    "ExperiencePolishUITests"
+    "StartupScheduleUITests",
+    "ExperiencePolishUITests/testCampusCodeExpandsWithLargerSquareAndCollapses",
+    "ExperiencePolishUITests/testCourseDetailFitsShortContentWithoutTallMetadata",
+    "ExperiencePolishUITests/testCourseDetailScrollsWithAccessibilityTextSize",
+    "ExperiencePolishUITests/testCourseDetailShowsAllIrregularWeeksAndLongMetadata",
+    "ExperiencePolishUITests/testSettingsTabReturnsToRootAfterLeavingDetailViaShortcut",
+    "ExperiencePolishUITests/testWeekIndicatorsAreCirclesForSingleAndDoubleDigits"
   ]
 }

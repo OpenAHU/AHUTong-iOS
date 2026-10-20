@@ -784,7 +784,9 @@ final class AppShellUITests: XCTestCase {
             for: NSPredicate(format: "label CONTAINS %@", option),
             evaluatedWith: menu
         )
-        waitForExpectations(timeout: 5)
+        // A single hosted accessibility snapshot exceeded eight seconds in CI.
+        // Keep the selected-value assertion and allow another bounded poll.
+        waitForExpectations(timeout: 15)
     }
 
     @MainActor

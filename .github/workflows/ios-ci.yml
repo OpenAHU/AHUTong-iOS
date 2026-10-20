@@ -90,6 +90,8 @@ jobs:
           path: ${{ runner.temp }}/test-products.tar.gz
           compression-level: 0
           if-no-files-found: error
+          # A full rerun replaces the build before its dependent tests start.
+          overwrite: true
           retention-days: 1
 
   test:
@@ -197,7 +199,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: AHUTong-${{ matrix.suite }}-xcresult-${{ github.run_number }}
+          name: AHUTong-${{ matrix.suite }}-xcresult-${{ github.run_number }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/AHUTong.xcresult
             ${{ runner.temp }}/AHUTong-unit.xcresult

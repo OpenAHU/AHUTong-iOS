@@ -22,6 +22,8 @@
 
 工作流现在先执行一次 `build-for-testing`，将 `Build/Products` 与 `.xctestrun` 打为 tar 包，随后五个测试 job 下载同一运行的产物，使用 `test-without-building`。tar 保留执行权限与符号链接；测试端核对 Xcode 和 Simulator SDK 版本。测试 job 不再安装 XcodeGen、编译 Rust 或拉取子模块。
 
-导航组先在同一模拟器运行全部 Swift 单测，再运行 UI；避免为数秒的单测额外启动一台模拟器、占用第六个 Mac runner。40 条 UI 测试分为导航 7、校园服务 3、支付 8、实时活动/快捷指令 9、设置/体验 13 条。分组按既有耗时平衡，不按条数平均。`.github/ci-test-shards.json` 定义分组，`python3 scripts/ci-test-shards.py validate` 强制每条 UI 用例恰好出现一次。增加测试类时必须分配分组；已按类分配的新方法自动进入同组。
+导航组先在同一模拟器运行全部 Swift 单测，再运行 UI；避免为数秒的单测额外启动一台模拟器、占用第六个 Mac runner。40 条 UI 测试分为导航 5、校园服务/电话本 7、支付 5、实时活动/快捷指令 10、设置/体验 13 条。分组按既有耗时平衡，不按条数平均。`.github/ci-test-shards.json` 定义分组，`python3 scripts/ci-test-shards.py validate` 强制每条 UI 用例恰好出现一次。增加测试类时必须分配分组；已按类分配的新方法自动进入同组。
 
 各组仍使用独立模拟器、组内串行；保留 509 条 Swift 单测、40 条 UI、25 条 Rust 测试、支付保护、截图与 xcresult。Python 检查由 16 条增至 22 条。共享构建包保留 1 天，测试证据保留 7 天。
+
+共享包保留期内可单独重跑失败任务；整轮重跑时替换旧共享包，避免同名产物冲突。测试证据按 `run_attempt` 分开保存，保留失败与复验记录。

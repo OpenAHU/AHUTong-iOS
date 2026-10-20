@@ -8,7 +8,7 @@
 2. 在 **Artifacts** 下载 `AHUTong-unsigned-ipa` 压缩包，解压得到 `AHUTong-unsigned.ipa`。构建产物保留 7 天。
 3. 使用 Sideloadly 或 AltStore 在自己的电脑上重签并安装，保留内嵌 Widget 扩展。安装后打开安大通，按首启流程完成登录。
 
-IPA 需要重新签名才能安装。签名、安装与课表小组件配置见 [安装说明](docs/release/readiness.md#免费-apple-id-的-7-天签名)。
+IPA 需要重新签名才能安装。签名、安装与课表小组件配置见 [安装说明](docs/release/readiness.md)。
 
 ## 开发
 
