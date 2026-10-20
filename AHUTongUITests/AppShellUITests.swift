@@ -61,7 +61,9 @@ final class AppShellUITests: XCTestCase {
             case "schedule": XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 3))
             case "tools": XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
             case "settings":
-                XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 3))
+                // Cold shared CI hosts can return from the tab tap before the
+                // new navigation root has entered the accessibility tree.
+                XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 15))
                 XCTAssertTrue(app.buttons["settings.account-login"].exists)
                 XCTAssertTrue(app.buttons["settings.feedback"].waitForExistence(timeout: 3))
             default: XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 3))
@@ -782,20 +784,26 @@ final class AppShellUITests: XCTestCase {
             for: NSPredicate(format: "label CONTAINS %@", option),
             evaluatedWith: menu
         )
-        waitForExpectations(timeout: 5)
+        // Hosted snapshots have taken 8-14 seconds; allow fresh AX polls while
+        // retaining the actual selected-value assertion.
+        waitForExpectations(timeout: 30)
     }
 
     @MainActor
     private func waitForPaymentResult(_ identifier: String, app: XCUIApplication) {
         let state = app.buttons[identifier]
-        expectation(
-            for: NSPredicate(format: "label CONTAINS %@", "支付成功"),
-            evaluatedWith: state
+        let success = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "支付成功"),
+            object: state
         )
-        // The CI recording shows the submitted Mock order still processing
-        // after four seconds. Keep the server-confirmed success assertion and
-        // allow durable payment-state writes to finish on the hosted disk.
-        waitForExpectations(timeout: 15)
+        // Hosted AX snapshots can take 14 seconds and temporarily contain only
+        // UIApplication with no windows. Allow several fresh snapshots without
+        // resubmitting a payment; a persistent failure still fails this test.
+        let result = XCTWaiter.wait(for: [success], timeout: 45)
+        if result != .completed {
+            capture("payment-result-timeout-\(identifier)", app: app)
+        }
+        XCTAssertEqual(result, .completed, "Mock 支付必须显示服务端确认的支付成功状态")
     }
 
     private func waitForRendering() {

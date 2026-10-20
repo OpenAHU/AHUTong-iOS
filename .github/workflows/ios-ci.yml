@@ -18,15 +18,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  build:
     runs-on: macos-26
-    name: Test ${{ matrix.suite }}
-    timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: [unit, ui-navigation, ui-services, ui-settings]
-
+    name: Build test products
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.shards.outputs.matrix }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -50,12 +47,82 @@ jobs:
           workspaces: Vendor/sdk
 
       - name: Test Rust SDK
-        if: matrix.suite == 'unit'
         run: cargo test --manifest-path Vendor/sdk/Cargo.toml --all-features
 
-      - name: Test artifact verification
-        if: matrix.suite == 'unit'
+      - name: Test CI and artifact verification
         run: python3 -m unittest discover -s scripts/tests -v
+
+      - name: Verify complete UI shard coverage
+        id: shards
+        run: |
+          python3 scripts/ci-test-shards.py validate
+          echo "matrix=$(python3 scripts/ci-test-shards.py matrix)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build once for all test shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project AHUTong.xcodeproj \
+            -scheme AHUTong \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/TestBuild" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            build-for-testing
+
+      - name: Package relocatable test products
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version > "$RUNNER_TEMP/TestBuild/Build/xcode-version.txt"
+          xcrun --sdk iphonesimulator --show-sdk-version > "$RUNNER_TEMP/TestBuild/Build/simulator-sdk.txt"
+          # tar preserves executable permissions and symlinks across artifact transfer.
+          tar -C "$RUNNER_TEMP/TestBuild/Build" -czf "$RUNNER_TEMP/test-products.tar.gz" \
+            Products xcode-version.txt simulator-sdk.txt
+
+      - name: Share test products within this run
+        uses: actions/upload-artifact@v6
+        with:
+          name: AHUTong-test-products-${{ github.run_number }}
+          path: ${{ runner.temp }}/test-products.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          # A full rerun replaces the build before its dependent tests start.
+          overwrite: true
+          retention-days: 1
+
+  test:
+    needs: build
+    runs-on: macos-26
+    name: Test ${{ matrix.suite }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      - name: Check out test orchestration only
+        uses: actions/checkout@v6
+
+      - name: Download this run's test products
+        uses: actions/download-artifact@v8
+        with:
+          name: AHUTong-test-products-${{ github.run_number }}
+          path: ${{ runner.temp }}
+
+      - name: Restore products and verify toolchain
+        id: restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/TestBuild/Build"
+          tar -xzf "$RUNNER_TEMP/test-products.tar.gz" -C "$RUNNER_TEMP/TestBuild/Build"
+          xcodebuild -version > "$RUNNER_TEMP/current-xcode.txt"
+          xcrun --sdk iphonesimulator --show-sdk-version > "$RUNNER_TEMP/current-sdk.txt"
+          diff -u "$RUNNER_TEMP/TestBuild/Build/xcode-version.txt" "$RUNNER_TEMP/current-xcode.txt"
+          diff -u "$RUNNER_TEMP/TestBuild/Build/simulator-sdk.txt" "$RUNNER_TEMP/current-sdk.txt"
 
       - name: Block live campus and payment hosts during automated tests
         shell: bash
@@ -64,12 +131,8 @@ jobs:
           printf '127.0.0.1 one.ahu.edu.cn jw.ahu.edu.cn adwmh.ahu.edu.cn ycard.ahu.edu.cn epay92.ahu.edu.cn\n' | sudo tee -a /etc/hosts >/dev/null
           echo 'AHUTONG_CI_DISABLE_LIVE_PAYMENT=1' >> "$GITHUB_ENV"
 
-      - name: Generate Xcode project
-        run: |
-          xcodegen --version
-          xcodegen generate --spec project.yml
-
       - name: Create an isolated iPhone Simulator
+        id: simulator
         shell: bash
         run: |
           set -euo pipefail
@@ -84,40 +147,59 @@ jobs:
           xcrun simctl bootstatus "$simulator_udid" -b
           xcrun simctl ui "$simulator_udid" appearance light
 
-      - name: Build and test
+      - name: Run all Swift unit tests on the navigation simulator
+        if: matrix.suite == 'ui-navigation'
         shell: bash
         run: |
           set -euo pipefail
-          test_options=()
-          case '${{ matrix.suite }}' in
-            unit)
-              test_options=(-only-testing:AHUTongTests)
-              ;;
-            ui-navigation)
-              for test in testAndroidParityPrimaryScreens testScheduleSupportsHorizontalWeekPaging testDeclinedPrivacyUsesScheduleOnlyExperienceAccount testNativeNavigationBarEdgeAndContentPopGestures testCompactHomeWeatherOpensWeatherInsteadOfSchedule; do
-                test_options+=("-only-testing:AHUTongUITests/AppShellUITests/$test")
-              done
-              ;;
-            ui-services)
-              for test in testAndroidParityLoginAndReminderSystemStates testAndroidParityLoadingEmptyAndErrorStates testAndroidParityPaymentsAndOperations testNetworkRechargeAndCMBPreference; do
-                test_options+=("-only-testing:AHUTongUITests/AppShellUITests/$test")
-              done
-              test_options+=(-only-testing:AHUTongUITests/PaymentLocalParityUITests -only-testing:AHUTongUITests/CampusCardPriorityUITests)
-              ;;
-            ui-settings)
-              test_options=(-only-testing:AHUTongUITests -skip-testing:AHUTongUITests/AppShellUITests -skip-testing:AHUTongUITests/PaymentLocalParityUITests -skip-testing:AHUTongUITests/CampusCardPriorityUITests)
-              ;;
-          esac
+          test_runs=("$RUNNER_TEMP/TestBuild/Build/Products/"*.xctestrun)
+          test "${#test_runs[@]}" -eq 1
+          test -f "${test_runs[0]}"
           xcodebuild \
-            -project AHUTong.xcodeproj \
-            -scheme AHUTong \
+            -xctestrun "${test_runs[0]}" \
+            -derivedDataPath "$RUNNER_TEMP/TestBuild" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -resultBundlePath "$RUNNER_TEMP/AHUTong-unit.xcresult" \
+            -parallel-testing-enabled NO \
+            -only-testing:AHUTongTests \
+            test-without-building
+
+      - name: Run UI tests without rebuilding
+        if: ${{ !cancelled() && steps.restore.outcome == 'success' && steps.simulator.outcome == 'success' }}
+        shell: bash
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci-test-shards.py options "$TEST_SUITE" > "$RUNNER_TEMP/test-options.txt"
+          test_options=()
+          while IFS= read -r option; do test_options+=("$option"); done < "$RUNNER_TEMP/test-options.txt"
+          test_runs=("$RUNNER_TEMP/TestBuild/Build/Products/"*.xctestrun)
+          test "${#test_runs[@]}" -eq 1
+          test -f "${test_runs[0]}"
+          # Failed UI cases get at most one fresh test-runner process.
+          # XCTest retains both attempts in xcresult; report retries below.
+          test_options+=(-retry-tests-on-failure -test-iterations 2 -test-repetition-relaunch-enabled YES)
+          xcodebuild \
+            -xctestrun "${test_runs[0]}" \
+            -derivedDataPath "$RUNNER_TEMP/TestBuild" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -resultBundlePath "$RUNNER_TEMP/AHUTong.xcresult" \
             -parallel-testing-enabled NO \
             "${test_options[@]}" \
-            test
+            test-without-building 2>&1 | tee "$RUNNER_TEMP/AHUTong-ui.log"
+          python3 - <<'PY'
+          import os, pathlib, re
+          log = pathlib.Path(os.environ['RUNNER_TEMP'], 'AHUTong-ui.log').read_text()
+          failed = sorted(set(re.findall(r"Test Case '-\[AHUTongUITests\.(\w+) (\w+)\]' failed", log)))
+          if failed:
+              names = ', '.join(f'{cls}/{method}' for cls, method in failed)
+              print(f'::warning::UI required its single retry: {names}. Inspect the retained xcresult and log.')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write(f'\nUI passed after one retry: {names}. Both attempts are retained.\n')
+          PY
 
-      - name: Upload UI parity screenshots and test result
+      - name: Export UI parity screenshots and test result
         if: always()
         shell: bash
         run: |
@@ -130,9 +212,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: AHUTong-${{ matrix.suite }}-xcresult-${{ github.run_number }}
+          name: AHUTong-${{ matrix.suite }}-xcresult-${{ github.run_number }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/AHUTong.xcresult
+            ${{ runner.temp }}/AHUTong-unit.xcresult
+            ${{ runner.temp }}/AHUTong-ui.log
             ${{ runner.temp }}/UIParityAttachments
           if-no-files-found: warn
           retention-days: 7

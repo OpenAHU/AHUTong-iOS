@@ -45,7 +45,7 @@ final class ShortcutUITests: XCTestCase {
         app.launchArguments = ["--demo-consent", "--demo-session"]
         app.open(URL(string: "ahutong://payment-code")!)
         XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].isHittable)
+        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].wait(for: \.isHittable, toEqual: true, timeout: 15))
         XCTAssertTrue(app.otherElements["campus-card.qr-panel"].exists)
         attachScreenshot(app, "shortcut-payment-code-cold")
     }
@@ -60,12 +60,12 @@ final class ShortcutUITests: XCTestCase {
         XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 5))
         app.open(URL(string: "ahutong://payment-code")!)
         XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].isHittable)
+        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].wait(for: \.isHittable, toEqual: true, timeout: 15))
         tools.tap()
         app.buttons["tools.phone-book"].tap()
         app.open(URL(string: "ahutong://payment-code")!)
         XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].isHittable)
+        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].wait(for: \.isHittable, toEqual: true, timeout: 15))
         attachScreenshot(app, "shortcut-payment-code-repeat")
     }
 

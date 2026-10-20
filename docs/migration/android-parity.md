@@ -8,12 +8,12 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v4 披露 ADWMH 首次及续期均远端 OCR，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.3（5）：包含 Widget 重签和安装检查（E-20261020-01）、十分钟岛卡边界/圆角与原生电话本（E-20261020-02）；精简下载使用说明、保护 main 并记录 CI 耗时（E-20261020-03）。Windows Sideloadly / iOS 27 最终授权仍待真机复验 |
+| 当前焦点 | 1.0.3（5）：包含 Widget 重签和安装检查（E-20261020-01）、十分钟岛卡边界/圆角与原生电话本（E-20261020-02）；精简下载使用说明、保护 main 并记录 CI 耗时（E-20261020-03）；CI 一次构建、五组 UI 与单测复用产物，全量通过，总用时 29 分 22 秒 → 23 分 58 秒（E-20261020-04）。Mac Developer Program 安装步骤已补齐；签名及 iOS 27 最终授权仍待真机复验 |
 | 下一步 | 在本轮包上用授权 iPhone 验证首次登录及隔天恢复、真实成绩/考试、缴费查询与小组件注册；当前本机仅有 iOS 26.5 Simulator，iOS 27 真机仍待复验 |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前分支 | `chore/1.0.3-maintenance` 与 PR #8 的 `fix/island-phonebook-ui` 同步；修复起点为 main `8b2916c`，已合入 Widget 修复 `0153ef1` |
+| 当前维护 | CI 优化见 [PR #9](https://github.com/OpenAHU/AHUTong-iOS/pull/9)；功能基线为 PR #8 的 main `e9b7704`，App / Widget 保持 1.0.3（5） |
 | 最近更新 | 2026-10-20 |
 
 ## 1. 目标与边界
@@ -304,7 +304,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；1.0.2（4）修复待重签包缺少权限声明、适配双方唯一共同组，新增具体失败原因与安装检查分享 | 共享专项 20 项、打包检查 16 项、原生指引/分享 UI 1 项通过，Release iphoneos 与最终 IPA 权限声明检查通过；Windows Sideloadly 实机最终授权仍待复验，见 E-20261020-01 | 2026-10-20 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天、课前 10 分钟边界和圆角安全留白；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录；本轮 10 分钟边界、圆角布局及原生计时回归见 E-20261020-02 | 2026-10-20 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 单测及三组 UI 独立运行并分别保存结果，避免整套 30 分钟超时；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI `35856636143` 全绿，未签名 IPA `35857197483` 构建与校验通过；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建，导航组单测及五组 UI 复用同一产物、五台独立模拟器并分别保存结果；分组校验保证 UI 无遗漏或重复（E-20261020-04）；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；本轮 CI `39428134231` 全绿：509 Swift / 40 UI / 25 Rust / 22 Python，耗时见 `E-20261020-04` 和 `docs/ci.md` | 2026-10-20 |
 
 2026-10-19 1.0.2 对上述矩阵的增量更新（覆盖对应旧界面描述，验证见 E-20261019-06）：
 
@@ -697,6 +697,15 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - `docs/ci.md` 按 run `39389808697` 的步骤时间和 XCTest 日志记录四组耗时；最长设置组约 30 分钟，其中串行 UI 17 分 53 秒、模拟器 2 分 45 秒、编译/准备 7 分 7 秒。记录后续分片与复用构建方向，本轮未缩减测试覆盖。
 - 本轮构建沿用 `Build unsigned IPA`，主 App 与 Widget 统一校验并保留 App Group 声明；产物需用户重签安装，不写入 Apple 账号、证书或描述文件，不更新 AIO gitlink。
 
+### E-20261020-04：CI 构建复用与均衡分组
+
+- 将四次重复编译改为一次 `build-for-testing`；五组任务通过 `test-without-building` 复用同一运行的 tar 产物，保留执行权限及符号链接，执行前核对 Xcode 与 Simulator SDK。导航组先运行全量单测，避免再占一台 Mac runner。
+- 40 条 UI 用例按逐项耗时均衡分配，校验脚本拒绝漏分、重复和失效选择；保留五台独立模拟器、组内串行、真实倒计时等待、支付禁写、域名阻断、截图与 xcresult。
+- 修正自动化同步：Tab 切换和电控选中值使用有界等待，大字体电话本 Popover 从原生导航栏外点关闭，支付保留服务端成功断言并等待有效快照，快捷指令使用原生属性等待可点击。UI 失败用例最多在新测试进程复验一次，两次结果保留；复验通过显式 warning，连续失败仍使 CI 失败。单测不自动复验。
+- 最终云端 [39428134231](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39428134231) 全绿：509 Swift 单测、40 UI、25 Rust、22 Python；40 条 UI 均首次通过，没有触发复验。与优化前最后一次成功运行相比，含排队总用时 29 分 22 秒 → 23 分 58 秒，缩短 18.4%；累计 job 用时 84 分 16 秒 → 81 分 54 秒。分组时间、计算口径和失败诊断记录见 [CI 文档](../ci.md)。
+- 本机跨目录恢复 tar 后 509 单测通过；通用 Simulator `build-for-testing`、22 Python 检查、40 UI 分组审计通过；页面巡检、两条电话本、完整支付及两条快捷指令用例复验通过。macOS Bash 3.2 下五组 UI 步骤、失败退出码和复验告警均检查通过。
+- README 统一链接安装文档，补齐 Mac + Developer Program 的同 Team、共同 App Group、源码安装与现成 IPA 重签步骤；未修改应用功能或 1.0.3（5）版本，未更新 AIO gitlink。
+
 ## 12. 风险与阻断项
 
 | ID | 风险 | 等级 | 缓解与解除条件 | 状态 |
@@ -912,3 +921,5 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 | 2026-10-19 | UI-010 / PREF-013 / SYS-006 / REL-003 | 校园码展开与放大、课表正圆周次、设置返回根页、与相邻卡片一致的偏好内 Siri 引导、紧凑课表回复与随机双排头像；贡献使用系统浮窗，关闭自动续滚；新增 Himekawa；岛卡改为仅课前显示，App/Widget 统一 1.0.2 (3) | 实现及验证见 E-20261019-06；旧断言按新需求更新，保留失败记录与真机边界 | 本次提交 |
 
 | 2026-10-20 | SYS-007 / REL-004 | 1.0.2（4）保留重签所需 App Group 声明、唯一共同组适配、具体失败提示与可分享安装摘要；CI 强制验证权限声明 | 20 Swift + 16 Python + 1 UI 通过，Release iphoneos 与最终 IPA 检查通过；Sideloadly 实机授权仍待复验，见 E-20261020-01 | 本次提交 |
+
+| 2026-10-20 | OPS-008 | CI 一次构建、五组复用，全量通过；含排队用时 29:22 → 23:58（−18.4%），保留隔离、断言与证据；补齐 Mac 安装说明 | CI `39428134231`：509 Swift / 40 UI / 25 Rust / 22 Python，UI 无复验；详见 E-20261020-04 | PR #9，验证 commit `31a3809` |

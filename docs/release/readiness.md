@@ -9,6 +9,18 @@
 
 GitHub Runner 不接收 Apple ID、密码、证书或描述文件。未签名 IPA 不能直接安装到 iPhone，也不等同于 TestFlight/App Store 产物。
 
+## 在 Mac 上使用 Developer Program 安装
+
+已有 Mac、Xcode 和付费开发者账号时，优先从源码用 Xcode 自动签名安装，便于同时管理主 App、Widget 和共享课表权限。此路径会重新构建；安装下载的 IPA 则使用下文的 Sideloadly 重签步骤。
+
+1. 初始化仓库依赖后执行 `xcodegen generate --spec project.yml`，用 Xcode 打开 `AHUTong.xcodeproj`。
+2. 在 Xcode 的 Settings → Accounts 登录开发者账号；为 `AHUTong` 和 `AHUTongWidget` 两个 target 选择同一个 Team，并启用 Automatically manage signing。
+3. 使用属于自己团队的 App / Widget Bundle ID。为这两个 App ID 启用同一个已注册的 App Group，将工程的 `AHUTONG_APP_GROUP` 设为该组；两份 entitlements 与 Info.plist 会共用此变量。保留这些签名设置在本机，重新生成工程前保存本地配置。
+4. 用数据线连接并解锁 iPhone，完成“信任此电脑”；按系统提示在“设置 → 隐私与安全性 → 开发者模式”启用并重启。Xcode 顶部选择 `AHUTong` scheme 和这台 iPhone，按 ⌘R 构建、签名并安装。
+5. 首次打开 App、刷新课表，再添加桌面课表组件；在“小工具 → 添加桌面课表微件”检查共享权限。更新已有安装时沿用原 Team 和 Bundle ID；改用新标识会成为另一个安装。
+
+Apple 说明：[在设备上运行](https://help.apple.com/xcode/mac/current/en.lproj/dev5a825a1ca.html)、[为目标分配签名团队](https://help.apple.com/xcode/mac/current/en.lproj/dev23aab79b4.html)、[配置 App Groups](https://developer.apple.com/documentation/xcode/configuring-app-groups)。签名有效期以实际证书和描述文件为准。
+
 ## 申请制 Ad Hoc 网页安装（付费开发者团队）
 
 2026-10-14 调研结论：安大通受限设备测试优先使用申请页、一次性 UDID 登记和 Ad Hoc OTA 安装。申请者只使用 Safari 和系统设置，不需要安装 Sideloadly、AltStore 或签名工具，也不需要开发者的 Apple Account。
@@ -44,7 +56,7 @@ Kazumi 的[官方构建工作流](https://github.com/Predidit/Kazumi/blob/main/.
 
 ### Xcode / Personal Team
 
-1. 在 macOS 下载并解压未签名 IPA，或从仓库生成 Xcode 工程：`xcodegen generate --spec project.yml`。
+1. 从仓库生成 Xcode 工程：`xcodegen generate --spec project.yml`。
 2. 用 Xcode 打开 `AHUTong.xcodeproj`，在 App 和 Widget 两个 target 选择自己的 Personal Team。
 3. 将 App 和 Widget 的 Bundle ID 改成自己账号下唯一且相互匹配的值。需要共享课表时，两个 target 都须获授权使用同一 App Group，并设置 `AHUTONG_APP_GROUP`；不要提交这些本地签名改动。
 4. 用数据线连接 iPhone 13 Pro，选择设备后运行；首次安装需在设备的“VPN 与设备管理”中信任开发者。
@@ -86,13 +98,13 @@ python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
 
 从源码使用自己团队签名时，设置 `AHUTONG_APP_GROUP` 为该团队已配置并且 App/Widget 都获授权的共享组；两份 entitlements 与两份 Info.plist 共用此变量。仅修改 Bundle ID 而丢失共享权限，会导致组件读不到课表。iOS 的 App/扩展需要共同获授权的 [App Group](https://developer.apple.com/documentation/xcode/configuring-app-groups)。
 
-### Windows Sideloadly + Developer Program 账号
+### Sideloadly + Developer Program 账号（macOS / Windows）
 
-1. 使用新版测试包，保留 Widget 扩展，并沿用原安装标识覆盖更新；无需卸载或清空数据。
+1. 从 [Sideloadly 官网](https://sideloadly.io/) 下载对应系统的版本，用数据线连接并信任 iPhone，在工具中选择该 iPhone、载入 `AHUTong-unsigned.ipa`，使用开发者账号重签安装。保留 Widget 扩展，并沿用原安装标识覆盖更新；无需卸载或清空数据。
 2. 打开 App 刷新课表，然后检查桌面组件。原共享组不能访问时，App/Widget 会尝试识别同一签名团队的唯一共同授权组；仍须通过系统 `containerURL` 检查，不会改用无法共享的私有目录。
-3. 若仍不能同步，进入“小工具 → 添加桌面课表微件 → 添加”，查看具体原因并使用“分享安装检查”。摘要只包含版本、App/Widget 标识、共享组和检查结果；不包含账号、Cookie、课表、设备标识、证书或完整描述文件，不需要从 Windows 导出签名 IPA。
+3. 若仍不能同步，进入“小工具 → 添加桌面课表微件 → 添加”，查看具体原因并使用“分享安装检查”。摘要只包含版本、App/Widget 标识、共享组和检查结果；不包含账号、Cookie、课表、设备标识、证书或完整描述文件，不需要导出签名 IPA。
 4. `noCommonGroup` 表示两份描述文件未提供共同组，`accessDenied` 表示系统未允许访问所选组。Developer Program 会员身份本身不代表本次签名已配置 App Groups。在 Apple Developer 后台为本次安装的两个实际 App ID 启用同一个、属于自己团队的 App Group，并让签名工具重新生成匹配描述文件及双方 entitlement。不要直接假定原 `group.com.openahu.ahutong.shared` 已属于自己的团队。
-5. Sideloadly 官方将“自定义 app entitlements”列为 Developer Program 账号可用的 Patreon 功能；不能把“登录 Developer 账号”当作这项签名能力已启用的证据。若当前 Windows 签名流程无法保留/设置双方共享权限，可改用自己团队的 Xcode 签名或支持该配置的签名流程，不能靠 App 代码绕过系统权限。
+5. Sideloadly 官方将“自定义 app entitlements”列为 Developer Program 账号可用的 Patreon 功能；不能把“登录 Developer 账号”当作这项签名能力已启用的证据。若当前签名流程无法保留/设置双方共享权限，可改用自己团队的 Xcode 签名或支持该配置的签名流程，不能靠 App 代码绕过系统权限。
 
 运行时对 `embedded.mobileprovision` 的读取仅用于侧载兼容候选和诊断；格式变化或缺失时回到配置组/明确不可用状态。Apple 提醒该格式不是稳定产品 API，因此不把读取成功当作签名验证，更不将其当作共享授权。正常签名和 App Store 构建直接使用配置组，无需读取描述文件。
 
