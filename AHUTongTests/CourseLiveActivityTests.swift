@@ -21,7 +21,7 @@ final class CourseLiveActivityTests: XCTestCase {
     func testEndUsesLastPeriodIncludingLongBreaks() throws {
         let plan = try XCTUnwrap(planner.nextCourse(
             courses: [course(duration: 3)], currentWeek: 1,
-            now: date(hour: 7), calendar: calendar
+            now: date(hour: 7, minute: 55), calendar: calendar
         ))
         XCTAssertEqual(plan.endDate, date(hour: 10, minute: 35))
     }
@@ -29,7 +29,7 @@ final class CourseLiveActivityTests: XCTestCase {
     func testDoesNotStartForTomorrowOrInactiveWeek() {
         XCTAssertNil(planner.nextCourse(
             courses: [course(weekday: 2), course(weeks: [2])],
-            currentWeek: 1, now: date(hour: 7), calendar: calendar
+            currentWeek: 1, now: date(hour: 7, minute: 55), calendar: calendar
         ))
     }
 
@@ -40,31 +40,48 @@ final class CourseLiveActivityTests: XCTestCase {
         ))
     }
 
-    func testActivityLifetimeOnlyNeedsToReachClassStart() {
+    func testPreclassWindowIncludesTenMinutesAndExcludesAnythingEarlier() {
+        let boundary = date(hour: 7, minute: 50)
+        XCTAssertNil(planner.nextCourse(
+            courses: [course()], currentWeek: 1,
+            now: boundary.addingTimeInterval(-1), calendar: calendar
+        ))
+        XCTAssertNotNil(planner.nextCourse(
+            courses: [course()], currentWeek: 1, now: boundary, calendar: calendar
+        ))
         XCTAssertNil(planner.nextCourse(
             courses: [course(startPeriod: 11)], currentWeek: 1,
-            now: date(hour: 7), calendar: calendar
+            now: date(hour: 16), calendar: calendar
         ))
         XCTAssertNotNil(planner.nextCourse(
             courses: [course(startPeriod: 11)], currentWeek: 1,
-            now: date(hour: 11), calendar: calendar
+            now: date(hour: 18, minute: 50), calendar: calendar
         ))
     }
 
     func testWeekdayUsesSuppliedTimeZone() {
-        // Sunday 23:30 UTC is already Monday morning in Shanghai.
-        let now = ISO8601DateFormatter().date(from: "2026-07-12T23:30:00Z")!
+        // Sunday 23:55 UTC is already Monday morning in Shanghai.
+        let now = ISO8601DateFormatter().date(from: "2026-07-12T23:55:00Z")!
         XCTAssertNotNil(planner.nextCourse(courses: [course()], currentWeek: 1, now: now, calendar: calendar))
         var utc = calendar
         utc.timeZone = TimeZone(secondsFromGMT: 0)!
         XCTAssertNil(planner.nextCourse(courses: [course()], currentWeek: 1, now: now, calendar: utc))
     }
 
+    func testSystemManagerEligibilityRejectsDistantOrStartedPlans() {
+        let start = date(hour: 8)
+        XCTAssertTrue(CourseActivityTiming.isWithinPreclassWindow(startDate: start, now: start.addingTimeInterval(-600)))
+        XCTAssertTrue(CourseActivityTiming.isWithinPreclassWindow(startDate: start, now: start.addingTimeInterval(-1)))
+        for offset in [-601.0, -10_038.0, 0, 1] {
+            XCTAssertFalse(CourseActivityTiming.isWithinPreclassWindow(startDate: start, now: start.addingTimeInterval(offset)))
+        }
+    }
+
     func testDefaultPlannerUsesCampusTimeEvenWhenDeviceUsesUTC() throws {
         let previous = NSTimeZone.default
         NSTimeZone.default = TimeZone(secondsFromGMT: 0)!
         defer { NSTimeZone.default = previous }
-        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-12T23:30:00Z"))
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-12T23:55:00Z"))
         let plan = try XCTUnwrap(planner.nextCourse(courses: [course()], currentWeek: 1, now: now))
         XCTAssertEqual(plan.startDate, date(hour: 8))
         XCTAssertEqual(plan.endDate, date(hour: 9, minute: 35))
@@ -79,7 +96,7 @@ final class CourseLiveActivityTests: XCTestCase {
         )
         XCTAssertEqual(restored.countdownInterval(to: restored.startDate).upperBound, date(hour: 8))
         XCTAssertEqual(restored.countdownInterval(to: restored.endDate).upperBound, date(hour: 9, minute: 35))
-        XCTAssertLessThan(restored.countdownInterval(to: restored.startDate).lowerBound, date(hour: 7))
+        XCTAssertEqual(restored.countdownInterval(to: restored.startDate).lowerBound, date(hour: 7, minute: 50))
         XCTAssertTrue(restored.isBeforeClass(at: date(hour: 7, minute: 59)))
         XCTAssertFalse(restored.isBeforeClass(at: date(hour: 8)))
         XCTAssertFalse(restored.isBeforeClass(at: date(hour: 10)))
@@ -88,7 +105,7 @@ final class CourseLiveActivityTests: XCTestCase {
     func testEnablingWithoutEligibleCourseKeepsPreferenceAndClearsOldActivity() async throws {
         let manager = LiveActivityManagerStub(authorized: true)
         let enabled = try await CourseLiveActivityCoordinator(manager: manager).setEnabled(
-            true, courses: [], currentWeek: 1, now: date(hour: 7), calendar: calendar
+            true, courses: [], currentWeek: 1, now: date(hour: 7, minute: 55), calendar: calendar
         )
         let plans = await manager.receivedPlans()
         XCTAssertTrue(enabled)
@@ -99,7 +116,7 @@ final class CourseLiveActivityTests: XCTestCase {
     func testDeniedAuthorizationClearsExistingActivityAndReturnsDisabled() async throws {
         let manager = LiveActivityManagerStub(authorized: false)
         let enabled = try await CourseLiveActivityCoordinator(manager: manager).setEnabled(
-            true, courses: [course()], currentWeek: 1, now: date(hour: 7), calendar: calendar
+            true, courses: [course()], currentWeek: 1, now: date(hour: 7, minute: 55), calendar: calendar
         )
         let plans = await manager.receivedPlans()
         XCTAssertFalse(enabled)
@@ -123,7 +140,7 @@ final class CourseLiveActivityTests: XCTestCase {
     func testEligibleCourseIsPassedToActivityManager() async throws {
         let manager = LiveActivityManagerStub(authorized: true)
         let enabled = try await CourseLiveActivityCoordinator(manager: manager).setEnabled(
-            true, courses: [course()], currentWeek: 1, now: date(hour: 7), calendar: calendar
+            true, courses: [course()], currentWeek: 1, now: date(hour: 7, minute: 55), calendar: calendar
         )
         let plans = await manager.receivedPlans()
         XCTAssertTrue(enabled)

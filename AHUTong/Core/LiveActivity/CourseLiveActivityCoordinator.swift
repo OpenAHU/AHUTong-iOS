@@ -31,7 +31,10 @@ actor SystemCourseLiveActivityManager: CourseLiveActivityManaging {
         backgroundTask = nil
         await CourseActivityBackgroundExecution.end()
         guard revision == currentRevision else { return }
-        let plan = plan.flatMap { $0.startDate > Date() ? $0 : nil }
+        let now = Date()
+        let plan = plan.flatMap {
+            CourseActivityTiming.isWithinPreclassWindow(startDate: $0.startDate, now: now) ? $0 : nil
+        }
         var retained: Activity<CourseActivityAttributes>?
         for activity in Activity<CourseActivityAttributes>.activities {
             if let plan,

@@ -9,9 +9,6 @@ struct CourseLiveActivityPlan: Equatable, Sendable {
 }
 
 struct CourseLiveActivityPlanner: Sendable {
-    // An activity only needs to survive until class starts.
-    static let maximumLifetime = CourseActivityTiming.maximumLifetime
-
     func nextCourse(
         courses: [Course],
         currentWeek: Int,
@@ -38,7 +35,7 @@ struct CourseLiveActivityPlanner: Sendable {
             )
         }
         guard !today.contains(where: { $0.startDate <= now }) else { return nil }
-        return today.filter { $0.startDate.timeIntervalSince(now) <= Self.maximumLifetime }.sorted {
+        return today.filter { CourseActivityTiming.isWithinPreclassWindow(startDate: $0.startDate, now: now) }.sorted {
             if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
             return $0.courseID < $1.courseID
         }

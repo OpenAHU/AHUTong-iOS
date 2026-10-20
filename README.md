@@ -1,39 +1,26 @@
-# AHUTong iOS
+# 安大通 iOS
 
-AHUTong（安大通）的 iOS 客户端，使用 Swift 和 SwiftUI 逐步迁移 Android 端的校园服务能力。
+安大通的 iOS 客户端，提供课程表与校园服务，支持 iOS 17 及以上版本。
 
-## 当前基线
+## 下载与使用
 
-- iOS 17+
-- Swift 6
-- Xcode 26
-- XcodeGen 2.45.4+
+1. 登录 GitHub，进入 [Build unsigned IPA](https://github.com/OpenAHU/AHUTong-iOS/actions/workflows/ios-unsigned-ipa.yml)，打开最近一次成功的运行。
+2. 在 **Artifacts** 下载 `AHUTong-unsigned-ipa` 压缩包，解压得到 `AHUTong-unsigned.ipa`。构建产物保留 7 天。
+3. 使用 Sideloadly 或 AltStore 在自己的电脑上重签并安装，保留内嵌 Widget 扩展。安装后打开安大通，按首启流程完成登录。
 
-Bundle ID `com.openahu.ahutong` 目前是工程占位值；签名团队、最终 Bundle ID 和发布参数会在发布前确认。
+IPA 需要重新签名才能安装。签名、安装与课表小组件配置见 [安装说明](docs/release/readiness.md#免费-apple-id-的-7-天签名)。
 
-## 生成并打开工程
+## 开发
+
+需要 macOS、Xcode 26+、XcodeGen 2.45.4+ 和 Rust stable。
 
 ```bash
-brew install xcodegen
+git clone --recurse-submodules https://github.com/OpenAHU/AHUTong-iOS.git
+cd AHUTong-iOS
 xcodegen generate --spec project.yml
 open AHUTong.xcodeproj
 ```
 
-`project.yml` 是工程配置的唯一来源，生成的 `AHUTong.xcodeproj` 不进入版本控制。
+在 Xcode 中选择 `AHUTong` scheme 和 iPhone Simulator，运行或测试。`project.yml` 是工程配置来源，生成的 Xcode 工程不提交。
 
-## 验证
-
-```bash
-xcodegen generate --spec project.yml
-xcodebuild \
-  -project AHUTong.xcodeproj \
-  -scheme AHUTong \
-  -destination 'platform=iOS Simulator,name=<available simulator>' \
-  test
-```
-
-当前 Windows 工作区无法运行 Xcode；构建、测试与 Archive 由 macOS/Xcode 或 GitHub Actions 验证。
-
-## 迁移进度
-
-长期目标、功能矩阵、风险和逐次变更记录见 [Android → iOS 迁移路线图](docs/migration/android-parity.md)。
+[功能与验证记录](docs/migration/android-parity.md) · [CI 耗时分析](docs/ci.md)

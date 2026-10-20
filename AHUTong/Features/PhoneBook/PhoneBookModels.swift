@@ -11,6 +11,9 @@ struct CampusPhoneNumber: Hashable, Codable, Identifiable, Sendable {
 
     var id: String { "\(campus?.rawValue ?? "通用")-\(localNumber)" }
     var displayNumber: String { "0551-\(localNumber)" }
+    var dialActionTitle: String {
+        campus.map { "\($0.rawValue)校区 \(displayNumber)" } ?? displayNumber
+    }
 
     var dialURL: URL? {
         let digits = displayNumber.filter(\.isNumber)
@@ -35,7 +38,7 @@ struct PhoneBookSection: Hashable, Identifiable, Sendable {
 }
 
 enum PhoneBookDirectory {
-    static let sourceDescription = "号码来自《安徽大学 2025 新生手册》；教务处号码于 2026 年 3 月核对更新。座机统一使用 0551 区号，Android 对照基线不含蜀山校区。"
+    static let sourceDescription = "号码来自《安徽大学 2025 新生手册》；教务处号码于 2026 年 3 月核对更新。座机统一使用 0551 区号，暂无蜀山校区号码。"
 
     static let sections: [PhoneBookSection] = [
         section("师生综合服务大厅", [

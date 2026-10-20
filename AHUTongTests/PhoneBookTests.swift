@@ -27,6 +27,8 @@ final class PhoneBookTests: XCTestCase {
         )
         XCTAssertEqual(finance.numbers.map(\.campus), [.qingyuan, .longhe])
         XCTAssertEqual(finance.numbers[0].dialURL?.absoluteString, "tel://055163861322")
+        XCTAssertEqual(finance.numbers.map(\.dialActionTitle), ["磬苑校区 0551-63861322", "龙河校区 0551-65107303"])
+        XCTAssertEqual(CampusPhoneNumber(campus: nil, localNumber: "63861109").dialActionTitle, "0551-63861109")
         XCTAssertNil(CampusPhoneNumber(campus: nil, localNumber: "110").dialURL)
     }
 }

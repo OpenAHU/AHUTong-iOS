@@ -616,7 +616,7 @@ struct HomeView: View {
             switch spec.id {
             case "grade": NavigationLink { GradeView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
             case "exam": NavigationLink { ExamView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "phone_book": NavigationLink { PhoneBookView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
+            case "phone_book": NavigationLink { PhoneBookView() } label: { label() }.buttonStyle(.plain)
             case "school_calendar": NavigationLink { SchoolCalendarView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
             case "weather": NavigationLink { WeatherView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
             case "repository": NavigationLink { StudyRepositoryView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
