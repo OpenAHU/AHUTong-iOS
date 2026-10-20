@@ -9,10 +9,12 @@ final class CourseLiveActivityUITests: XCTestCase {
         app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-session", "--demo-live-activity", "--demo-live-activity-too-early"]
         app.launch()
         defer { app.terminate() }
-        let status = app.staticTexts["live-activity.fixture.status"]
-        XCTAssertTrue(status.waitForExistence(timeout: 15))
-        expectation(for: NSPredicate(format: "label == %@", "未创建"), evaluatedWith: status)
-        waitForExpectations(timeout: 5)
+        // Wait for the completed fixture state, not the initially empty overlay.
+        // A cold CI simulator can spend the entire short predicate timeout
+        // resolving one AX snapshot. A labelled query also refreshes the match.
+        let status = app.staticTexts.matching(identifier: "live-activity.fixture.status")
+            .matching(NSPredicate(format: "label == %@", "未创建")).firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 30))
     }
 
     @MainActor
