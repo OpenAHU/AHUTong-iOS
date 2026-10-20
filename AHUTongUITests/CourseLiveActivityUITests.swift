@@ -34,9 +34,7 @@ final class CourseLiveActivityUITests: XCTestCase {
         let screen = app.frame
         XCUIDevice.shared.press(.home)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let island = springboard.descendants(matching: .any).matching(identifier: "regular.view").firstMatch
-        XCTAssertTrue(island.waitForExistence(timeout: 5))
-        island.press(forDuration: 1.5)
+        expandIsland(springboard, screen: screen)
         let title = springboard.staticTexts["数据库原理与应用"]
         let location = springboard.staticTexts["博学南楼 B101"]
         let timer = springboard.descendants(matching: .any)
@@ -120,18 +118,7 @@ final class CourseLiveActivityUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         capture("live-activity-collapsed", springboard: springboard)
-        // SpringBoard sometimes exposes extra windows in physical pixels on CI.
-        // Its application frame then exceeds the logical screen, so normalized
-        // application coordinates can miss the island entirely. Target the
-        // observed island element, with a logical-screen coordinate fallback.
-        let island = springboard.descendants(matching: .any).matching(identifier: "regular.view").firstMatch
-        if island.waitForExistence(timeout: 5) {
-            island.press(forDuration: 1.5)
-        } else {
-            springboard.coordinate(withNormalizedOffset: .zero)
-                .withOffset(CGVector(dx: screenFrame.midX, dy: screenFrame.height * 0.037))
-                .press(forDuration: 1.5)
-        }
+        expandIsland(springboard, screen: screenFrame)
         let startCountdown = springboard.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS %@", "距上课")).firstMatch
         XCTAssertTrue(startCountdown.waitForExistence(timeout: 8))
@@ -140,9 +127,14 @@ final class CourseLiveActivityUITests: XCTestCase {
         let timers = try renderedCountdowns(springboard)
         XCTAssertGreaterThan(timers[0], 0)
         let deadline = capturedAt.addingTimeInterval(TimeInterval(timers[0]) + 8)
-        XCTAssertTrue(startCountdown.waitForNonExistence(timeout: max(5, deadline.timeIntervalSinceNow)))
-        XCTAssertFalse(springboard.staticTexts["距下课"].exists)
+        _ = startCountdown.waitForNonExistence(timeout: max(5, deadline.timeIntervalSinceNow))
         capture("live-activity-dismissed-in-background", springboard: springboard)
+        // SpringBoard can retain an old AX subtree (including a frozen 0:00)
+        // after removing the remote view. Check fresh rendered pixels as well;
+        // an actually visible zero countdown must still fail this assertion.
+        XCTAssertTrue(try renderedTimerReadings(springboard, requiresCountdown: false).isEmpty,
+                      "The course countdown must no longer be visible by class start")
+        XCTAssertFalse(springboard.staticTexts["距下课"].exists)
     }
 
     @MainActor
@@ -163,12 +155,31 @@ final class CourseLiveActivityUITests: XCTestCase {
     }
 
     @MainActor
+    private func expandIsland(_ springboard: XCUIApplication, screen: CGRect) {
+        let title = springboard.staticTexts["数据库原理与应用"]
+        let island = springboard.descendants(matching: .any).matching(identifier: "regular.view").firstMatch
+        XCTAssertTrue(island.waitForExistence(timeout: 8))
+        island.press(forDuration: 1.5)
+        if title.waitForExistence(timeout: 5) { return }
+        // SpringBoard can report a collapsed region before its remote view is
+        // ready. Retry at a logical screen point only after checking expansion;
+        // SpringBoard's own frame can include oversized physical-pixel windows.
+        for _ in 0..<2 {
+            springboard.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: screen.midX, dy: screen.height * 0.037))
+                .press(forDuration: 1.5)
+            if title.waitForExistence(timeout: 5) { return }
+        }
+        XCTFail("Course Live Activity did not expand after its remote view became available")
+    }
+
+    @MainActor
     private func renderedCountdowns(_ springboard: XCUIApplication) throws -> [Int] {
         try renderedTimerReadings(springboard).map { $0.1 }
     }
 
     @MainActor
-    private func renderedTimerReadings(_ springboard: XCUIApplication) throws -> [(CGRect, Int)] {
+    private func renderedTimerReadings(_ springboard: XCUIApplication, requiresCountdown: Bool = true) throws -> [(CGRect, Int)] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US"]
@@ -178,13 +189,17 @@ final class CourseLiveActivityUITests: XCTestCase {
         try VNImageRequestHandler(cgImage: image).perform([request])
         let matches = (request.results ?? []).compactMap { observation -> (CGRect, String)? in
             guard let text = observation.topCandidates(1).first?.string,
+                  observation.boundingBox.midX > 0.5,
                   text.range(of: #"^\d{1,2}:\d{2}(:\d{2})?$"#, options: .regularExpression) != nil else { return nil }
             return (observation.boundingBox, text)
         }
-        // The preclass countdown is below the status-bar clock in the expanded island.
+        // Keep only the right-side island timer, excluding the left status clock.
+        // The expanded countdown is below a compact countdown if both appear.
         let timers = matches.sorted { $0.0.minY < $1.0.minY }.prefix(1).sorted { $0.0.midX < $1.0.midX }
-        XCTAssertEqual(timers.count, 1, "Expanded island must render the preclass countdown")
-        guard timers.count == 1 else { throw CountdownRecognitionError.missingTimers }
+        if requiresCountdown {
+            XCTAssertEqual(timers.count, 1, "Expanded island must render the preclass countdown")
+            guard timers.count == 1 else { throw CountdownRecognitionError.missingTimers }
+        }
         return timers.map { value in
             (value.0, value.1.split(separator: ":").reduce(0) { $0 * 60 + (Int($1) ?? 0) })
         }

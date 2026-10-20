@@ -684,6 +684,8 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 首轮 `build/IslandPhoneBookUI.xcresult` 中原生边缘/内容返回手势、远期计划不创建、后台在上课前消失共 3 项通过；另外 3 项失败的证据保留：倒计时组合辅助功能节点报告整个 region 的宽度，已改测 Vision 识别的真实数字像素；iOS 26 原生浮窗不显示取消行，已改走系统 `PopoverDismissRegion` 的外部点击关闭。未放宽倒计时递减和圆角内部留白要求。
 - `build/IslandPhoneBookUI2.xcresult` 中岛卡真实像素边距/原生倒计时递减及最大无障碍字号的原生分类/单号确认两项通过；搜索空态最初误断言固定“无结果”标题，实际系统标题包含搜索词，已按实际系统状态与零条目断言，`build/PhoneBookSearchValidation.xcresult` 回归通过。浅色截图见 `build/IslandPhoneBookUIAttachments2/`，包括 `DE87B980-8DB3-4338-A540-32AB3FC1D212.png` 岛卡和 `71FC2C0C-4A86-4596-8917-9274647D51B3.png` 双校区菜单。
 - 通过 `simctl ui appearance dark` 设置独立 QA 设备的真实系统深色模式后，`build/PhoneBookDarkValidation.xcresult` 两项电话本 UI 全部通过，包含分类、最大无障碍字号、双校区确认、外部关闭与空搜索；已逐张目视检查 `build/PhoneBookDarkAttachments/` 的列表/菜单/大字体截图，测试后恢复浅色。六个独立 UI 场景均已有通过证据（其中电话本两场景另在深色模式复验），不将保留的首轮失败结果标记为整套通过。
+- 合并前同步上游 `0153ef1`，保留 E-20261020-01 的 Widget 共享组、重签检查与 1.0.2（4）。PR #8 首轮 CI 的 509 项单测、5 项导航 UI、7 项服务 UI 通过；设置组 28 项中两项岛卡测试失败，电话本两项通过。证据保留在 run `39389808697`，未标为整套通过。
+- CI 录屏中首次长按后仍为折叠态，测试现确认标题出现后才检查布局，必要时按逻辑屏幕坐标重试。后台截止检查改用新截图的倒计时像素，排除左侧系统时钟，仍会拒绝可见的 `0:00`；本机复现旧 AX 子树一直存在但画面已清空，`build/PR8IslandDeadlineRegression.xcresult` 两项回归全部通过，保留展开边距、原生计时递减和后台截止截图。未修改产品行为或跳过测试。
 - 本轮没有新增 APNs，也没有改变主线的后台预算策略。岛卡仍在打开 App/刷新课表时维护；没有承诺 App 不运行时自动于课前十分钟创建，后台预算耗尽时可提前结束。未执行真实拨号；物理 iPhone、iOS 17–25 与 iOS 27 运行时仍需后续回归。
 
 ## 12. 风险与阻断项
