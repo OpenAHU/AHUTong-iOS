@@ -130,6 +130,55 @@ final class StudentMailUITests: XCTestCase {
         capture(app, "aurora-blue-default-and-iris-purple")
     }
 
+    func testSundayFirstKeepsCourseDatesAndPersistsUntilSwitchedOff() {
+        let fixture = #"[{"weekday":7,"startWeek":1,"endWeek":1,"location":"A301","name":"周日课程","teacher":"测试","length":2,"startTime":1,"courseId":"sunday-fixture","weekIndexes":[1]},{"weekday":1,"startWeek":1,"endWeek":2,"location":"A302","name":"周一课程","teacher":"测试","length":2,"startTime":1,"courseId":"monday-fixture","weekIndexes":[1,2]}]"#
+        let app = launch(["-schedule.show-all", "NO", "--demo-endpoint-schedule=\(fixture)"])
+        app.tabBars.buttons["课表"].tap()
+        app.buttons["schedule.settings"].tap()
+        let toggle = app.switches["schedule.settings.sunday-first"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 4))
+        if toggle.value as? String == "1" { toggle.tap() }
+        app.buttons["schedule.settings.done"].tap()
+        let monday = app.staticTexts["schedule.date.week.1.day.1"]
+        let sunday = app.staticTexts["schedule.date.week.1.day.7"]
+        XCTAssertTrue(monday.waitForExistence(timeout: 4))
+        XCTAssertEqual(sunday.label, "07-19")
+        XCTAssertLessThan(monday.frame.midX, sunday.frame.midX)
+
+        app.buttons["schedule.settings"].tap()
+        toggle.tap()
+        capture(app, "schedule-sunday-first-setting")
+        app.buttons["schedule.settings.done"].tap()
+        XCTAssertEqual(sunday.label, "07-12")
+        XCTAssertEqual(monday.label, "07-13")
+        XCTAssertLessThan(sunday.frame.midX, monday.frame.midX)
+        XCTAssertFalse(app.buttons["schedule.course.sunday-fixture"].exists)
+        app.buttons["schedule.week.2"].tap()
+        let nextSunday = app.staticTexts["schedule.date.week.2.day.7"]
+        XCTAssertTrue(nextSunday.waitForExistence(timeout: 4))
+        XCTAssertEqual(nextSunday.label, "07-19")
+        XCTAssertEqual(app.staticTexts["schedule.date.week.2.day.1"].label, "07-20")
+        let sundayCourse = app.buttons["schedule.course.sunday-fixture"]
+        XCTAssertTrue(sundayCourse.exists)
+        XCTAssertEqual(sundayCourse.frame.midX, nextSunday.frame.midX, accuracy: 2)
+        XCTAssertTrue(app.buttons["schedule.course.monday-fixture"].exists)
+        // The next page is accessible slightly before its slide finishes.
+        Thread.sleep(forTimeInterval: 0.35)
+        capture(app, "schedule-sunday-first-consecutive-dates")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["课表"].tap()
+        app.buttons["schedule.settings"].tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 4))
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.tap()
+        app.buttons["schedule.settings.done"].tap()
+        XCTAssertTrue(monday.waitForExistence(timeout: 4))
+        XCTAssertEqual(sunday.label, "07-19")
+        XCTAssertLessThan(monday.frame.midX, sunday.frame.midX)
+    }
+
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<5 {
             if element.isHittable { return }

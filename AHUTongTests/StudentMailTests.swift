@@ -39,6 +39,17 @@ final class StudentMailTests: XCTestCase {
         XCTAssertEqual(redirect?.host, StudentMailRoutes.host)
     }
 
+    func testOfficialVPNAndMailboxFragmentsAreLocalRoutesOnly() throws {
+        let vpn = URL(string: "https://wvpn.ahu.edu.cn/https/77726476706e69737468656265737421fff944d226387d1e7b0c9ce29b5b/tp_up/view?m=up#/")!
+        let normalized = try StudentMailRoutes.validate(vpn, campus: true)
+        XCTAssertNil(normalized.fragment)
+        XCTAssertEqual(normalized.host, "wvpn.ahu.edu.cn")
+        XCTAssertEqual(normalized.query, "m=up")
+        XCTAssertNil(try StudentMailRoutes.validate(URL(string: "https://mail.stu.ahu.edu.cn/static/sirius-web/?sid=fixture#/inbox")!, campus: false).fragment)
+        XCTAssertThrowsError(try StudentMailRoutes.validate(URL(string: "https://foreign.example/#https://wvpn.ahu.edu.cn/")!, campus: true))
+        XCTAssertThrowsError(try StudentMailRoutes.validate(URL(string: "http://wvpn.ahu.edu.cn/#/")!, campus: true))
+    }
+
     func testComposeEscapesTextAndNeverSilentlyDropsUnsupportedResources() throws {
         var draft = StudentMailDraft(to: "one@example.test；two@example.test;one@example.test", subject: "合成主题", body: "<script>safe text</script>\n下一行")
         XCTAssertTrue(draft.canSend)

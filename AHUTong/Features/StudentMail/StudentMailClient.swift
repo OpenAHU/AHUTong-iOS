@@ -18,10 +18,21 @@ struct StudentMailWebContext: Sendable {
 }
 
 enum StudentMailRoutes {
+    private static let logger = RedactingLogger(category: "student-mail")
     static let host = "mail.stu.ahu.edu.cn"
     static let entryHost = "entryhz.qiye.163.com"
     static let portal = URL(string: "https://one.ahu.edu.cn/tp_up/view?m=up")!
     static let secureAccount = "student-mail.session"
+
+    static func destination(_ url: URL) -> String {
+        switch url.host {
+        case "one.ahu.edu.cn": "portal"
+        case "wvpn.ahu.edu.cn": "vpn"
+        case host: "mail"
+        case entryHost: "entry"
+        default: "other"
+        }
+    }
 
     static func domainMatches(_ cookie: CampusCookie, host: String) -> Bool {
         let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
@@ -32,14 +43,21 @@ enum StudentMailRoutes {
         var parts = URLComponents(url: url, resolvingAgainstBaseURL: true)
         let allowed = campus ? ["one.ahu.edu.cn", "wvpn.ahu.edu.cn"] : [host, entryHost]
         guard let components = parts, components.user == nil, components.password == nil,
-              let hostname = components.host, allowed.contains(hostname),
-              components.fragment == nil else { throw StudentMailError.untrustedRoute }
+              let hostname = components.host, allowed.contains(hostname) else {
+            let reason = parts?.user != nil || parts?.password != nil ? "credentials" : "host"
+            logger.notice("route.rejected destination=\(destination(url)) reason=\(reason)")
+            throw StudentMailError.untrustedRoute
+        }
+        // Official WebVPN redirects include client-side routes after '#'. They
+        // are never part of an HTTP request or its destination authorization.
+        parts?.fragment = nil
         // The observed official entry sometimes emits an HTTP mailbox redirect.
         if !campus, hostname == host, components.scheme == "http", components.port == nil || components.port == 80 {
             parts?.scheme = "https"
             parts?.port = nil
         }
         guard parts?.scheme == "https", parts?.port == nil || parts?.port == 443, let result = parts?.url else {
+            logger.notice("route.rejected destination=\(destination(url)) reason=transport")
             throw StudentMailError.untrustedRoute
         }
         return result
@@ -102,6 +120,7 @@ private final class StudentMailDownloadLimiter: NSObject, URLSessionDownloadDele
 }
 
 actor StudentMailClient {
+    private let logger = RedactingLogger(category: "student-mail")
     private let owner: String
     private let campus: any CampusCoreAPI
     private let campusStore: CampusSessionStore
@@ -145,6 +164,7 @@ actor StudentMailClient {
     }
 
     private func establish() async throws -> String {
+        logger.notice("connect.begin")
         if let data = try await secureStore.data(forAccount: StudentMailRoutes.secureAccount),
            let stored = try? JSONDecoder().decode(StudentMailStoredSession.self, from: data),
            stored.owner == owner, !stored.sid.isEmpty, StudentMailProtocol.validAddress(stored.address) {
@@ -170,6 +190,7 @@ actor StudentMailClient {
         let endpoint = URL(string: "https://one.ahu.edu.cn/tp_up/up/subgroup/generateSsoUrl")!
         var entry = try await sso(endpoint, scope: "portal")
         if let vpnView = entry.vpn {
+            logger.notice("connect.vpn.begin")
             let portalKey = "portal.one.ahu.edu.cn"
             jars["vpn.one.ahu.edu.cn"] = (jars[portalKey] ?? []).filter { ["CASTGC", "TGC"].contains($0.cookie.name) }
             _ = try await send(URLRequest(url: URL(string: "https://wvpn.ahu.edu.cn/login")!), scope: "vpn", campus: true)
@@ -187,6 +208,7 @@ actor StudentMailClient {
             entry = try await sso(vpnEndpoint, scope: "vpn")
         }
         guard let entryURL = entry.url else { throw StudentMailError.invalidResponse }
+        logger.notice("connect.mail.begin")
         var mailPage = try await follow(entryURL, scope: "mail", campus: false)
         var capturedSID = URLComponents(url: mailPage.0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "sid" }?.value
         if mailPage.0.host == StudentMailRoutes.entryHost {
@@ -247,7 +269,10 @@ actor StudentMailClient {
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let raw = root["ssourl"] as? String, let entry = URL(string: raw) else { throw StudentMailError.unavailable }
         let trusted = try StudentMailRoutes.validate(entry, campus: false)
-        guard trusted.host == StudentMailRoutes.entryHost, trusted.path == "/domain/oa/Entry" else { throw StudentMailError.untrustedRoute }
+        guard trusted.host == StudentMailRoutes.entryHost, trusted.path == "/domain/oa/Entry" else {
+            logger.notice("sso.rejected reason=entry-target")
+            throw StudentMailError.untrustedRoute
+        }
         return (trusted, nil)
     }
 
@@ -282,6 +307,7 @@ actor StudentMailClient {
         let (data, response) = try await transport.data(for: request, delegate: StudentMailRedirectBlocker())
         try await assertCurrent()
         guard let response = response as? HTTPURLResponse else { throw StudentMailError.invalidResponse }
+        logger.notice("http.response scope=\(scope) destination=\(StudentMailRoutes.destination(url)) status=\(response.statusCode)")
         let headers = response.allHeaderFields.reduce(into: [String: String]()) { result, item in
             if let name = item.key as? String, let value = item.value as? String { result[name] = value }
         }

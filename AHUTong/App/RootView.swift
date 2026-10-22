@@ -75,6 +75,7 @@ struct RootView: View {
             }
         }
         .environmentObject(toastCenter)
+        .defaultAppStorage(AppRuntime.sessionDefaults)
         .overlay { AppToastOverlay(center: toastCenter) }
         .task {
             if ProcessInfo.processInfo.arguments.contains("--reset-onboarding") {

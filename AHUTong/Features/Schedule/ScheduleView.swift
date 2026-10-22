@@ -312,12 +312,18 @@ struct ScheduleView: View {
     @State private var importMessage: String?
     @AppStorage("schedule.show-all") private var showAllCourses = false
     @AppStorage("schedule.preview-next") private var previewNextSemester = false
+    @AppStorage(ScheduleWeekPresentation.sundayFirstKey) private var sundayFirst = false
 
     private let times = [
         "08:00", "08:50", "09:50", "10:40", "11:30", "14:00", "14:50",
         "15:50", "16:40", "17:30", "19:00", "19:50", "20:40"
     ]
-    private let weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    private var presentation: ScheduleWeekPresentation { ScheduleWeekPresentation(sundayFirst: sundayFirst) }
+    private var currentDisplayWeek: Int {
+        guard model.currentWeekIsKnown, !previewNextSemester else { return presentation.clamped(model.currentWeek) }
+        let weekday = (ScheduleCalendar.campus.component(.weekday, from: model.referenceDate) + 5) % 7 + 1
+        return presentation.clamped(presentation.page(teachingWeek: model.currentWeek, weekday: weekday))
+    }
 
     init(appModel: AppModel) {
         let userID: String
@@ -361,8 +367,11 @@ struct ScheduleView: View {
             }
             await model.load(demo: AppRuntime.isDemoSession, previewNext: previewNextSemester)
         }
-        .onChange(of: model.currentWeek) { oldWeek, newWeek in
-            if selectedWeek == oldWeek { selectedWeek = ScheduleWeekNavigation.clamped(newWeek) }
+        .onChange(of: currentDisplayWeek) { oldWeek, newWeek in
+            if selectedWeek == oldWeek { selectedWeek = newWeek }
+        }
+        .onChange(of: sundayFirst) { _, _ in
+            selectedWeek = presentation.clamped(selectedWeek)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { model.advanceDate() }
@@ -375,6 +384,7 @@ struct ScheduleView: View {
             ScheduleSettingsView(
                 showAllCourses: $showAllCourses,
                 previewNextSemester: $previewNextSemester,
+                sundayFirst: $sundayFirst,
                 isExperienceMode: isExperienceMode,
                 importAction: {
                     showSettings = false
@@ -407,13 +417,13 @@ struct ScheduleView: View {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
-                        ForEach(ScheduleWeekNavigation.validWeeks, id: \.self) { week in
+                        ForEach(presentation.pages, id: \.self) { week in
                             Button {
                                 withAnimation(.easeInOut(duration: 0.25)) {
                                     selectedWeek = week
                                 }
                             } label: {
-                                Text("\(week)")
+                                Text(presentation.title(page: week))
                                     .font(.headline.bold())
                                     .foregroundStyle(selectedWeek == week ? Color.white : Color.primary)
                                     .frame(width: weekIndicatorSize, height: weekIndicatorSize)
@@ -422,6 +432,7 @@ struct ScheduleView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("schedule.week.\(week)")
+                            .accessibilityLabel(presentation.accessibilityTitle(page: week))
                             .accessibilityAddTraits(selectedWeek == week ? .isSelected : [])
                             .id(week)
                         }
@@ -441,7 +452,7 @@ struct ScheduleView: View {
                         previewNextSemester = false
                     } else {
                         withAnimation(.easeInOut(duration: 0.25)) {
-                            selectedWeek = ScheduleWeekNavigation.clamped(model.currentWeek)
+                            selectedWeek = currentDisplayWeek
                         }
                     }
                 }
@@ -493,7 +504,7 @@ struct ScheduleView: View {
 
     private func schedulePager(courses: [Course]) -> some View {
         TabView(selection: $selectedWeek) {
-            ForEach(ScheduleWeekNavigation.validWeeks, id: \.self) { week in
+            ForEach(presentation.pages, id: \.self) { week in
                 scheduleGrid(courses: courses, week: week)
                     .tag(week)
             }
@@ -501,7 +512,7 @@ struct ScheduleView: View {
         .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: scheduleGridHeight)
         .accessibilityIdentifier("schedule.week-pager")
-        .accessibilityValue("第\(selectedWeek)周")
+        .accessibilityValue(presentation.accessibilityTitle(page: selectedWeek))
     }
 
     private func scheduleGrid(courses: [Course], week: Int) -> some View {
@@ -545,14 +556,14 @@ struct ScheduleView: View {
         VStack(spacing: spacing) {
             HStack(spacing: spacing) {
                 Color.clear.frame(width: timeWidth, height: 64)
-                ForEach(Array(weekdays.enumerated()), id: \.offset) { index, weekday in
+                ForEach(presentation.weekdays, id: \.self) { weekday in
                     VStack(spacing: 2) {
-                        Text(weekday).font(.caption.bold())
-                        Text(dateLabel(dayIndex: index, week: week)).font(.caption2).foregroundStyle(.secondary)
-                            .accessibilityIdentifier("schedule.date.week.\(week).day.\(index + 1)")
+                        Text(ScheduleWeekPresentation.weekdayTitle(weekday)).font(.caption.bold())
+                        Text(dateLabel(weekday: weekday, week: week)).font(.caption2).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("schedule.date.week.\(week).day.\(weekday)")
                     }
                     .frame(width: dayWidth, height: 64)
-                    .background(index == currentWeekdayIndex && week == model.currentWeek ? AndroidParityPalette.primaryContainer(colorScheme) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                    .background(presentation.column(for: weekday) == currentWeekdayIndex && week == currentDisplayWeek ? AndroidParityPalette.primaryContainer(colorScheme) : .clear, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             ForEach(Array(times.enumerated()), id: \.offset) { index, time in
@@ -575,7 +586,7 @@ struct ScheduleView: View {
         timeWidth: CGFloat,
         week: Int
     ) -> some View {
-        let active = course.occurs(inWeek: week)
+        let active = course.occurs(inWeek: presentation.teachingWeek(weekday: course.weekday, page: week))
         let height = CGFloat(course.duration) * 48 + CGFloat(max(course.duration - 1, 0)) * spacing
         return Button { selectedCourse = course } label: {
             VStack(alignment: .leading, spacing: 2) {
@@ -589,14 +600,14 @@ struct ScheduleView: View {
                     .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
                     .foregroundStyle(.black)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(active ? .white : ScheduleInactiveCourseStyle.foreground(colorScheme))
             .padding(4)
             .frame(width: dayWidth, height: height)
-            .background(active ? courseColor(course.name) : Color.gray, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(active ? courseColor(course.name) : ScheduleInactiveCourseStyle.background(colorScheme), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .offset(
-            x: timeWidth + spacing + CGFloat(course.weekday - 1) * (dayWidth + spacing),
+            x: timeWidth + spacing + CGFloat(presentation.column(for: course.weekday)) * (dayWidth + spacing),
             y: 64 + spacing + CGFloat(course.startPeriod - 1) * (48 + spacing)
         )
         .accessibilityLabel("\(course.name)，\(course.location)，第\(course.startPeriod)节")
@@ -620,7 +631,7 @@ struct ScheduleView: View {
         let cardHeight = max(1, (height - CGFloat(group.courses.count - 1)) / CGFloat(max(1, group.courses.count)))
         return VStack(spacing: 1) {
             ForEach(group.courses) { course in
-                let active = course.occurs(inWeek: week)
+                let active = course.occurs(inWeek: presentation.teachingWeek(weekday: course.weekday, page: week))
                 Button { selectedCourse = course } label: {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(course.name)
@@ -639,14 +650,14 @@ struct ScheduleView: View {
                                 .lineLimit(group.courses.count == 1 ? 2 : 1)
                                 .frame(maxWidth: .infinity)
                                 .padding(2)
-                                .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
-                                .foregroundStyle(.black)
+                                .background(active ? Color.white.opacity(0.82) : Color(uiColor: .systemGray6), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(active ? .black : ScheduleInactiveCourseStyle.foreground(colorScheme))
                         }
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(active ? .white : ScheduleInactiveCourseStyle.foreground(colorScheme))
                     .padding(4)
                     .frame(width: dayWidth, height: cardHeight)
-                    .background(active ? courseColor(course.name) : Color.gray,
+                    .background(active ? courseColor(course.name) : ScheduleInactiveCourseStyle.background(colorScheme),
                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
@@ -664,13 +675,13 @@ struct ScheduleView: View {
         }
         .frame(width: dayWidth, height: height)
         .offset(
-            x: timeWidth + spacing + CGFloat(group.weekday - 1) * (dayWidth + spacing),
+            x: timeWidth + spacing + CGFloat(presentation.column(for: group.weekday)) * (dayWidth + spacing),
             y: 64 + spacing + CGFloat(group.startPeriod - 1) * (48 + spacing)
         )
     }
 
     private func visibleCourses(_ courses: [Course], week: Int) -> [Course] {
-        courses.filter { $0.occurs(inWeek: week) }
+        courses.filter { $0.occurs(inWeek: presentation.teachingWeek(weekday: $0.weekday, page: week)) }
     }
 
     private func courseColor(_ name: String) -> Color {
@@ -698,11 +709,13 @@ struct ScheduleView: View {
     }
 
     private var currentWeekdayIndex: Int {
-        demo || previewNextSemester || !model.currentWeekIsKnown ? -1 : (ScheduleCalendar.campus.component(.weekday, from: model.referenceDate) + 5) % 7
+        guard !demo, !previewNextSemester, model.currentWeekIsKnown else { return -1 }
+        let weekday = (ScheduleCalendar.campus.component(.weekday, from: model.referenceDate) + 5) % 7 + 1
+        return presentation.column(for: weekday)
     }
 
-    private func dateLabel(dayIndex: Int, week: Int) -> String {
-        guard let date = model.date(weekday: dayIndex + 1, week: week) else { return "—" }
+    private func dateLabel(weekday: Int, week: Int) -> String {
+        guard let date = model.date(weekday: weekday, week: presentation.teachingWeek(weekday: weekday, page: week)) else { return "—" }
         let components = ScheduleCalendar.campus.dateComponents([.month, .day], from: date)
         return String(format: "%02d-%02d", components.month ?? 0, components.day ?? 0)
     }
@@ -748,6 +761,7 @@ private struct ScheduleSettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showAllCourses: Bool
     @Binding var previewNextSemester: Bool
+    @Binding var sundayFirst: Bool
     let isExperienceMode: Bool
     let importAction: () -> Void
 
@@ -757,6 +771,8 @@ private struct ScheduleSettingsView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     settingToggle(title: "总览课表", description: "显示全部周次的课程，重叠课程会平分同一块时间区域",
                                   identifier: "schedule.settings.overview", isOn: $showAllCourses)
+                    settingToggle(title: "每周开始于周日", description: "从周日连续显示到周六，不改变课程日期",
+                                  identifier: "schedule.settings.sunday-first", isOn: $sundayFirst)
                     settingToggle(title: "预览下学期课表", description: "切换到教务系统中的下学期课表",
                                   identifier: "schedule.settings.next-semester", isOn: $previewNextSemester)
                     if isExperienceMode {
@@ -779,7 +795,7 @@ private struct ScheduleSettingsView: View {
             // for partial-height sheets; painting an opaque background hides it.
             .background(Color.clear)
         }
-        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(isExperienceMode ? 370 : 310), .large])
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(isExperienceMode ? 460 : 400), .large])
         .presentationDragIndicator(.visible)
     }
 
