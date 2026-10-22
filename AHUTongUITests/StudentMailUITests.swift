@@ -63,12 +63,13 @@ final class StudentMailUITests: XCTestCase {
     }
 
     func testToolsAndSettingsReturnToRootAfterExternalNavigationAndForegroundReturn() {
-        let app = launch()
+        let app = launch([#"--demo-endpoint-weather={"city":"合肥市","weather":"晴","temperature":28}"#])
         app.tabBars.buttons["小工具"].tap()
         let weather = app.buttons["tools.weather"]
         reveal(weather, in: app)
         weather.tap()
-        XCTAssertTrue(app.staticTexts.matching(identifier: "weather.current").firstMatch.waitForExistence(timeout: 6))
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "weather.current").firstMatch.waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["天气设置"].isHittable)
         XCUIDevice.shared.press(.home)
         app.open(URL(string: "ahutong://schedule")!)
         XCTAssertTrue(app.tabBars.buttons["小工具"].waitForExistence(timeout: 5))

@@ -829,6 +829,8 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - Actions `39792897121` 对 1.0.4（6）执行完整回归；530 项单元/契约、支付 5 项、设置 13 项、导航 5 项 UI 均通过。实况活动组的 5 项岛卡与 4 项快捷指令测试通过，顶部按钮测试在两次执行中均失败于“添加小工具”未出现。
 - 根因是本轮引入的测试存储隔离：`HomeView` 的 `@AppStorage("home.request-edit")` 已使用测试 suite，但工具页回首页的入口仍写 `UserDefaults.standard`。统一通过 `AppRuntime.sessionDefaults` 写入，避免测试模式跨存储，也不通过放宽 UI 断言掩盖问题；原始失败日志/截图保留在 `build/source-audit-20261021/ci-1.0.4-live-activity/`。
 - 修复后，仅使用已授权的 iPhone 17 Pro（iOS 26.5）运行原有完整 `testHeaderActionsRemainUsableWithNativeMaterials`，课表三个共享材质按钮、回到当前周、刷新、设置与工具页编辑首页全部通过，原断言未修改。证据为 `build/source-audit-20261021/version-1.0.4-header-edit-fix.xcresult`；真实账号数据与 Keychain 保留。
+- 校园服务组的详细日志另显示：新增工具/设置导航回归未传天气 fixture，导致 CI 依赖真实天气外网并在等待天气卡片时失败；整组重试随后触及 job 时限。该测试补齐已有天气注入入口的合成数据，按天气卡片标识查找实际 AX 元素类型，并明确核验天气设置按钮可点；保留天气子页、退后台、外部深链、工具/设置返回根页及重复选择断言，不扩大 CI 超时或减少测试范围。日志为 `build/deliverables/1.0.4-candidate-139/ci-services.log`。
+- 天气 fixture 修复后的完整导航回归在同一 iPhone 17 Pro 通过，证据为 `build/source-audit-20261021/version-1.0.4-navigation-fixture-fix.xcresult`；测试后恢复正常账号课表页面。
 - 同一提交被 push 和 pull_request 重复触发全量 CI；确认提交与合并预览代码树完全相同后取消排队的重复运行 `39792959419`，保留完整分支回归。未修改 workflow 的测试范围或合并规则。
 
 ## 14. 变更日志
