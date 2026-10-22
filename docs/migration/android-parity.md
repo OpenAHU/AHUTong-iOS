@@ -824,6 +824,13 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 测试隔离：`.defaultAppStorage` 让演示 UI 的开关写入测试 suite；宿主 XCTest 环境同样隔离 RootView 的会话/协议，防止真实启动续期加入模拟请求的全局协调任务。初轮全量测试发生 4 个断言/异常失败，修复后 531 项（其中 1 个手动项跳过）全部无失败。曾尝试从单元测试宿主进行真实验收，但其凭据上下文无法读取正常安装的会话；该临时测试已删除，真实验收改由正常 App 完成；正常启动后已核实原登录仍可用。
 - 新增模型/契约测试覆盖：WebVPN/邮箱 fragment 归一及恶意域名/明文 VPN 拒绝；默认周一、跨年连续日期、20 周所有课程日期往返映射、周六到周日及最后周日。新 UI 验证周日开关、对应日期和课程列、重启持久化及关闭恢复。最终结果 `build/source-audit-20261021/mail-week-start-final-3.xcresult`：530 单元/契约、10 UI 全部通过，无跳过；Python 22 项和全部 46 项 UI 分组校验通过。合成 UI 截图见 `week-start-preview/`，已目视检查浅灰卡片、独立圆角、设置原生材质与周日连续日期。
 
+### E-20261022-03：1.0.4 合并前全量 CI 发现与修复
+
+- Actions `39792897121` 对 1.0.4（6）执行完整回归；530 项单元/契约、支付 5 项、设置 13 项、导航 5 项 UI 均通过。实况活动组的 5 项岛卡与 4 项快捷指令测试通过，顶部按钮测试在两次执行中均失败于“添加小工具”未出现。
+- 根因是本轮引入的测试存储隔离：`HomeView` 的 `@AppStorage("home.request-edit")` 已使用测试 suite，但工具页回首页的入口仍写 `UserDefaults.standard`。统一通过 `AppRuntime.sessionDefaults` 写入，避免测试模式跨存储，也不通过放宽 UI 断言掩盖问题；原始失败日志/截图保留在 `build/source-audit-20261021/ci-1.0.4-live-activity/`。
+- 修复后，仅使用已授权的 iPhone 17 Pro（iOS 26.5）运行原有完整 `testHeaderActionsRemainUsableWithNativeMaterials`，课表三个共享材质按钮、回到当前周、刷新、设置与工具页编辑首页全部通过，原断言未修改。证据为 `build/source-audit-20261021/version-1.0.4-header-edit-fix.xcresult`；真实账号数据与 Keychain 保留。
+- 同一提交被 push 和 pull_request 重复触发全量 CI；确认提交与合并预览代码树完全相同后取消排队的重复运行 `39792959419`，保留完整分支回归。未修改 workflow 的测试范围或合并规则。
+
 ## 14. 变更日志
 
 - 2026-10-22：App 与 Widget 同步提升为 1.0.4（6），交付本轮原生校园邮箱、校园码恢复、Widget 共享目录恢复、主题与课表展示、工具/设置根页修复；功能验证见 E-20261022-01/02。按维护 PR 合并并使用现有 Actions 打包 IPA，不执行商店发布或修改 AIO gitlink。
