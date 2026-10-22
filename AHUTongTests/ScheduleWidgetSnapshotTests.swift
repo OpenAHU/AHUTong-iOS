@@ -2,6 +2,19 @@ import XCTest
 @testable import AHUTong
 
 final class ScheduleWidgetSnapshotTests: XCTestCase {
+    func testTemporaryContainerFailureCanRecoverWithoutRestartingTheStore() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = WidgetContainerProbe()
+        let store = ScheduleWidgetSnapshotStore(container: { probe.url })
+        let initial = await store.load()
+        XCTAssertEqual(initial.status, .sharingUnavailable)
+        probe.url = root
+        let expected = ScheduleWidgetSnapshot.make(courses: [course()], currentWeek: 1)
+        try await store.save(expected)
+        let loaded = await store.load()
+        XCTAssertEqual(loaded, expected)
+    }
     func testMissingSharedContainerIsNotMisreportedAsSignedOut() async {
         let store = ScheduleWidgetSnapshotStore(containerURL: nil)
         let snapshot = await store.load()
@@ -65,5 +78,14 @@ final class ScheduleWidgetSnapshotTests: XCTestCase {
 
     private func course() -> Course {
         Course(weekday: 1, startWeek: 1, endWeek: 16, location: "A301", name: "移动应用开发", teacher: "张老师", duration: 2, startPeriod: 1, courseID: "1", weekIndexes: Array(1...16))
+    }
+}
+
+private final class WidgetContainerProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: URL?
+    var url: URL? {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
     }
 }

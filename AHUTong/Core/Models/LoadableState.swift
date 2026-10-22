@@ -47,6 +47,21 @@ enum DemoDataState: String {
 }
 
 enum AppRuntime {
+    static let uiTestDefaultsSuite = "com.openahu.ahutong.ui-tests"
+    static var usesIsolatedUITestStorage: Bool {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        return ["--demo-session", "--demo-consent", "--reset-onboarding"].contains { arguments.contains($0) }
+        #else
+        false
+        #endif
+    }
+
+    @MainActor
+    static var sessionDefaults: UserDefaults {
+        usesIsolatedUITestStorage ? UserDefaults(suiteName: uiTestDefaultsSuite)! : .standard
+    }
+
     static var isDemoSession: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--demo-session")

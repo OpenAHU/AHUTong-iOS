@@ -142,6 +142,20 @@ final class CampusCardPriorityTests: XCTestCase {
         XCTAssertEqual(events, ["qr", "balance", "qr"])
     }
 
+    func testShortcutActivationFailureRecoversOnForegroundWithoutRepeatedTimerRetries() async {
+        let api = DeferredCampusCardAPI(failsFirstQR: true)
+        let defaults = makeDefaults()
+        defer { defaults.0.removePersistentDomain(forName: defaults.1) }
+        let model = CampusCardViewModel(api: api, userID: "qr-fixture", defaults: defaults.0)
+        await model.prefetchQRCode(demo: false)
+        if case .failed = model.qrState {} else { XCTFail("First activation must fail in this fixture") }
+        await model.loadQRCode(demo: false)
+        await model.resumeAfterForeground(demo: false)
+        XCTAssertEqual(model.qrState, .loaded("QR-2"))
+        let events = await api.events()
+        XCTAssertEqual(events, ["qr", "balance", "qr", "balance"])
+    }
+
     func testExplicitRetryReplacesHungRequestAndLateResultCannotOverwrite() async {
         let api = DeferredCampusCardAPI(suspendFirstQR: true)
         let defaults = makeDefaults()
@@ -175,6 +189,7 @@ private actor DeferredCampusCardAPI: CampusCoreAPI {
     private let suspendFirstBalance: Bool
     private let suspendFirstQR: Bool
     private let failsQR: Bool
+    private let failsFirstQR: Bool
     private var recordedEvents: [String] = []
     private var balanceCalls = 0
     private var qrCalls = 0
@@ -183,10 +198,11 @@ private actor DeferredCampusCardAPI: CampusCoreAPI {
     private var balanceWaiter: CheckedContinuation<Void, Never>?
     private var qrWaiter: CheckedContinuation<Void, Never>?
 
-    init(suspendFirstBalance: Bool = false, suspendFirstQR: Bool = false, failsQR: Bool = false) {
+    init(suspendFirstBalance: Bool = false, suspendFirstQR: Bool = false, failsQR: Bool = false, failsFirstQR: Bool = false) {
         self.suspendFirstBalance = suspendFirstBalance
         self.suspendFirstQR = suspendFirstQR
         self.failsQR = failsQR
+        self.failsFirstQR = failsFirstQR
     }
 
     func cardBalance() async -> Double { await cardBalance(allowsInteractiveLogin: false) }
@@ -209,6 +225,7 @@ private actor DeferredCampusCardAPI: CampusCoreAPI {
         qrWaiter = nil
         if suspendFirstQR && call == 1 { await withCheckedContinuation { qrGate = $0 } }
         if failsQR { throw CampusCoreError.invalidResponse }
+        if failsFirstQR && call == 1 { throw CampusCoreError.sessionRefreshDeferred }
         return "QR-\(call)"
     }
     func waitForBalance() async {

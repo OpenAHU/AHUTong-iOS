@@ -7,6 +7,7 @@
     "AppShellUITests/testCompactHomeWeatherOpensWeatherInsteadOfSchedule"
   ],
   "ui-services": [
+    "StudentMailUITests",
     "AppShellUITests/testAndroidParityLoginAndReminderSystemStates",
     "AppShellUITests/testAndroidParityLoadingEmptyAndErrorStates",
     "AppShellUITests/testNetworkRechargeAndCMBPreference",

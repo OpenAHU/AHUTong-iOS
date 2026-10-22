@@ -67,13 +67,13 @@ Apple 的[能力支持取决于平台及会员类型](https://developer.apple.co
 ### Sideloadly / AltStore
 
 1. 下载 `AHUTong-unsigned.ipa`，只在本机工具内输入 Apple ID。
-2. 由工具用 Personal Team 重新签名 App 及内嵌 Widget Extension；不要把凭据、签名后的 IPA 或描述文件上传仓库。
+2. 由工具使用自己的团队重新签名 App 及内嵌 Widget Extension；免费账号为 Personal Team，付费 Developer Program 账号应选对应团队并为两个 App ID 配置同一 App Group。不要把凭据、签名后的 IPA 或描述文件上传仓库。
 3. 安装后验证 App 启动、登录、通知授权、桌面 Widget、付款第三方跳转和返回后的订单核验。
 
 ## 发布前人工检查
 
 - [ ] 使用授权校园测试账号验证登录、课表和 PAY-01～05；真实支付只由测试者在明确授权的小额环境中手动确认。
-- [ ] 验证隐私 v4 接受/拒绝/撤回、可见 CAS 首登、首次及过期校园服务隐藏认证、OCR 失败重试，以及只含课表+设置的体验账户。
+- [ ] 验证隐私 v5 接受/拒绝/撤回、可见 CAS 首登、首次及过期校园服务隐藏认证、OCR 失败重试，以及只含课表+设置的体验账户；邮箱会话应在退出/撤回后清除。
 - [ ] 确认 Apple target 不编译 Rust `/login` 与外部 OCR 链路；Release Archive 会拒绝包含旧 OCR 端点的二进制。
 - [x] PAY-01、PAY-03、PAY-05 的客户端签名与 PAY-02 安全键盘兼容逻辑已按 Android `2c33b0b` 隔离实现；协议常量只存在于私有支付兼容层，值不得进入日志、文档、诊断或验收记录。
 - [x] CI/自动测试通过应用级禁写开关、runner 域名阻断和 URLProtocol/Mock 禁止连接真实扣款接口。
@@ -111,3 +111,5 @@ python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
 参考：[Apple 注册 App Group](https://developer.apple.com/help/account/identifiers/register-an-app-group/)、[启用 App ID 能力](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/)、[Provisioning Profiles 格式与边界](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)、[Sideloadly 更新记录](https://sideloadly.io/changelog)。
 
 若系统列表完全没有安大通，先排查扩展保留、扩展签名/标识和注册；若可添加但无数据，再检查共享权限和课表同步。当前本机运行时为 iOS 26.5，不能用模拟器测试替代用户报告的 iOS 27 真机结论。
+
+2026-10-22 维护：App 和 Widget 每次访问时重新解析共享容器，不固定保存一次失败结果；快照显式设置首次解锁后可读，安装检查无论成功/失败均可分享。这些改动改善进程与锁屏状态下的恢复，不会给缺失权限的重签安装授予 App Group。

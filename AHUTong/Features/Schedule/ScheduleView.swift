@@ -592,7 +592,7 @@ struct ScheduleView: View {
             .foregroundStyle(.white)
             .padding(4)
             .frame(width: dayWidth, height: height)
-            .background(active ? courseColor(course.name) : Color.gray, in: RoundedRectangle(cornerRadius: 8))
+            .background(active ? courseColor(course.name) : Color.gray, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .offset(
@@ -617,33 +617,42 @@ struct ScheduleView: View {
         week: Int
     ) -> some View {
         let height = CGFloat(group.duration) * 48 + CGFloat(max(group.duration - 1, 0)) * spacing
+        let cardHeight = max(1, (height - CGFloat(group.courses.count - 1)) / CGFloat(max(1, group.courses.count)))
         return VStack(spacing: 1) {
             ForEach(group.courses) { course in
                 let active = course.occurs(inWeek: week)
                 Button { selectedCourse = course } label: {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(course.name)
                             .androidScaledFont(size: 11, relativeTo: .caption2, weight: .bold)
-                            .lineLimit(group.courses.count <= 2 ? 3 : 2)
+                            .lineLimit(group.courses.count == 1 ? 3 : cardHeight >= 70 ? 2 : 1)
                         Spacer(minLength: 0)
-                        Text(ScheduleTextFormatter.weekRange(for: course))
-                            .androidScaledFont(size: 10, relativeTo: .caption2, weight: .bold)
-                            .frame(maxWidth: .infinity)
-                        Text(shortLocation(course.location))
-                            .androidScaledFont(size: 10, relativeTo: .caption2, weight: .bold)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity)
-                            .padding(2)
-                            .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
-                            .foregroundStyle(.black)
+                        if cardHeight >= 48 {
+                            Text(ScheduleTextFormatter.weekRange(for: course))
+                                .androidScaledFont(size: 9, relativeTo: .caption2, weight: .bold)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity)
+                        }
+                        if cardHeight >= 40 {
+                            Text(shortLocation(course.location))
+                                .androidScaledFont(size: 10, relativeTo: .caption2, weight: .bold)
+                                .lineLimit(group.courses.count == 1 ? 2 : 1)
+                                .frame(maxWidth: .infinity)
+                                .padding(2)
+                                .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(.black)
+                        }
                     }
                     .foregroundStyle(.white)
                     .padding(4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(courseColor(course.name).opacity(active ? 1 : 0.45))
+                    .frame(width: dayWidth, height: cardHeight)
+                    .background(active ? courseColor(course.name) : Color.gray,
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(course.name)，\(ScheduleTextFormatter.weekRange(for: course))，\(course.location)")
+                .accessibilityValue(active ? "本周" : "非本周")
                 .accessibilityIdentifier(
                     ScheduleWeekNavigation.courseIdentifier(
                         courseID: course.courseID,
@@ -654,8 +663,6 @@ struct ScheduleView: View {
             }
         }
         .frame(width: dayWidth, height: height)
-        .background(AndroidParityPalette.surface(colorScheme))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
         .offset(
             x: timeWidth + spacing + CGFloat(group.weekday - 1) * (dayWidth + spacing),
             y: 64 + spacing + CGFloat(group.startPeriod - 1) * (48 + spacing)

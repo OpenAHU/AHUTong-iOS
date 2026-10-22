@@ -25,6 +25,7 @@ struct CampusSessionStore: Sendable {
 
     func clear() async throws {
         try await secureStore.removeValue(forAccount: account)
+        try await secureStore.removeValue(forAccount: StudentMailRoutes.secureAccount)
     }
 }
 

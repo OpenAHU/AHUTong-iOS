@@ -118,6 +118,13 @@ final class CampusCardViewModel: ObservableObject {
         if case .failed = qrState { await load(demo: demo) }
     }
 
+    func resumeAfterForeground(demo: Bool) async {
+        // One new foreground entry permits one retry. Timer-driven reads still
+        // leave failures alone, so an unavailable service cannot cause a loop.
+        await loadQRCode(demo: demo, retryFailure: true)
+        if case .failed = qrState { await load(demo: demo) }
+    }
+
     func loadQRCode(demo: Bool, force: Bool = false, retryFailure: Bool = false) async {
         if case .loading = qrState, !force { return }
         if !force {
@@ -242,15 +249,18 @@ struct CampusCardPanel: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: expandedHeight)
         .sensoryFeedback(.selection, trigger: showsQRCode)
         .onGeometryChange(for: CGFloat.self) { min(150, max(100, $0.size.width - 32)) } action: { inlineQRSize = $0 }
-        .task { await model.prefetchQRCode(demo: demo) }
+        .task {
+            if scenePhase == .active { await model.prefetchQRCode(demo: demo) }
+        }
         .task(id: paymentCodeRequestID) {
             guard paymentCodeRequestID != nil else { return }
             showsQRCode = true
+            guard scenePhase == .active else { return }
             await model.loadQRCode(demo: demo, force: true)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await model.prefetchQRCode(demo: demo) }
+                Task { await model.resumeAfterForeground(demo: demo) }
             } else if phase == .background {
                 model.invalidateQRCode()
             }

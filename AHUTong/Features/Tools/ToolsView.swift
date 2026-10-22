@@ -69,14 +69,14 @@ struct ToolsView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .accessibilityIdentifier("tools.widget-guide.sharing-issue")
-                            ShareLink(item: ScheduleWidgetSnapshotStore.sharing.diagnosticSummary) {
-                                Label("分享安装检查", systemImage: "square.and.arrow.up")
-                            }
-                            .accessibilityIdentifier("tools.widget-guide.share-check")
-                            Text("检查仅包含小组件和共享组配置，不含账号、课表或设备标识。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                         }
+                        ShareLink(item: ScheduleWidgetSnapshotStore.sharing.diagnosticSummary) {
+                            Label("分享安装检查", systemImage: "square.and.arrow.up")
+                        }
+                        .accessibilityIdentifier("tools.widget-guide.share-check")
+                        Text("检查不含账号、课表或设备标识。Sideloadly 重签时，保留小组件扩展，并让 App 和扩展使用同一团队及同一 App Group。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         Text("未找到安大通？重签时保留小组件扩展，安装后先打开 App。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -112,6 +112,7 @@ struct ToolsView: View {
             case "exam": ExamView(appModel: appModel).androidDetailScreen()
             case "network-recharge": NetworkRechargeView(appModel: appModel).androidDetailScreen()
             case "phone-book": PhoneBookView()
+            case "student-mail": StudentMailView(appModel: appModel)
             case "school-calendar": SchoolCalendarView().androidDetailScreen()
             case "weather": WeatherView().androidDetailScreen()
             case "study-repository": StudyRepositoryView().androidDetailScreen()
@@ -181,6 +182,7 @@ struct AndroidToolItem: Identifiable {
         AndroidToolItem(id: "study-repository", title: "学习资料", systemImage: "doc.on.doc", tint: Color(red: 141 / 255, green: 110 / 255, blue: 99 / 255)),
         AndroidToolItem(id: "program-completion", title: "培养方案", systemImage: "graduationcap", tint: .indigo),
         AndroidToolItem(id: "card-billing", title: "校园卡账单", systemImage: "list.bullet.rectangle", tint: .teal),
+        AndroidToolItem(id: "student-mail", title: "校园邮箱", systemImage: "envelope", tint: .blue),
         AndroidToolItem(id: "network-recharge", title: "网费充值", systemImage: "network", tint: Color(red: 30 / 255, green: 136 / 255, blue: 229 / 255))
     ]
 

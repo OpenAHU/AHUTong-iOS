@@ -893,7 +893,7 @@ final class CampusWebAuthenticationService: CampusWebAuthenticating {
     }
 
     private func refreshHidden(mode: CampusWebLoginEngine.Mode) async throws -> CampusWebAuthenticationResult {
-        guard UIApplication.shared.applicationState == .active else {
+        guard try await CampusForegroundReadiness.wait() else {
             throw CampusWebAuthenticationError.inactive
         }
         let engine = CampusWebLoginEngine(mode: mode)
