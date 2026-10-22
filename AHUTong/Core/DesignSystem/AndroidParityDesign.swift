@@ -90,9 +90,12 @@ enum AndroidParitySymbol {
 }
 
 enum AndroidThemeColor {
+    static let defaultValue = "default"
+    static let auroraBlue = "#FF4A90E2"
+    static let irisPurple = "#FF6750A4"
     static let options: [(value: String, name: String)] = [
-        ("default", "默认"),
-        ("#FF4A90E2", "极光蓝"),
+        (defaultValue, "极光蓝"),
+        (irisPurple, "鸢尾紫"),
         ("#FFE07A9F", "樱花粉"),
         ("#FFF4A261", "落日橙"),
         ("#FF5C6BC0", "靛夜蓝"),
@@ -107,7 +110,6 @@ enum AndroidThemeColor {
     ]
 
     static func color(for value: String) -> Color {
-        if value == "default" || value == "blue" { return Color(red: 103 / 255, green: 80 / 255, blue: 164 / 255) }
         if value == "green" { return .green }
         if value == "purple" { return .purple }
         if value == "orange" { return .orange }
@@ -117,6 +119,7 @@ enum AndroidThemeColor {
     }
 
     static func rgbComponents(for value: String) -> (red: Double, green: Double, blue: Double) {
+        let value = canonicalValue(value) == defaultValue ? auroraBlue : value
         let hex = value.hasPrefix("#") ? String(value.dropFirst()) : value
         guard let raw = UInt64(hex, radix: 16) else { return (0, 127 / 255, 172 / 255) }
         let rgb = hex.count == 8 ? raw & 0x00FF_FFFF : raw
@@ -125,6 +128,10 @@ enum AndroidThemeColor {
             Double((rgb >> 8) & 0xFF) / 255,
             Double(rgb & 0xFF) / 255
         )
+    }
+
+    static func canonicalValue(_ value: String) -> String {
+        [defaultValue, "blue", auroraBlue].contains(value) ? defaultValue : value
     }
 }
 

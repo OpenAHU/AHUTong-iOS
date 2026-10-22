@@ -381,7 +381,7 @@ private struct AndroidPreferencesView: View {
     @StateObject private var model: PreferencesModel
     @AppStorage("notifications.course-reminders") private var reminders = false
     @AppStorage("notifications.live-activity") private var liveActivity = false
-    @AppStorage("theme.color") private var themeColor = "blue"
+    @AppStorage("theme.color") private var themeColor = AndroidThemeColor.defaultValue
     @AppStorage private var prefersCMB: Bool
     @State private var showsCustomColor = false
     @State private var showsPrivacyConsent = false
@@ -536,15 +536,15 @@ private struct AndroidPreferencesView: View {
     }
 
     private var customColorValue: String {
-        AndroidThemeColor.options.contains(where: { $0.value == themeColor }) || ["blue", "green", "purple", "orange"].contains(themeColor)
+        AndroidThemeColor.options.contains(where: { $0.value == AndroidThemeColor.canonicalValue(themeColor) }) || ["green", "purple", "orange"].contains(themeColor)
             ? "#FF007FAC"
             : themeColor
     }
 
     private func themeSwatch(value: String, name: String, custom: Bool = false) -> some View {
         let selected = custom
-            ? !AndroidThemeColor.options.contains(where: { $0.value == themeColor }) && !["blue", "green", "purple", "orange"].contains(themeColor)
-            : themeColor == value || (value == "default" && themeColor == "blue")
+            ? !AndroidThemeColor.options.contains(where: { $0.value == AndroidThemeColor.canonicalValue(themeColor) }) && !["green", "purple", "orange"].contains(themeColor)
+            : AndroidThemeColor.canonicalValue(themeColor) == value
         return Button {
             if custom {
                 customColor = selected ? themeColor : ""
@@ -571,6 +571,9 @@ private struct AndroidPreferencesView: View {
             }
         }
         .buttonStyle(SettingsPressFeedbackStyle())
+        .accessibilityLabel(name)
+        .accessibilityValue(selected ? "已选中" : "")
+        .accessibilityIdentifier("preferences.theme.\(custom ? "custom" : value)")
     }
 }
 

@@ -287,7 +287,9 @@ actor RustCampusCoreAPI: CampusCoreAPI {
             } else {
                 credentials = nil
             }
-            let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+            let isActive = if snapshot != nil, credentials != nil {
+                try await CampusForegroundReadiness.wait()
+            } else { false }
             guard CampusCardAutomaticLoginPolicy.canAttempt(
                 snapshot: snapshot, credentials: credentials, isActive: isActive
             ), let snapshot, let credentials else {
@@ -298,9 +300,11 @@ actor RustCampusCoreAPI: CampusCoreAPI {
                 } else {
                     "请回到 App 前台后重试校园服务"
                 }
+                if snapshot != nil, credentials != nil { throw CampusCoreError.sessionRefreshDeferred }
                 await postCampusCardDiagnostic(reason)
                 throw CampusCoreError.credentialsUnavailable
             }
+            guard (try await sessionStore.load())?.user == snapshot.user else { throw CancellationError() }
             do {
                 let result = try await authenticate(.campusCard, credentials)
                 guard let current = try await sessionStore.load(), current.user == snapshot.user else {

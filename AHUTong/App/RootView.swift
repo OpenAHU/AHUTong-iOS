@@ -2,7 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("theme.color") private var themeColor = "blue"
+    @AppStorage("theme.color") private var themeColor = AndroidThemeColor.defaultValue
     @State private var selectedTab: AppTab = .home
     @StateObject private var onboardingModel: OnboardingViewModel
     @StateObject private var appModel: AppModel
@@ -12,6 +12,7 @@ struct RootView: View {
     @StateObject private var shortcutNavigation = ShortcutNavigation.shared
     @State private var homeNavigationID = UUID()
     @State private var settingsNavigationID = UUID()
+    @State private var toolsNavigationID = UUID()
     @State private var paymentCodeRequestID: UUID?
 
     init(
@@ -19,10 +20,24 @@ struct RootView: View {
             store: UserDefaultsDataStore()
         )
     ) {
+        let isolated = AppRuntime.usesIsolatedUITestStorage
+        let testStore = UserDefaultsDataStore(suiteName: AppRuntime.uiTestDefaultsSuite)
         _onboardingModel = StateObject(
-            wrappedValue: OnboardingViewModel(store: consentStore)
+            wrappedValue: OnboardingViewModel(store: isolated
+                ? AgreementConsentStore(store: testStore) : consentStore)
         )
-        _appModel = StateObject(wrappedValue: AppModel())
+        if isolated {
+            let secureStore = InMemorySecureStore()
+            _appModel = StateObject(wrappedValue: AppModel(
+                sessionStore: CampusSessionStore(secureStore: secureStore),
+                credentialStore: CredentialStore(secureStore: secureStore),
+                experienceScheduleStore: ExperienceScheduleStore(store: testStore),
+                defaults: AppRuntime.sessionDefaults,
+                accountCacheCleaner: {}
+            ))
+        } else {
+            _appModel = StateObject(wrappedValue: AppModel())
+        }
     }
 
     var body: some View {
@@ -60,10 +75,11 @@ struct RootView: View {
             }
         }
         .environmentObject(toastCenter)
+        .defaultAppStorage(AppRuntime.sessionDefaults)
         .overlay { AppToastOverlay(center: toastCenter) }
         .task {
             if ProcessInfo.processInfo.arguments.contains("--reset-onboarding") {
-                UserDefaults.standard.removeObject(forKey: AppModel.experienceEnabledKey)
+                AppRuntime.sessionDefaults.removeObject(forKey: AppModel.experienceEnabledKey)
             }
             await onboardingModel.load(
                 resetForUITesting: ProcessInfo.processInfo.arguments.contains("--reset-onboarding"),
@@ -88,6 +104,11 @@ struct RootView: View {
             }
         }
         .tint(themeTint)
+        .onChange(of: selectedTab) { previous, _ in
+            // Discard a departing utility/settings stack even when selection
+            // changes through a deep link instead of the system tab binding.
+            if previous == .tools || previous == .settings { resetNavigationRoot(previous) }
+        }
         .onChange(of: appModel.sessionState) { _, state in
             switch state {
             case .authenticated: break
@@ -137,15 +158,24 @@ struct RootView: View {
 
     private var tabSelection: Binding<AppTab> {
         Binding(get: { selectedTab }, set: { tab in
-            if tab == .settings { settingsNavigationID = UUID() }
+            if tab == .tools || tab == .settings { resetNavigationRoot(tab) }
             selectedTab = tab
         })
+    }
+
+    private func resetNavigationRoot(_ tab: AppTab) {
+        switch tab {
+        case .tools: toolsNavigationID = UUID()
+        case .settings: settingsNavigationID = UUID()
+        default: break
+        }
     }
 
     private func navigationID(for tab: AppTab) -> String {
         switch tab {
         case .home: homeNavigationID.uuidString
         case .settings: settingsNavigationID.uuidString
+        case .tools: toolsNavigationID.uuidString
         default: tab.rawValue
         }
     }
@@ -165,7 +195,7 @@ struct RootView: View {
             ScheduleView(appModel: appModel)
         case .tools:
             ToolsView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled) {
-                UserDefaults.standard.set(true, forKey: "home.request-edit")
+                AppRuntime.sessionDefaults.set(true, forKey: "home.request-edit")
                 selectedTab = .home
             }
         case .settings:

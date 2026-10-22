@@ -90,7 +90,7 @@ final class AgreementConsentStoreTests: XCTestCase {
         XCTAssertFalse(previous.isComplete)
     }
 
-    func testExistingAcceptanceMustBeConfirmedAgainForPrivacyV4() async throws {
+    func testExistingAcceptanceMustBeConfirmedAgainForCurrentPrivacyPolicy() async throws {
         let dataStore = InMemoryDataStore()
         let previous = AgreementConsent(
             acceptedDocumentIDs: Set(AgreementDocument.allCases.map(\.id)),
@@ -110,6 +110,6 @@ final class AgreementConsentStoreTests: XCTestCase {
         let renewed = try await store.confirmRequiredDocuments()
 
         XCTAssertTrue(renewed.isComplete)
-        XCTAssertEqual(renewed.privacyPolicyVersion, 4)
+        XCTAssertEqual(renewed.privacyPolicyVersion, AgreementConsent.currentPrivacyPolicyVersion)
     }
 }

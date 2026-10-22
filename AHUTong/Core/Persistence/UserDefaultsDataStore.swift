@@ -7,6 +7,10 @@ actor UserDefaultsDataStore: DataStore {
         self.defaults = defaults
     }
 
+    init(suiteName: String) {
+        defaults = UserDefaults(suiteName: suiteName)!
+    }
+
     func data(forKey key: String) async throws -> Data? {
         defaults.data(forKey: key)
     }

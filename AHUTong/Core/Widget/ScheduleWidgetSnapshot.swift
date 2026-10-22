@@ -70,27 +70,38 @@ struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
 
 actor ScheduleWidgetSnapshotStore {
     static let shared = ScheduleWidgetSnapshotStore()
-    nonisolated static let sharing = WidgetSharingResolution.resolve(.bundled()) {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0)
+    nonisolated static var sharing: WidgetSharingResolution {
+        WidgetSharingResolution.resolve(.bundled()) {
+            FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0)
+        }
     }
     nonisolated static var sharedContainerURL: URL? {
         sharing.containerURL
     }
 
-    private let fileURL: URL?
+    private let explicitFileURL: URL?
+    private let container: @Sendable () -> URL?
+    private var fileURL: URL? {
+        explicitFileURL ?? container()?.appendingPathComponent("schedule-widget.json")
+    }
 
     init(fileURL: URL? = nil) {
-        if let fileURL {
-            self.fileURL = fileURL
-        } else if let container = Self.sharedContainerURL {
-            self.fileURL = container.appendingPathComponent("schedule-widget.json")
+        explicitFileURL = fileURL
+        if fileURL == nil {
+            container = { Self.sharedContainerURL }
         } else {
-            self.fileURL = nil
+            container = { nil }
         }
     }
 
     init(containerURL: URL?) {
-        fileURL = containerURL?.appendingPathComponent("schedule-widget.json")
+        explicitFileURL = nil
+        container = { containerURL }
+    }
+
+    init(container: @escaping @Sendable () -> URL?) {
+        explicitFileURL = nil
+        self.container = container
     }
 
     /// WidgetKit's callback-based provider API is synchronous. Reading this
@@ -110,7 +121,9 @@ actor ScheduleWidgetSnapshotStore {
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try JSONEncoder().encode(snapshot).write(to: fileURL, options: .atomic)
+        // Course snapshots must remain readable by WidgetKit while locked after
+        // the first unlock. Credentials never enter this shared file.
+        try JSONEncoder().encode(snapshot).write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
 

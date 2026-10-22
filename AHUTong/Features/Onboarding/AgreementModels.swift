@@ -60,9 +60,10 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
             3. 远程验证码识别请求只包含当次验证码图片，不附带学号、密码、Cookie、Token 或其他校园业务数据。App 不将验证码图片或识别结果保存到本机文件、日志或诊断中；远程接口仅得将该数据用于本次验证码识别。识别失败、结果不可靠、出现设备验证或校方页面变化时，App 会提示原因并允许稍后重试，不会自动弹出第二个登录页要求您手动填验证码；在校方要求额外验证且无法自动完成时，相关校园服务可能暂时不可用。
             4. 账号、密码、Token 和 Cookie 不会进入日志、诊断、剪贴板、iCloud 备份或开发者服务器，也不会发送给验证码识别接口、统计或广告服务。安大通不将这些凭据用于校园服务登录以外的用途。
             5. 登录、教务、校园卡、失物招领等请求会直接发送到安徽大学对应业务系统；天气查询会按您的授权向天气服务发送必要的位置或城市信息。
-            6. 支付功能仅在您主动确认后通过学校 HTTPS 接口提交。校园卡六位密码只在当前操作的内存中短暂存在，完成后立即清除。
-            7. 课表、缓存、偏好和小组件快照保存在本机或 App Group。您拒绝或在设置中撤回同意后，App 会删除账号密码和校园 Cookie，并切换为“安大通体验用户”。之前缓存或手动导入的课表会保留，直到您清除缓存或重新导入。
-            8. 拒绝本政策仍可使用体验账户的课表和设置；其他需要真实校园身份的功能不可用。您可随时在设置中重新同意或撤回同意。
+            6. 您主动打开校园邮箱后，App 通过学校门户及学校使用的网易企业邮箱服务（entryhz.qiye.163.com、mail.stu.ahu.edu.cn）连接您的邮箱。邮箱会话单独保存在本机 ThisDeviceOnly Keychain；邮件、联系人和编辑内容仅在当前页面内存中处理。发送、保存草稿、移动邮件和上传附件只在您主动操作时提交到学校邮箱服务；下载的附件仅在本机临时保存，分享时由您选择接收方。开发者不接收邮件内容或邮箱凭据，退出校园账号时删除本机邮箱会话。
+            7. 支付功能仅在您主动确认后通过学校 HTTPS 接口提交。校园卡六位密码只在当前操作的内存中短暂存在，完成后立即清除。
+            8. 课表、缓存、偏好和小组件快照保存在本机或 App Group。您拒绝或在设置中撤回同意后，App 会删除账号密码和校园 Cookie，并切换为“安大通体验用户”。之前缓存或手动导入的课表会保留，直到您清除缓存或重新导入。
+            9. 拒绝本政策仍可使用体验账户的课表和设置；其他需要真实校园身份的功能不可用。您可随时在设置中重新同意或撤回同意。
             """
         case .community:
             """
@@ -75,8 +76,8 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
 }
 
 struct AgreementConsent: Codable, Equatable, Sendable {
-    static let currentVersion = 4
-    static let currentPrivacyPolicyVersion = 4
+    static let currentVersion = 5
+    static let currentPrivacyPolicyVersion = 5
 
     var acceptedDocumentIDs: Set<String> = []
     var confirmedVersion: Int? = nil

@@ -128,7 +128,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '127.0.0.1 one.ahu.edu.cn jw.ahu.edu.cn adwmh.ahu.edu.cn ycard.ahu.edu.cn epay92.ahu.edu.cn\n' | sudo tee -a /etc/hosts >/dev/null
+          printf '127.0.0.1 one.ahu.edu.cn jw.ahu.edu.cn adwmh.ahu.edu.cn ycard.ahu.edu.cn epay92.ahu.edu.cn wvpn.ahu.edu.cn entryhz.qiye.163.com mail.stu.ahu.edu.cn\n' | sudo tee -a /etc/hosts >/dev/null
           echo 'AHUTONG_CI_DISABLE_LIVE_PAYMENT=1' >> "$GITHUB_ENV"
 
       - name: Create an isolated iPhone Simulator

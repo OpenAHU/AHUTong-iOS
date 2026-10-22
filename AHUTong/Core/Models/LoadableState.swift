@@ -47,6 +47,25 @@ enum DemoDataState: String {
 }
 
 enum AppRuntime {
+    static let uiTestDefaultsSuite = "com.openahu.ahutong.ui-tests"
+    static var usesIsolatedUITestStorage: Bool {
+        #if DEBUG
+        // Hosted unit bundles start RootView too. Their fixture refresh tasks
+        // must not join a real account's automatic startup refresh.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil { return true }
+        let arguments = ProcessInfo.processInfo.arguments
+        return ["--demo-session", "--demo-consent", "--reset-onboarding"].contains { arguments.contains($0) }
+        #else
+        false
+        #endif
+    }
+
+    @MainActor
+    static var sessionDefaults: UserDefaults {
+        usesIsolatedUITestStorage ? UserDefaults(suiteName: uiTestDefaultsSuite)! : .standard
+    }
+
     static var isDemoSession: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--demo-session")
