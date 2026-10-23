@@ -13,7 +13,7 @@
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前维护 | `codex/ios-widget-navigation-reliability`；基于与远端同步的 main `9e8478a`，检查时无开放 PR；本轮不变更 1.0.4（6）版本或 AIO gitlink |
+| 当前维护 | `codex/ios-widget-navigation-reliability`；本轮修复提交 `0aaa23b`，按用户要求向 develop 集成。远端原无 develop，从 main `9e8478a` 建立，并为 develop 的推送与 PR 补齐 CI；保持 1.0.4（6）版本和 AIO gitlink |
 | 最近更新 | 2026-10-23 |
 
 ## 1. 目标与边界
@@ -847,6 +847,7 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 
 ## 14. 变更日志
 
+- 2026-10-23：按用户要求将本轮修复提交 `0aaa23b` 向 develop 集成；从 main `9e8478a` 建立此前不存在的 develop，并为其推送与 PR 启用既有完整 CI。版本号和 AIO gitlink 不变，合并前核验远端检查结果。
 - 2026-10-23：修复 Widget 范围周次遗漏和缓存同步时序，隔离测试快照；固定课表顶部周选择/操作，补小工具系统返回菜单标题，增强校园码续期后的有界回退。详见 E-20261023-01；保留 Sideloadly / iOS 27 实机验收边界。
 
 - 2026-10-22：App 与 Widget 同步提升为 1.0.4（6），交付本轮原生校园邮箱、校园码恢复、Widget 共享目录恢复、主题与课表展示、工具/设置根页修复；功能验证见 E-20261022-01/02。按维护 PR 合并并使用现有 Actions 打包 IPA，不执行商店发布或修改 AIO gitlink。
