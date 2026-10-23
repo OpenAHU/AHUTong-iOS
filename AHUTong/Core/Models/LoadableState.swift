@@ -66,6 +66,11 @@ enum AppRuntime {
         usesIsolatedUITestStorage ? UserDefaults(suiteName: uiTestDefaultsSuite)! : .standard
     }
 
+    static let widgetSnapshotStore: ScheduleWidgetSnapshotStore = usesIsolatedUITestStorage
+        ? ScheduleWidgetSnapshotStore(fileURL: FileManager.default.temporaryDirectory
+            .appendingPathComponent("ui-tests/schedule-widget.json"))
+        : .shared
+
     static var isDemoSession: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--demo-session")

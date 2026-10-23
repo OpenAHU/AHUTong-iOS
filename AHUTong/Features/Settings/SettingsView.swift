@@ -739,6 +739,6 @@ enum AppDataCleaner {
         for key in UserDefaults.standard.dictionaryRepresentation().keys where exact.contains(key) || prefixes.contains(where: key.hasPrefix) {
             UserDefaults.standard.removeObject(forKey: key)
         }
-        try? await ScheduleWidgetSnapshotStore.shared.save(.unavailable(.signedOut))
+        try? await AppRuntime.widgetSnapshotStore.save(.unavailable(.signedOut))
     }
 }

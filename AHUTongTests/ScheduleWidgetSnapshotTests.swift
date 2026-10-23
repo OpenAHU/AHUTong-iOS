@@ -2,6 +2,22 @@ import XCTest
 @testable import AHUTong
 
 final class ScheduleWidgetSnapshotTests: XCTestCase {
+    func testWidgetUsesTheSameFallbackWeekRangeAsMainSchedule() {
+        let course = Course(weekday: 1, startWeek: 3, endWeek: 8, location: "A301", name: "周次范围课程",
+            teacher: "", duration: 2, startPeriod: 1, courseID: "range-only", weekIndexes: [])
+        XCTAssertTrue(course.occurs(inWeek: 7))
+        let snapshot = ScheduleWidgetSnapshot.make(courses: [course], currentWeek: 7)
+        XCTAssertEqual(snapshot.status, .ready)
+        XCTAssertEqual(snapshot.courses.map(\.name), [course.name])
+        XCTAssertEqual(snapshot.courses.first?.weekIndexes, Array(3...8))
+        let next = snapshot.resolved(at: snapshot.updatedAt.addingTimeInterval(7 * 86_400))
+        XCTAssertEqual(next.status, .ready)
+        XCTAssertEqual(next.currentWeek, 8)
+        let expired = snapshot.resolved(at: snapshot.updatedAt.addingTimeInterval(14 * 86_400))
+        XCTAssertEqual(expired.status, .empty)
+        XCTAssertTrue(expired.courses.isEmpty)
+    }
+
     func testTemporaryContainerFailureCanRecoverWithoutRestartingTheStore() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

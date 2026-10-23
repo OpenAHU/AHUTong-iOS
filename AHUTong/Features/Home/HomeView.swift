@@ -169,14 +169,17 @@ final class HomeViewModel: ObservableObject {
     private let shortcutStore: ScheduleShortcutStore
     private let weekRepository: ScheduleWeekRepository
     private let now: @Sendable () -> Date
+    private let widgetStore: ScheduleWidgetSnapshotStore
 
     init(
         api: any CampusCoreAPI, userID: String,
         store: any DataStore = AppPersistence.migratingDefaults(),
+        widgetStore: ScheduleWidgetSnapshotStore = AppRuntime.widgetSnapshotStore,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         shortcutStore = ScheduleShortcutStore(userID: userID, dataStore: store)
         self.now = now
+        self.widgetStore = widgetStore
         let cache = UserScopedStore(store: store, userID: userID)
         repository = ScheduleRepository(
             remote: RustScheduleRemoteDataSource(api: api),
@@ -206,18 +209,21 @@ final class HomeViewModel: ObservableObject {
         referenceDate = cached.referenceDate
         do {
             let result = try await repository.load(semester: semester, policy: refresh ? .refresh : .cacheFirst)
+            guard !Task.isCancelled else { return }
             courses = result.courses
             errorMessage = result.source == .staleCache ? "刷新失败，显示上次同步的课表" : nil
             lastRefresh = now()
+            // A valid cached week can populate the widget immediately. A slow
+            // school request must not leave it empty when the app backgrounds.
+            await publishWidgetIfWeekKnown()
             if let position = try? await weekRepository.refresh() {
+                guard !Task.isCancelled else { return }
                 currentWeekIsKnown = true
                 currentWeek = position.week
                 referenceDate = position.referenceDate
             }
-            if currentWeekIsKnown {
-                try? await ScheduleWidgetSnapshotStore.shared.save(.make(courses: result.courses, currentWeek: currentWeek, updatedAt: referenceDate))
-                WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
-            }
+            guard !Task.isCancelled else { return }
+            await publishWidgetIfWeekKnown()
             try? await shortcutStore.record(
                 courses: result.courses, semester: semester,
                 currentWeek: currentWeekIsKnown ? currentWeek : nil,
@@ -225,6 +231,16 @@ final class HomeViewModel: ObservableObject {
             )
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func publishWidgetIfWeekKnown() async {
+        guard currentWeekIsKnown else { return }
+        try? await widgetStore.save(.make(
+            courses: courses, currentWeek: currentWeek, updatedAt: referenceDate
+        ))
+        if !AppRuntime.usesIsolatedUITestStorage {
+            WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
         }
     }
 

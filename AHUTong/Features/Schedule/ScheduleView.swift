@@ -79,6 +79,7 @@ final class ScheduleViewModel: ObservableObject {
     private let accessMode: ScheduleAccessMode
     private let experienceStore: ExperienceScheduleStore
     private let shortcutStore: ScheduleShortcutStore
+    private let widgetStore: ScheduleWidgetSnapshotStore
 
     init(
         api: any CampusCoreAPI,
@@ -86,10 +87,12 @@ final class ScheduleViewModel: ObservableObject {
         accessMode: ScheduleAccessMode = .authenticated,
         experienceStore: ExperienceScheduleStore = ExperienceScheduleStore(),
         store: any DataStore = AppPersistence.migratingDefaults(),
+        widgetStore: ScheduleWidgetSnapshotStore = AppRuntime.widgetSnapshotStore,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         shortcutStore = ScheduleShortcutStore(userID: userID, dataStore: store)
         self.now = now
+        self.widgetStore = widgetStore
         self.accessMode = accessMode
         self.experienceStore = experienceStore
         let scopedStore = UserScopedStore(store: store, userID: userID)
@@ -171,6 +174,9 @@ final class ScheduleViewModel: ObservableObject {
             guard requestID == id, !Task.isCancelled else { return }
             source = result.source
             state = result.courses.isEmpty ? .empty : .loaded(result.courses)
+            if !previewNext, currentWeekIsKnown {
+                await publishWidget(.make(courses: result.courses, currentWeek: currentWeek, updatedAt: referenceDate))
+            }
             // Cached courses are visible while the week request is still in flight.
             if !previewNext, let position = try? await weekRepository.refresh() {
                 guard requestID == id, !Task.isCancelled else { return }
@@ -255,15 +261,16 @@ final class ScheduleViewModel: ObservableObject {
 
     private func updateSystemIntegrations(courses: [Course], referenceDate: Date = Date()) async {
         await publishWidget(.make(courses: courses, currentWeek: currentWeek, updatedAt: referenceDate))
+        guard !AppRuntime.usesIsolatedUITestStorage else { return }
         if accessMode == .authenticated, !AppRuntime.isDemoSession {
             _ = try? await CourseLiveActivityCoordinator.shared.setEnabled(
-                UserDefaults.standard.bool(forKey: "notifications.live-activity"),
+                AppRuntime.sessionDefaults.bool(forKey: "notifications.live-activity"),
                 courses: courses,
                 currentWeek: currentWeek,
                 now: referenceDate
             )
         }
-        if UserDefaults.standard.bool(forKey: "notifications.course-reminders") {
+        if AppRuntime.sessionDefaults.bool(forKey: "notifications.course-reminders") {
             _ = try? await CourseReminderCoordinator().setEnabled(
                 true,
                 courses: courses,
@@ -274,8 +281,10 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     private func publishWidget(_ snapshot: ScheduleWidgetSnapshot) async {
-        try? await ScheduleWidgetSnapshotStore.shared.save(snapshot)
-        WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
+        try? await widgetStore.save(snapshot)
+        if !AppRuntime.usesIsolatedUITestStorage {
+            WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
+        }
     }
 
     private func repository(previewNext: Bool) -> ScheduleRepository {
@@ -351,14 +360,15 @@ struct ScheduleView: View {
 
     var body: some View {
         AndroidScreen {
-            ScrollView(.vertical) {
-                VStack(spacing: 8) {
-                    controls
+            VStack(spacing: 8) {
+                controls
+                ScrollView(.vertical) {
                     content
+                        .padding(.bottom, 16)
                 }
-                .padding(.bottom, 16)
+                .scrollIndicators(.hidden)
+                .accessibilityIdentifier("schedule.scroll")
             }
-            .scrollIndicators(.hidden)
         }
         .task(id: previewNextSemester) {
             if loadedSemesterPreview != previewNextSemester {

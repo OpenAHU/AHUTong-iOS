@@ -113,16 +113,15 @@ final class CampusCardViewModel: ObservableObject {
         }
     }
 
-    func prefetchQRCode(demo: Bool) async {
-        await loadQRCode(demo: demo)
+    func prefetchQRCode(demo: Bool, retryFailure: Bool = false) async {
+        await loadQRCode(demo: demo, retryFailure: retryFailure)
         if case .failed = qrState { await load(demo: demo) }
     }
 
     func resumeAfterForeground(demo: Bool) async {
         // One new foreground entry permits one retry. Timer-driven reads still
         // leave failures alone, so an unavailable service cannot cause a loop.
-        await loadQRCode(demo: demo, retryFailure: true)
-        if case .failed = qrState { await load(demo: demo) }
+        await prefetchQRCode(demo: demo, retryFailure: true)
     }
 
     func loadQRCode(demo: Bool, force: Bool = false, retryFailure: Bool = false) async {
@@ -249,19 +248,20 @@ struct CampusCardPanel: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: expandedHeight)
         .sensoryFeedback(.selection, trigger: showsQRCode)
         .onGeometryChange(for: CGFloat.self) { min(150, max(100, $0.size.width - 32)) } action: { inlineQRSize = $0 }
-        .task {
-            if scenePhase == .active { await model.prefetchQRCode(demo: demo) }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await model.resumeAfterForeground(demo: demo)
         }
         .task(id: paymentCodeRequestID) {
             guard paymentCodeRequestID != nil else { return }
             showsQRCode = true
             guard scenePhase == .active else { return }
-            await model.loadQRCode(demo: demo, force: true)
+            // A new shortcut rebuilds the home stack. Join its initial read
+            // instead of cancelling an in-flight request or silent renewal.
+            await model.loadQRCode(demo: demo, retryFailure: true)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                Task { await model.resumeAfterForeground(demo: demo) }
-            } else if phase == .background {
+            if phase == .background {
                 model.invalidateQRCode()
             }
         }
@@ -366,7 +366,10 @@ struct CampusCardPanel: View {
                 .accessibilityIdentifier("campus-card.qr-panel")
                 .allowsHitTesting(false)
         }
-        .task { await model.loadQRCode(demo: demo, retryFailure: true) }
+        .task {
+            guard scenePhase == .active else { return }
+            await model.loadQRCode(demo: demo, retryFailure: true)
+        }
     }
 
     @ViewBuilder

@@ -30,21 +30,34 @@ final class ExperiencePolishUITests: XCTestCase {
         XCTAssertTrue(done.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["添加课表小组件"].exists)
         app.swipeUp()
-        let issue = app.descendants(matching: .any)["tools.widget-guide.sharing-issue"].firstMatch
-        if issue.exists {
-            let share = app.buttons["tools.widget-guide.share-check"]
-            for _ in 0..<3 {
-                if share.isHittable { break }
-                app.swipeUp()
-            }
-            XCTAssertTrue(share.isHittable)
-            share.tap()
-            XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
-            app.swipeDown()
+        let share = app.buttons["tools.widget-guide.share-check"]
+        for _ in 0..<3 {
+            if share.isHittable { break }
+            app.swipeUp()
         }
+        XCTAssertTrue(share.isHittable)
+        share.tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
+        app.swipeDown()
         capture(app, "widget-installation-guide")
         done.tap()
         XCTAssertTrue(add.waitForExistence(timeout: 3))
+        add.tap()
+        let sync = app.buttons["tools.widget-guide.sync"]
+        if sync.waitForExistence(timeout: 3) {
+            XCTAssertTrue(app.staticTexts["tools.widget-guide.sync-status"].exists)
+            for _ in 0..<3 {
+                if sync.isHittable { break }
+                app.swipeUp()
+            }
+            sync.tap()
+            XCTAssertTrue(app.buttons["schedule.settings"].waitForExistence(timeout: 4))
+            XCTAssertTrue(app.tabBars.buttons["课表"].isSelected)
+            capture(app, "widget-guide-opened-schedule-sync")
+        } else {
+            XCTAssertTrue(app.descendants(matching: .any)["tools.widget-guide.sharing-issue"].firstMatch.exists)
+            done.tap()
+        }
     }
 
     func testSettingsTabReturnsToRootAfterLeavingDetailViaShortcut() {

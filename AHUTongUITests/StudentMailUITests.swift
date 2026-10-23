@@ -62,6 +62,22 @@ final class StudentMailUITests: XCTestCase {
         capture(app, "student-mail-error-retry")
     }
 
+    func testToolsBackHistoryNamesItsRoot() {
+        let app = launch([#"--demo-endpoint-weather={"city":"合肥市","weather":"晴","temperature":28}"#])
+        app.tabBars.buttons["小工具"].tap()
+        app.buttons["tools.weather"].tap()
+        XCTAssertTrue(app.buttons["天气设置"].waitForExistence(timeout: 5))
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        XCTAssertEqual(back.label, "小工具")
+        back.press(forDuration: 3)
+        let root = app.buttons["小工具"].firstMatch
+        XCTAssertTrue(root.waitForExistence(timeout: 4))
+        XCTAssertTrue(root.isHittable)
+        capture(app, "tools-native-back-history-root")
+        root.tap()
+        XCTAssertTrue(app.buttons["tools.weather"].waitForExistence(timeout: 4))
+    }
+
     func testToolsAndSettingsReturnToRootAfterExternalNavigationAndForegroundReturn() {
         let app = launch([#"--demo-endpoint-weather={"city":"合肥市","weather":"晴","temperature":28}"#])
         app.tabBars.buttons["小工具"].tap()

@@ -81,6 +81,14 @@ enum CampusCardQRRecovery {
         if needsRefresh {
             try await refresh()
             try Task.checkCancellation()
+            do { return try await firstParty() }
+            catch {
+                try checkCancellation(error)
+                report(error, stage: "first-party-renewed")
+            }
+            // The renewed Rust session may work even if the direct transport
+            // is still unavailable. Do not start another renewal here.
+            return try await fallback()
         }
         return try await firstParty()
     }

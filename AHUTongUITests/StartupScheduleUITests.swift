@@ -4,6 +4,35 @@ final class StartupScheduleUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
     @MainActor
+    func testScheduleHeaderStaysFixedWhileCoursesScroll() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+        app.launchArguments = ["--demo-consent", "--demo-session", "-schedule.preview-next", "NO", "-schedule.show-all", "NO"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
+        app.tabBars.buttons["课表"].tap()
+        let settings = app.buttons["schedule.settings"]
+        let week = app.buttons["schedule.week.2"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 4))
+        let settingsY = settings.frame.midY
+        let weekY = week.frame.midY
+        let date = app.staticTexts["schedule.date.week.1.day.1"]
+        XCTAssertTrue(date.waitForExistence(timeout: 4))
+        let dateY = date.frame.midY
+        let scroll = app.scrollViews["schedule.scroll"]
+        scroll.swipeUp()
+        XCTAssertLessThan(date.frame.midY, dateY - 30)
+        XCTAssertEqual(settings.frame.midY, settingsY, accuracy: 1)
+        XCTAssertEqual(week.frame.midY, weekY, accuracy: 1)
+        scroll.swipeDown()
+        XCTAssertEqual(settings.frame.midY, settingsY, accuracy: 1)
+        week.tap()
+        XCTAssertTrue(app.staticTexts["schedule.date.week.2.day.1"].waitForExistence(timeout: 4))
+        settings.tap()
+        XCTAssertTrue(app.switches["schedule.settings.sunday-first"].waitForExistence(timeout: 4))
+    }
+
+    @MainActor
     func testSlowValidationDoesNotKeepSplashVisible() {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"

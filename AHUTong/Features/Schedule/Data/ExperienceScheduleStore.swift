@@ -131,7 +131,7 @@ struct ExperienceScheduleStore: Sendable {
             store: scoped,
             key: "schedule.\(next.rawValue)"
         ).load()
-        let widgetWeek = await ScheduleWidgetSnapshotStore.shared.load().resolved(at: Date()).currentWeek
+        let widgetWeek = await AppRuntime.widgetSnapshotStore.load().resolved(at: Date()).currentWeek
         if let currentCourses {
             try? await save(courses: currentCourses, semester: current, currentWeek: widgetWeek)
         }

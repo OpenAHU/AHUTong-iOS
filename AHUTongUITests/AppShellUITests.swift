@@ -211,6 +211,17 @@ final class AppShellUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
         tabButton("schedule", app: app).tap()
+        // Restore the fixture through the UI so persistent settings from a
+        // previous run cannot select next-semester courses. Launch overrides
+        // would also mask the setting changes tested below.
+        app.buttons["schedule.settings"].tap()
+        for identifier in ["schedule.settings.overview", "schedule.settings.next-semester"] {
+            let toggle = app.switches[identifier]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+            if toggle.value as? String == "1" { toggle.tapNativeSwitch() }
+            XCTAssertEqual(toggle.value as? String, "0")
+        }
+        app.buttons["schedule.settings.done"].tap()
 
         let pager = app.descendants(matching: .any)["schedule.week-pager"]
         let firstWeek = app.buttons["schedule.week.1"]

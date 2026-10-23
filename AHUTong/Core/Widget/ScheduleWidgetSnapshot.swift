@@ -34,7 +34,7 @@ struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
                     endPeriod: $0.endPeriod,
                     name: $0.name,
                     location: $0.location,
-                    weekIndexes: $0.weekIndexes
+                    weekIndexes: $0.activeWeeks
                 )
             }
             .sorted { ($0.weekday, $0.startPeriod, $0.name) < ($1.weekday, $1.startPeriod, $1.name) }
@@ -50,6 +50,26 @@ struct ScheduleWidgetSnapshot: Codable, Equatable, Sendable {
 
     static func unavailable(_ status: ScheduleWidgetStatus, updatedAt: Date = Date()) -> Self {
         Self(status: status, currentWeek: 1, updatedAt: updatedAt, courses: [], allCourses: [])
+    }
+
+    var synchronizationSummary: String {
+        switch status {
+        case .ready: "已同步第 \(currentWeek) 周，共 \(courses.count) 门课程"
+        case .empty: "已同步，第 \(currentWeek) 周暂无课程"
+        case .signedOut: "尚未同步课表，请打开课表同步"
+        case .expired: "课表同步失败，请打开课表重试"
+        case .sharingUnavailable: "当前安装无法共享课表，请检查签名权限"
+        }
+    }
+
+    /// Counts and state only: never include course titles, locations or IDs.
+    var diagnosticSummary: String {
+        """
+        Snapshot status: \(status.rawValue)
+        Snapshot week: \(currentWeek)
+        Snapshot active courses: \(courses.count)
+        Snapshot total courses: \((allCourses ?? courses).count)
+        """
     }
 
     func resolved(at date: Date, calendar: Calendar = ScheduleCalendar.campus) -> Self {
