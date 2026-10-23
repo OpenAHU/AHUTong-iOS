@@ -194,7 +194,9 @@ struct RootView: View {
         case .schedule:
             ScheduleView(appModel: appModel)
         case .tools:
-            ToolsView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled) {
+            ToolsView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled, onOpenSchedule: {
+                selectedTab = .schedule
+            }) {
                 AppRuntime.sessionDefaults.set(true, forKey: "home.request-edit")
                 selectedTab = .home
             }

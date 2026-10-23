@@ -6,18 +6,22 @@ struct ToolsView: View {
     let appModel: AppModel
     let homeEditEnabled: Bool
     let onEditHome: () -> Void
+    let onOpenSchedule: () -> Void
     @State private var showsWidgetGuide = false
+    @State private var widgetSnapshot: ScheduleWidgetSnapshot?
     @State private var homeLayout = HomeWidgetLayout()
     private let layoutStore: JSONStore<HomeWidgetLayout>
 
     init(
         appModel: AppModel,
         homeEditEnabled: Bool = true,
+        onOpenSchedule: @escaping () -> Void = {},
         onEditHome: @escaping () -> Void = {}
     ) {
         self.appModel = appModel
         self.homeEditEnabled = homeEditEnabled
         self.onEditHome = onEditHome
+        self.onOpenSchedule = onOpenSchedule
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "guest" }
         layoutStore = JSONStore(
             store: UserScopedStore(store: AppPersistence.migratingDefaults(), userID: userID),
@@ -55,6 +59,8 @@ struct ToolsView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .navigationTitle("小工具")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showsWidgetGuide) {
             NavigationStack {
                 ScrollView {
@@ -69,8 +75,19 @@ struct ToolsView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .accessibilityIdentifier("tools.widget-guide.sharing-issue")
+                        } else {
+                            Text(widgetSnapshot?.synchronizationSummary ?? "正在检查课表同步…")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("tools.widget-guide.sync-status")
+                            Button("打开课表同步") {
+                                showsWidgetGuide = false
+                                onOpenSchedule()
+                            }
+                            .accessibilityIdentifier("tools.widget-guide.sync")
                         }
-                        ShareLink(item: ScheduleWidgetSnapshotStore.sharing.diagnosticSummary) {
+                        ShareLink(item: ScheduleWidgetSnapshotStore.sharing.diagnosticSummary
+                            + (widgetSnapshot.map { "\n" + $0.diagnosticSummary } ?? "")) {
                             Label("分享安装检查", systemImage: "square.and.arrow.up")
                         }
                         .accessibilityIdentifier("tools.widget-guide.share-check")
@@ -82,6 +99,9 @@ struct ToolsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(24)
+                }
+                .task {
+                    widgetSnapshot = await AppRuntime.widgetSnapshotStore.load().resolved(at: Date())
                 }
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {

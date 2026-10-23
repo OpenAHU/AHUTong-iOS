@@ -143,8 +143,8 @@ struct ScheduleWidgetContent: View {
         let message: String = switch snapshot.status {
         case .ready: ""
         case .empty: "本周暂无课程"
-        case .signedOut: "登录安大通后显示课表"
-        case .expired: "登录已失效，请打开安大通"
+        case .signedOut: "打开安大通同步课表"
+        case .expired: "课表同步失败，请打开安大通重试"
         case .sharingUnavailable: "当前签名无法共享课表，请在安大通查看小组件指引"
         }
         return VStack(spacing: 8) {

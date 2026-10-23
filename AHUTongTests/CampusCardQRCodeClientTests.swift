@@ -129,6 +129,44 @@ final class CampusCardQRCodeClientTests: XCTestCase {
         XCTAssertEqual(events, ["direct"])
     }
 
+    func testRenewedSessionCanUseFallbackWhenDirectReadStillFails() async throws {
+        let calls = QRRecoveryCalls()
+        let payload = try await CampusCardQRRecovery.payload {
+            await calls.record("direct")
+            throw CampusCoreError.unauthorized
+        } fallback: {
+            let events = await calls.events
+            await calls.record("rust")
+            if events.contains("refresh") { return "RENEWED-FALLBACK" }
+            throw CampusCoreError.unauthorized
+        } refresh: {
+            await calls.record("refresh")
+        }
+        XCTAssertEqual(payload, "RENEWED-FALLBACK")
+        let events = await calls.events
+        XCTAssertEqual(events, ["direct", "rust", "refresh", "direct", "rust"])
+    }
+
+    func testCancellationAfterRenewalDoesNotFallThroughToFallback() async {
+        let calls = QRRecoveryCalls()
+        do {
+            _ = try await CampusCardQRRecovery.payload {
+                let events = await calls.events
+                await calls.record("direct")
+                if events.contains("refresh") { throw CancellationError() }
+                throw CampusCoreError.unauthorized
+            } fallback: {
+                await calls.record("rust")
+                throw CampusCoreError.unauthorized
+            } refresh: {
+                await calls.record("refresh")
+            }
+            XCTFail("Cancellation must propagate")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        let events = await calls.events
+        XCTAssertEqual(events, ["direct", "rust", "refresh", "direct"])
+    }
+
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [QRTransportProtocol.self]

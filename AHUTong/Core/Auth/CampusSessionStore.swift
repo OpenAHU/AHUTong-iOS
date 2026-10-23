@@ -300,7 +300,7 @@ final class AppModel: ObservableObject {
         }
         try? await sessionStore.clear()
         try? await campusAPI.initialize(cookiesJSON: "")
-        try? await ScheduleWidgetSnapshotStore.shared.save(.unavailable(.signedOut))
+        try? await AppRuntime.widgetSnapshotStore.save(.unavailable(.signedOut))
         WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
         defaults.set(false, forKey: Self.experienceEnabledKey)
         sessionState = .signedOut
@@ -340,7 +340,7 @@ final class AppModel: ObservableObject {
         let snapshot = await experienceScheduleStore.snapshot()
         let current = Semester.current()
         let courses = snapshot.coursesBySemester[current.rawValue] ?? []
-        try? await ScheduleWidgetSnapshotStore.shared.save(
+        try? await AppRuntime.widgetSnapshotStore.save(
             .make(courses: courses, currentWeek: snapshot.resolvedCurrentWeek())
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")

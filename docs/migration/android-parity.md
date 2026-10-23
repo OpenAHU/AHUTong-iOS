@@ -8,13 +8,13 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v5 保留 ADWMH 远端 OCR 说明，并披露学校邮箱的数据流和隔离会话，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 维护分支基于 main `6b843b7`：校园码唤起时等待前台就绪及一次恢复重试，Widget 共享目录重新解析与首次解锁后可读，极光蓝默认色/鸢尾紫、总览灰色与统一圆角、工具/设置返回根页；对照 Android `b6961a3` 接入原生校园邮箱，保留隔离的官方网页回退。后续修复 WebVPN 页面片段兼容、浅灰非本周卡片及默认关闭的周日周视图，见 E-20261022-01/02；按用户要求将 App / Widget 同步提升为 1.0.4（6），通过维护 PR 与 Actions 打包，不更新 AIO gitlink |
-| 下一步 | 在 iPhone 17 Pro（iOS 26.5）完成本轮契约/UI 回归，授权实机复验 Sideloadly App Group、隔天续期与快捷指令校园码；真实邮箱协议与发送结果需另行人工验收，不以合成邮件测试代替真实发信 |
+| 当前焦点 | 1.0.4（6）已通过 PR #10 合入 main `9e8478a` 并由 Actions 打包。本轮修复小组件遗漏范围周次、有效缓存发布被网络请求阻塞、课表顶部周选择/操作随滚动移动、小工具原生返回菜单空标题；补齐校园码续期后的双通道回退和测试快照隔离，见 E-20261023-01 |
+| 下一步 | 仅在 iPhone 17 Pro（iOS 26.5）完成本轮回归与保留数据的真实校园码唤起；Sideloadly 安装的实际共享权限和 iOS 27 Widget 显示仍需实机安装摘要/复验，不以模拟器替代 |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前维护 | `codex/ios-reliability-mail-theme`；上游 main `6b843b7`，检查时无开放 PR。本轮修改尚未合并；保留 Sideloadly / iOS 27 及真实邮箱验收边界 |
-| 最近更新 | 2026-10-22 |
+| 当前维护 | `codex/ios-widget-navigation-reliability`；本轮修复提交 `0aaa23b`，按用户要求向 develop 集成。远端原无 develop，从 main `9e8478a` 建立，并为 develop 的推送与 PR 补齐 CI；保持 1.0.4（6）版本和 AIO gitlink |
+| 最近更新 | 2026-10-23 |
 
 ## 1. 目标与边界
 
@@ -306,7 +306,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；会话过期显示失败与手动登录入口，不因自动重试触发 WebView 或重放写请求 | 既有所有权/发布/删除单测及 UI smoke 在 CI `35867866032` 全绿；真实登录联调仍依赖 AUTH-02 真机验证 | 2026-09-23 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 的路径、面包屑、LFS、下载完整性、凭据边界与 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者；设置行统一轻触觉、明暗和短缩放，减弱动态效果保留非动态反馈；本轮修正偏好入口高亮越界并精简数据清理/更新文案 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；原生入口与反馈实际模拟器复核见 `E-20261019-02` | 2026-10-19 |
-| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；1.0.2（4）修复待重签包缺少权限声明、适配双方唯一共同组，新增具体失败原因与安装检查分享 | 共享专项 20 项、打包检查 16 项、原生指引/分享 UI 1 项通过，Release iphoneos 与最终 IPA 权限声明检查通过；Windows Sideloadly 实机最终授权仍待复验，见 E-20261020-01 | 2026-10-20 |
+| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；修复仅有起止周课程被空周次过滤、缓存发布等待网络周次、测试快照覆盖真实共享目录；指引显示同步状态/数量并提供课表同步入口，保留双方唯一共同授权组适配 | 历史签名检查见 E-20261020-01；本轮契约/UI 与实机边界见 E-20261023-01，Windows Sideloadly / iOS 27 实际共享及显示仍待复验 | 2026-10-23 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天、课前 10 分钟边界和圆角安全留白；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录；本轮 10 分钟边界、圆角布局及原生计时回归见 E-20261020-02 | 2026-10-20 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
 | OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建，导航组单测及五组 UI 复用同一产物、五台独立模拟器并分别保存结果；分组校验保证 UI 无遗漏或重复（E-20261020-04）；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；本轮 CI `39428134231` 全绿：509 Swift / 40 UI / 25 Rust / 22 Python，耗时见 `E-20261020-04` 和 `docs/ci.md` | 2026-10-20 |
@@ -833,7 +833,22 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 天气 fixture 修复后的完整导航回归在同一 iPhone 17 Pro 通过，证据为 `build/source-audit-20261021/version-1.0.4-navigation-fixture-fix.xcresult`；测试后恢复正常账号课表页面。
 - 同一提交被 push 和 pull_request 重复触发全量 CI；确认提交与合并预览代码树完全相同后取消排队的重复运行 `39792959419`，保留完整分支回归。未修改 workflow 的测试范围或合并规则。
 
+### E-20261023-01：小组件数据、固定课表表头、返回菜单及校园码恢复
+
+- 基线：远端 main `9e8478a` 与本地一致，检查时无开放 PR；PR #10 已合并，1.0.4（6）IPA 的 main Actions `39802035511` 成功。新建 `codex/ios-widget-navigation-reliability`，不修改 Android、版本或 AIO gitlink。
+- 用户补充：Widget 可以添加，但课程为空或显示异常。模拟器正常账号的共享快照为 ready、第 7 周、11 条当周课程/18 条全部课程；这只证明本机数据已写入，不能作为 Windows Sideloadly 签名和 iOS 27 桌面渲染的验收。
+- Widget 数据缺陷：`Course` 在 `weekIndexes` 为空时使用起止周范围，原快照直接复制空数组，随后被组件周次过滤清空。改用 `activeWeeks`，并新增当周、下一周及超出范围三种结果测试。已有有效缓存和周次时，首页/课表先发布缓存快照，再等待网络校准，避免退出或网络缓慢时一直没有数据；未知周次仍不发布虚构第 1 周。
+- 隔离与指引：演示/宿主 XCTest 的 Widget 读写改为测试私有快照，避免示例课表覆盖真实 App Group；提醒偏好沿用隔离 suite。安装指引显示同步状态和课程数量、提供“打开课表同步”，分享摘要只新增状态/周次/数量，不包含课程名称、地点、账号、Cookie 或设备标识。未同步和网络同步失败不再误称“登录失效”。
+- 课表与导航：对照当前 Android `Schedule.kt` 中固定的 `ScheduleHeaderRow`，顶部周选择及三个系统材质动作留在滚动区外，网格继续纵向滚动/横向分页；周日视图和固定课程日期不变。工具首页补 `.navigationTitle("小工具")`，保留系统返回历史菜单。
+- 校园码：前台/快捷指令/展开面板初次加载合并在途请求，快捷指令不再强制取消首页预取；后台仍清除旧码。会话最多续期一次，续期后直接通道仍失败时允许 Rust 通道读取，取消不触发回退；显式点击刷新继续可替换挂起请求，不引入计时器无限重试。
+- 验证：仅使用 iPhone 17 Pro / iOS 26.5 / Xcode 27.0，最终 537 项单元/契约无失败；受影响的 15 条 UI 路径均通过。`final-regression.xcresult` 中 14 条 UI 直接通过，旧分页用例因未隔离上次保留的下学期预览设置而失败；改为通过设置 UI 明确恢复初态，避免启动参数覆盖后续开关切换，保留原有左右分页、总览及下学期断言。最终 `verified-regression.xcresult` 的全部 537 项单元/契约与分页、返回标题、冷启动二维码 3 条 UI 均通过。日志/原失败证据均在 `build/source-audit-20261023/`，未降低断言或扩大等待。
+- UI 与视觉证据：上下滚动前后周选择/操作按钮坐标固定；周日连续日期、重入所选周、顶部原生按钮、重复快捷指令、后台返回及工具/设置根页回归通过；原生返回按钮明确断言“小工具”，长按中间状态截图 `native-back-held.png` 实际显示“小工具”菜单项。三尺寸 × 深浅色 Widget 合成渲染图与同步指引截图已导出目视检查。
+- 正常账号只读验收：测试后无演示参数启动原 App，数据和 Keychain 保留；真正进程冷启动深链、退后台返回、从课表重复深链均显示真实二维码，本次未见加载失败/重试或重新登录提示。用本机 Vision 只输出二维码存在与错误文案存在的布尔值，不输出付款码内容或 OCR 文本；无充值/支付。桌面已添加的小尺寸 Widget 实际显示第 7 周的真实接下来课程，截图 `real-widget-home.png`；共享快照仍为 ready、11 条当周/18 条全部记录。证据在 `build/source-audit-20261023/`，真实二维码截图仅本机保留，不发布；iOS 27 / Sideloadly 实际签名授权及显示仍须另行实机复验。
+
 ## 14. 变更日志
+
+- 2026-10-23：按用户要求将本轮修复提交 `0aaa23b` 向 develop 集成；从 main `9e8478a` 建立此前不存在的 develop，并为其推送与 PR 启用既有完整 CI。版本号和 AIO gitlink 不变，合并前核验远端检查结果。
+- 2026-10-23：修复 Widget 范围周次遗漏和缓存同步时序，隔离测试快照；固定课表顶部周选择/操作，补小工具系统返回菜单标题，增强校园码续期后的有界回退。详见 E-20261023-01；保留 Sideloadly / iOS 27 实机验收边界。
 
 - 2026-10-22：App 与 Widget 同步提升为 1.0.4（6），交付本轮原生校园邮箱、校园码恢复、Widget 共享目录恢复、主题与课表展示、工具/设置根页修复；功能验证见 E-20261022-01/02。按维护 PR 合并并使用现有 Actions 打包 IPA，不执行商店发布或修改 AIO gitlink。
 - 2026-10-20：App/Widget 同步提升为 1.0.3（5），精简 README 下载使用说明，新增 main 最小保护规则并记录实测 CI 耗时，见 E-20261020-03。
