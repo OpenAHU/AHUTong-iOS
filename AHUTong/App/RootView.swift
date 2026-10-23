@@ -87,7 +87,8 @@ struct RootView: View {
             )
             await restoreForCurrentConsent()
         }
-        .onChange(of: onboardingModel.consent) { _, _ in
+        .onChange(of: onboardingModel.consent) { _, consent in
+            AppDiagnostics.shared.updateConsent(consent)
             Task {
                 await restoreForCurrentConsent()
                 handleShortcutRequest()
@@ -236,6 +237,7 @@ struct RootView: View {
     }
 
     private func restoreForCurrentConsent() async {
+        AppDiagnostics.shared.updateConsent(onboardingModel.consent)
         guard onboardingModel.isLoaded, onboardingModel.consent.isComplete else { return }
         let key = "\(onboardingModel.consent.confirmedVersion ?? 0)-\(onboardingModel.consent.privacyDecision.rawValue)-\(AppRuntime.isDemoSession)"
         guard key != restoredConsentKey else { return }

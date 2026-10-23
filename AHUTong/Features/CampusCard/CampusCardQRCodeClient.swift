@@ -79,7 +79,11 @@ enum CampusCardQRRecovery {
         }
         // One display attempt can renew at most once, after trying both sessions.
         if needsRefresh {
-            try await refresh()
+            do { try await refresh() }
+            catch {
+                AppDiagnostics.shared.report(.campusCodeFailed, stage: .refresh, error: error)
+                throw error
+            }
             try Task.checkCancellation()
             do { return try await firstParty() }
             catch {
@@ -88,9 +92,19 @@ enum CampusCardQRRecovery {
             }
             // The renewed Rust session may work even if the direct transport
             // is still unavailable. Do not start another renewal here.
-            return try await fallback()
+            return try await finalRead(stage: .rust, operation: fallback)
         }
-        return try await firstParty()
+        return try await finalRead(stage: .firstParty, operation: firstParty)
+    }
+
+    private static func finalRead(
+        stage: DiagnosticStage, operation: @Sendable () async throws -> String
+    ) async throws -> String {
+        do { return try await operation() }
+        catch {
+            AppDiagnostics.shared.report(.campusCodeFailed, stage: stage, error: error)
+            throw error
+        }
     }
 
     private static func checkCancellation(_ error: Error) throws {
