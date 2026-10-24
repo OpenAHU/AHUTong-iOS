@@ -369,41 +369,14 @@ struct RedactingLogger: Sendable {
     }
 }
 
-struct PrivacyManifestAudit: Equatable, Sendable {
-    let exists: Bool
-    let trackingDisabled: Bool
-    let declaresPaymentInfo: Bool
-
-    static func inspect(bundle: Bundle = .main) -> PrivacyManifestAudit {
-        guard let url = bundle.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"),
-              let data = try? Data(contentsOf: url),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
-              let root = plist as? [String: Any] else {
-            return PrivacyManifestAudit(exists: false, trackingDisabled: false, declaresPaymentInfo: false)
-        }
-        let trackingDisabled = root["NSPrivacyTracking"] as? Bool == false
-        let collected = root["NSPrivacyCollectedDataTypes"] as? [[String: Any]] ?? []
-        let payment = collected.contains {
-            $0["NSPrivacyCollectedDataType"] as? String == "NSPrivacyCollectedDataTypePaymentInfo"
-        }
-        return PrivacyManifestAudit(exists: true, trackingDisabled: trackingDisabled, declaresPaymentInfo: payment)
-    }
-}
-
 struct ReleaseDiagnostics: Equatable, Sendable {
     let version: String
     let build: String
-    let privacy: PrivacyManifestAudit
-    let productionPaymentGatewayConfigured: Bool
-    let thirdPartyCrashReportingEnabled: Bool
 
     static func current(bundle: Bundle = .main) -> ReleaseDiagnostics {
         ReleaseDiagnostics(
             version: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "--",
-            build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "--",
-            privacy: PrivacyManifestAudit.inspect(bundle: bundle),
-            productionPaymentGatewayConfigured: true,
-            thirdPartyCrashReportingEnabled: false
+            build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "--"
         )
     }
 }

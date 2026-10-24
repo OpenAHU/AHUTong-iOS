@@ -4,6 +4,8 @@
 <dict>
     <key>AHUTongAppGroupIdentifier</key>
     <string>$(AHUTONG_APP_GROUP)</string>
+    <key>AHUTongSentryDSN</key>
+    <string>$(AHUTONG_SENTRY_DSN)</string>
     <key>CFBundleDisplayName</key>
     <string>安大通</string>
     <key>CFBundleExecutable</key>

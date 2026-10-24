@@ -281,7 +281,11 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     private func publishWidget(_ snapshot: ScheduleWidgetSnapshot) async {
-        try? await widgetStore.save(snapshot)
+        do {
+            try await widgetStore.save(snapshot)
+        } catch {
+            AppDiagnostics.shared.report(.widgetWriteFailed, stage: .widgetPublish, error: error)
+        }
         if !AppRuntime.usesIsolatedUITestStorage {
             WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
         }

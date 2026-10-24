@@ -180,16 +180,30 @@ final class RedactingLoggerTests: XCTestCase {
 }
 
 final class ReleaseDiagnosticsTests: XCTestCase {
-    func testProductionPaymentIsConfiguredWithoutCrashCollection() {
-        let diagnostics = ReleaseDiagnostics.current()
-        XCTAssertTrue(diagnostics.productionPaymentGatewayConfigured)
-        XCTAssertFalse(diagnostics.thirdPartyCrashReportingEnabled)
+    func testPrivacyManifestShipsInHostedApplication() throws {
+        let root = try privacyManifest()
+        XCTAssertEqual(root["NSPrivacyTracking"] as? Bool, false)
+        let collected = try XCTUnwrap(root["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
+        XCTAssertTrue(collected.contains {
+            $0["NSPrivacyCollectedDataType"] as? String == "NSPrivacyCollectedDataTypePaymentInfo"
+        })
     }
 
-    func testPrivacyManifestShipsInHostedApplication() {
-        let audit = PrivacyManifestAudit.inspect()
-        XCTAssertTrue(audit.exists)
-        XCTAssertTrue(audit.trackingDisabled)
-        XCTAssertTrue(audit.declaresPaymentInfo)
+    func testPrivacyManifestDeclaresUnlinkedNonTrackingDiagnostics() throws {
+        let root = try privacyManifest()
+        let collected = try XCTUnwrap(root["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
+        for type in ["NSPrivacyCollectedDataTypeCrashData", "NSPrivacyCollectedDataTypeOtherDiagnosticData"] {
+            let entry = try XCTUnwrap(collected.first { $0["NSPrivacyCollectedDataType"] as? String == type })
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, false, type)
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeTracking"] as? Bool, false, type)
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypePurposes"] as? [String],
+                           ["NSPrivacyCollectedDataTypePurposeAppFunctionality"], type)
+        }
+    }
+
+    private func privacyManifest() throws -> [String: Any] {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"))
+        let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil)
+        return try XCTUnwrap(plist as? [String: Any])
     }
 }

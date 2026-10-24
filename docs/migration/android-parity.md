@@ -7,13 +7,13 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
-| 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v5 保留 ADWMH 远端 OCR 说明，并披露学校邮箱的数据流和隔离会话，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | 1.0.4（6）已通过 PR #10 合入 main `9e8478a` 并由 Actions 打包。本轮修复小组件遗漏范围周次、有效缓存发布被网络请求阻塞、课表顶部周选择/操作随滚动移动、小工具原生返回菜单空标题；补齐校园码续期后的双通道回退和测试快照隔离，见 E-20261023-01 |
-| 下一步 | 仅在 iPhone 17 Pro（iOS 26.5）完成本轮回归与保留数据的真实校园码唤起；Sideloadly 安装的实际共享权限和 iOS 27 Widget 显示仍需实机安装摘要/复验，不以模拟器替代 |
+| 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v6 保留 OCR 与学校邮箱说明，新增经过过滤的 Sentry 诊断用途与撤回控制，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
+| 当前焦点 | PR #11 已将 Widget/课表/校园码修复合入 develop `f7a79e0`。本轮新增 Sentry 隐私过滤诊断，项目 ahutong-ios 已实际收件；依据用户安装摘要明确主 App 缺少 App Group 授权，见 E-20261023-02 |
+| 下一步 | Sentry 收件与 IPA/Archive 自动 dSYM 上传均已验证；用户设备需重新签名时同时授权 App/Widget 的同一 App Group，随后复验 iOS 27 Widget；不将模拟器或未签名 IPA 当作权限修复 |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
 | Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
 | 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前维护 | `codex/ios-widget-navigation-reliability`；本轮修复提交 `0aaa23b`，按用户要求向 develop 集成。远端原无 develop，从 main `9e8478a` 建立，并为 develop 的推送与 PR 补齐 CI；保持 1.0.4（6）版本和 AIO gitlink |
+| 当前维护 | `codex/ios-sentry-widget-diagnostics`；基于 develop `f7a79e0`。保持 1.0.4（6）版本和 AIO gitlink；SDK 固定版本、符号上传和授权状态见 docs/operations/sentry.md |
 | 最近更新 | 2026-10-23 |
 
 ## 1. 目标与边界
@@ -306,10 +306,10 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | CONTENT-02 | 失物发布与删除 | 同上、`crawler/model/adwnh/*` | `Features/LostFound/Compose/` | P5 / CONTENT-01 | 已完成 | 真实发布/删除端点只在服务端确认成功后改变 UI；会话过期显示失败与手动登录入口，不因自动重试触发 WebView 或重放写请求 | 既有所有权/发布/删除单测及 UI smoke 在 CI `35867866032` 全绿；真实登录联调仍依赖 AUTH-02 真机验证 | 2026-09-23 |
 | CONTENT-03 | 学习资料浏览与下载 | `main/Repository*.kt`、`RepositoryViewModel.kt`、`data/repository/*` | `Features/Repository/` | P4 | 已完成 | 六学院虚拟根、面包屑、目录缓存、GitHub/代理源、Git LFS、流式下载、SHA-256/大小校验、Markdown 阅读、系统预览/分享、下载管理及自定义设置页完整；认证头不会发往非 GitHub 域 | `StudyRepositoryServiceTests` 的路径、面包屑、LFS、下载完整性、凭据边界与 UI 覆盖全部通过，见 `E-20260726-01` | 2026-07-26 |
 | PREF-01 | 设置、偏好、关于、许可证与贡献者 | `Settings.kt`、`settings/*`、`PreferencesViewModel.kt`、`LicenseViewModel.kt` | `Features/Settings/` | P1→P7 | 待真机验证 | 设置首页显示真实 App 图标和账户信息卡；登录真实账号/重新登录操作仍在首页，只有隐私开关与政策入口留在偏好设置，体验用户也可访问；Debug 页及隐藏入口已删除，贡献名单保留匿名展示名并补齐 Android `develop` 两位开发者；设置行统一轻触觉、明暗和短缩放，减弱动态效果保留非动态反馈；本轮修正偏好入口高亮越界并精简数据清理/更新文案 | 设置/体验账户 UI smoke 已更新，确认账户操作不再出现在偏好设置；CI `35901490865` 的设置 UI smoke 全绿，真机待验证；2026-10-19 本轮维护与待验边界见 `E-20261019-01`；原生入口与反馈实际模拟器复核见 `E-20261019-02` | 2026-10-19 |
-| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；修复仅有起止周课程被空周次过滤、缓存发布等待网络周次、测试快照覆盖真实共享目录；指引显示同步状态/数量并提供课表同步入口，保留双方唯一共同授权组适配 | 历史签名检查见 E-20261020-01；本轮契约/UI 与实机边界见 E-20261023-01，Windows Sideloadly / iOS 27 实际共享及显示仍待复验 | 2026-10-23 |
+| SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；修复仅有起止周课程被空周次过滤、缓存发布等待网络周次、测试快照覆盖真实共享目录；指引显示同步状态/数量并提供课表同步入口，保留双方唯一共同授权组适配 | 历史签名检查见 E-20261020-01；本轮契约/UI 与实机边界见 E-20261023-01，用户安装已确认缺少 App Group 授权；v2 的精确分类与团队 unknown 修复见 E-20261023-02，重新签名后的 iOS 27 显示待复验 | 2026-10-23 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天、课前 10 分钟边界和圆角安全留白；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录；本轮 10 分钟边界、圆角布局及原生计时回归见 E-20261020-02 | 2026-10-20 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建，导航组单测及五组 UI 复用同一产物、五台独立模拟器并分别保存结果；分组校验保证 UI 无遗漏或重复（E-20261020-04）；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖 | 既有证据见 `E-20260801-01`、`E-20260801-02`；本轮 CI `39428134231` 全绿：509 Swift / 40 UI / 25 Rust / 22 Python，耗时见 `E-20261020-04` 和 `docs/ci.md` | 2026-10-20 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建，导航组单测及五组 UI 复用同一产物、五台独立模拟器并分别保存结果；分组校验保证 UI 无遗漏或重复（E-20261020-04）；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖；隐私 v6 下的 Sentry 崩溃/故障分类及自动 dSYM 上传已验证 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI 分组耗时见 `E-20261020-04` 和 `docs/ci.md`；Sentry 收件/过滤见 E-20261023-02，令牌授权、实际符号上传与过时审计清理见 E-20261024-01 | 2026-10-24 |
 
 2026-10-19 1.0.2 对上述矩阵的增量更新（覆盖对应旧界面描述，验证见 E-20261019-06）：
 
@@ -845,7 +845,29 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - UI 与视觉证据：上下滚动前后周选择/操作按钮坐标固定；周日连续日期、重入所选周、顶部原生按钮、重复快捷指令、后台返回及工具/设置根页回归通过；原生返回按钮明确断言“小工具”，长按中间状态截图 `native-back-held.png` 实际显示“小工具”菜单项。三尺寸 × 深浅色 Widget 合成渲染图与同步指引截图已导出目视检查。
 - 正常账号只读验收：测试后无演示参数启动原 App，数据和 Keychain 保留；真正进程冷启动深链、退后台返回、从课表重复深链均显示真实二维码，本次未见加载失败/重试或重新登录提示。用本机 Vision 只输出二维码存在与错误文案存在的布尔值，不输出付款码内容或 OCR 文本；无充值/支付。桌面已添加的小尺寸 Widget 实际显示第 7 周的真实接下来课程，截图 `real-widget-home.png`；共享快照仍为 ready、11 条当周/18 条全部记录。证据在 `build/source-audit-20261023/`，真实二维码截图仅本机保留，不发布；iOS 27 / Sideloadly 实际签名授权及显示仍须另行实机复验。
 
+### E-20261023-02：Sentry 接入与用户安装签名诊断
+
+- 基于已合并 PR #11 的 develop `f7a79e0`。使用当前会话工作区的新功能分支 `codex/ios-sentry-widget-diagnostics`，版本保持 1.0.4（6），不改 Android 或 AIO gitlink。
+- 用户提供的 v1 摘要：扩展存在、配置组一致，但主 App 描述文件 groups 为 none、Widget 描述文件不可读，配置组容器也无法访问。这是当前安装缺少共享权限的证据；原 `Same profile team: false` 因两份信息不齐不能推断团队不同。v2 改为 unknown，并新增 appGroupNotProvisioned 精确提示。没有引入私有目录伪共享，也未声称给 Sideloadly 安装授予权限。
+- 按用户指定 AHUTong-iOS 建立 Sentry 项目；服务将 slug 规范为 ahutong-ios，组织为 ratatoskr，使用 DE 接收节点。固定官方 Apple 二进制包 9.31.0，补齐 MIT 离线许可。仅当前 v6 隐私确认后启动；拒绝、撤回和测试隔离不启动业务上报。
+- 过滤 SDK 事件的用户、请求、任意附加字段、异常原因、栈变量与内存寄存器；业务诊断只接受封闭枚举和数字错误码，按进程去重并限量。覆盖共享权限/写入、续期和校园码最终失败，不传课程、邮件、凭据或二维码。关闭自动网络采集、日志、回放、截图、视图层级、性能和指标；服务端保存默认清洗、额外敏感字段以及禁止新事件存储 IP。
+- 只使用 iPhone 17 Pro / iOS 26.5 / Xcode 27.0：全部 545 项单元测试中 544 通过，1 项真实投递测试按默认隔离策略跳过；随后显式传入 AHUTONG_SENTRY_SMOKE=1，仅该合成测试通过并由浏览器确认收到事件 3161569339c145ed86d6a19fe133f81a，项目 AHUTONG-IOS-1、用户数 0。另 4 条 UI 覆盖隐私拒绝、Widget 指引、冷启动与重复快捷指令，均通过。证据在 build/sentry-20261023/，无真实校园请求或充值。
+- Release 真机目标与保留 Widget 的待重签 IPA 结构验证通过，App/Widget dSYM 均生成。Actions 补保留匹配 dSYM 和可选上传步骤；脚本只扫描 .dSYM，不上传源码，令牌只从环境读取。CI/产物脚本测试 25 项通过。上传令牌创建及写入 GitHub Secret 尚待用户确认；收件成功不等于已完成 Debug 符号化，用户 iOS 27 签名与组件显示仍需实机复验。
+
+### E-20261024-01：CI 符号上传与隐私审计收口
+
+- 用户明确允许创建 `AHUTong-iOS GitHub Actions` 组织令牌（固定 org:ci）并保存到 OpenAHU/AHUTong-iOS 的 `SENTRY_AUTH_TOKEN`。Sentry 页面确认令牌名称，GitHub 页面与 API 均确认 Secret 已保存；凭据不进入源码、IPA 或命令参数。
+- 在源码 `0644586` 重跑 IPA #144 与 Archive，双方均上传两份匹配 dSYM，Sentry CLI 等待服务端处理后分别返回两个 OK。项目 Debug Files 页面确认四份文件含 symtab/debug/unwind；具体 Debug ID 和运行链接见 `docs/operations/sentry.md`。不宣称历史 Debug 合成事件已补齐符号。
+- 发现并修正过时的“不接入第三方崩溃上报”文档和恒定关闭的诊断测试。删除 ReleaseDiagnostics 未被业务使用的隐私、支付开关及崩溃标志，将实际随包隐私清单检查放到测试中，核对诊断类型、不关联身份、不用于跟踪和 App 功能用途。README、隐私映射和设备验收说明统一为 v6。
+- CI 日志确认新进程重试会重复整组所选 UI。原 25 分钟不足以覆盖两轮和保存结果，UI job 预算改为 40 分钟；仍最多重试一次，保留失败证据与 warning，持续失败照常失败。不减少 48 条 UI、断言或真实等待，更新 docs/ci.md 的历史/当前测试范围和重试语义。
+- 仅使用 iPhone 17 Pro / iOS 26.5 / Xcode 27.0，清理后的全部 545 项单元测试中 544 通过、1 项显式投递默认跳过，设备 Release 构建通过。原 CI 首轮出现等待失败的校园码展开、体验账户进入课表两项本机均一次通过；日志为 `build/sentry-20261023/ci-wait-regression.log` 与 `privacy-audit-regression.log`。保留原失败和重试证据，不将超时结果写成通过。
+- 源码 `0644586` 的完整 CI run 39972435515 attempt 2 最终成功：五组共 48 条 UI 全部通过，设置/服务两组重跑各 14 项均在该次执行首次通过，没有隐藏的新失败；导航组的 545 单元为 544 通过、1 跳过。后续仅删除上述未使用审计数据、更新实际清单测试与 CI 预算；最终本机单元/设备构建证据使用清理后的源码。
+
 ## 14. 变更日志
+
+- 2026-10-24：经用户授权配置 Sentry CI Secret，实际验证 IPA/Archive dSYM 上传与服务端处理；同步隐私 v6 数据映射，删除过时的未采集标志和测试，见 E-20261024-01。
+
+- 2026-10-23：为 ahutong-ios 接入经过过滤的 Sentry 诊断和隐私 v6，完成合成收件、本机回归与设备构建；新增 App Group 未授权的精确诊断和团队信息 unknown 状态，见 E-20261023-02。自动符号上传仍待令牌授权。
 
 - 2026-10-23：按用户要求将本轮修复提交 `0aaa23b` 向 develop 集成；从 main `9e8478a` 建立此前不存在的 develop，并为其推送与 PR 启用既有完整 CI。版本号和 AIO gitlink 不变，合并前核验远端检查结果。
 - 2026-10-23：修复 Widget 范围周次遗漏和缓存同步时序，隔离测试快照；固定课表顶部周选择/操作，补小工具系统返回菜单标题，增强校园码续期后的有界回退。详见 E-20261023-01；保留 Sideloadly / iOS 27 实机验收边界。

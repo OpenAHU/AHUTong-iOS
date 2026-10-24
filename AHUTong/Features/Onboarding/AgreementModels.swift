@@ -63,7 +63,8 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
             6. 您主动打开校园邮箱后，App 通过学校门户及学校使用的网易企业邮箱服务（entryhz.qiye.163.com、mail.stu.ahu.edu.cn）连接您的邮箱。邮箱会话单独保存在本机 ThisDeviceOnly Keychain；邮件、联系人和编辑内容仅在当前页面内存中处理。发送、保存草稿、移动邮件和上传附件只在您主动操作时提交到学校邮箱服务；下载的附件仅在本机临时保存，分享时由您选择接收方。开发者不接收邮件内容或邮箱凭据，退出校园账号时删除本机邮箱会话。
             7. 支付功能仅在您主动确认后通过学校 HTTPS 接口提交。校园卡六位密码只在当前操作的内存中短暂存在，完成后立即清除。
             8. 课表、缓存、偏好和小组件快照保存在本机或 App Group。您拒绝或在设置中撤回同意后，App 会删除账号密码和校园 Cookie，并切换为“安大通体验用户”。之前缓存或手动导入的课表会保留，直到您清除缓存或重新导入。
-            9. 拒绝本政策仍可使用体验账户的课表和设置；其他需要真实校园身份的功能不可用。您可随时在设置中重新同意或撤回同意。
+            9. 您确认本版隐私政策后，App 使用 Sentry（sentry.io，德国接收节点）发送经过过滤的崩溃堆栈、App/系统版本、设备型号及小组件、会话续期、校园码的故障分类，用于定位兼容性和稳定性问题。不会上传学号、密码、Cookie、Token、课表、邮件、二维码或请求内容；不启用截图、屏幕回放和广告追踪。撤回同意后停止新诊断采集，并清理本机待发送的诊断缓存。
+            10. 拒绝本政策仍可使用体验账户的课表和设置；其他需要真实校园身份的功能不可用。您可随时在设置中重新同意或撤回同意。
             """
         case .community:
             """
@@ -76,8 +77,8 @@ enum AgreementDocument: String, CaseIterable, Codable, Hashable, Identifiable, S
 }
 
 struct AgreementConsent: Codable, Equatable, Sendable {
-    static let currentVersion = 5
-    static let currentPrivacyPolicyVersion = 5
+    static let currentVersion = 6
+    static let currentPrivacyPolicyVersion = 6
 
     var acceptedDocumentIDs: Set<String> = []
     var confirmedVersion: Int? = nil

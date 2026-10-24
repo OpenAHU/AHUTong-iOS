@@ -236,9 +236,13 @@ final class HomeViewModel: ObservableObject {
 
     private func publishWidgetIfWeekKnown() async {
         guard currentWeekIsKnown else { return }
-        try? await widgetStore.save(.make(
-            courses: courses, currentWeek: currentWeek, updatedAt: referenceDate
-        ))
+        do {
+            try await widgetStore.save(.make(
+                courses: courses, currentWeek: currentWeek, updatedAt: referenceDate
+            ))
+        } catch {
+            AppDiagnostics.shared.report(.widgetWriteFailed, stage: .widgetPublish, error: error)
+        }
         if !AppRuntime.usesIsolatedUITestStorage {
             WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
         }

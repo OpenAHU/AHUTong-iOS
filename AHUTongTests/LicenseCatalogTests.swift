@@ -21,14 +21,16 @@ final class LicenseCatalogTests: XCTestCase {
         XCTAssertEqual(Set(entry.bundledDocuments), Set(["LICENSE", "NOTICE"]))
     }
 
-    func testMaterialIconsProvidesOfflineAttribution() throws {
-        let entry = try XCTUnwrap(IOSLicenseCatalog.entries.first { $0.name == "Material Icons" })
-        for resource in entry.bundledDocuments {
-            let url = try XCTUnwrap(
-                Bundle.main.url(forResource: resource, withExtension: nil),
-                "Missing bundled attribution: \(resource)"
-            )
-            XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).isEmpty)
+    func testThirdPartyDependenciesProvideOfflineAttribution() throws {
+        for name in ["Material Icons", "Sentry SDK 9.31.0"] {
+            let entry = try XCTUnwrap(IOSLicenseCatalog.entries.first { $0.name == name })
+            for resource in entry.bundledDocuments {
+                let url = try XCTUnwrap(
+                    Bundle.main.url(forResource: resource, withExtension: nil),
+                    "Missing bundled attribution: \(resource)"
+                )
+                XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).isEmpty)
+            }
         }
     }
 }

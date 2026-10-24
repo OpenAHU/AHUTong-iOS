@@ -19,6 +19,9 @@ xcuserdata/
 *.cer
 *.key
 *.xcconfig.local
+.sentryclirc
+sentry.properties
+.env.sentry
 
 # Python artifact-verification test caches
 __pycache__/

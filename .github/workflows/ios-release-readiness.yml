@@ -17,6 +17,8 @@ jobs:
   archive-and-audit:
     runs-on: macos-26
     timeout-minutes: 30
+    env:
+      SENTRY_TOKEN_CONFIGURED: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
 
     steps:
       - name: Check out repository
@@ -170,3 +172,12 @@ jobs:
           path: ${{ runner.temp }}/AHUTong.xcarchive
           if-no-files-found: error
           retention-days: 7
+
+      - name: Install official Sentry CLI
+        if: env.SENTRY_TOKEN_CONFIGURED == 'true'
+        run: brew install getsentry/tools/sentry-cli
+
+      - name: Upload archive debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: bash scripts/upload-sentry-symbols.sh "$RUNNER_TEMP/AHUTong.xcarchive/dSYMs"

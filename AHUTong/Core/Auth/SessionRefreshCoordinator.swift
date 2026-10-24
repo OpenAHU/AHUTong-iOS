@@ -29,6 +29,7 @@ actor SessionRefreshCoordinator {
             clearRefresh(id: id, scope: scope)
         } catch {
             clearRefresh(id: id, scope: scope)
+            AppDiagnostics.shared.report(.sessionRefreshFailed, stage: .refresh, error: error, scope: scope)
             throw error
         }
     }

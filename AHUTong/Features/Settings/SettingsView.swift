@@ -622,6 +622,13 @@ struct IOSLicenseEntry: Identifiable, Equatable, Sendable {
 enum IOSLicenseCatalog {
     static let entries = [
         IOSLicenseEntry(
+            name: "Sentry SDK 9.31.0",
+            author: "Sentry",
+            url: URL(string: "https://github.com/getsentry/sentry-cocoa")!,
+            license: "MIT License",
+            bundledDocuments: ["Sentry-LICENSE.txt"]
+        ),
+        IOSLicenseEntry(
             name: "Material Icons",
             author: "The Android Open Source Project",
             url: URL(string: "https://github.com/google/material-design-icons")!,

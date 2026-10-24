@@ -20,6 +20,8 @@ jobs:
     name: Build unsigned device IPA
     runs-on: macos-26
     timeout-minutes: 30
+    env:
+      SENTRY_TOKEN_CONFIGURED: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
 
     steps:
       - name: Check out repository
@@ -101,3 +103,20 @@ jobs:
             ${{ steps.package.outputs.checksum_path }}
           if-no-files-found: error
           retention-days: 7
+
+      - name: Preserve matching debug symbols
+        uses: actions/upload-artifact@v6
+        with:
+          name: AHUTong-dSYMs-${{ github.run_number }}
+          path: ${{ runner.temp }}/DerivedData/Build/Products/Release-iphoneos/*.dSYM
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Install official Sentry CLI
+        if: env.SENTRY_TOKEN_CONFIGURED == 'true'
+        run: brew install getsentry/tools/sentry-cli
+
+      - name: Upload matching debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: bash scripts/upload-sentry-symbols.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos"
