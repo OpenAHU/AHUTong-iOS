@@ -73,7 +73,7 @@ Apple 的[能力支持取决于平台及会员类型](https://developer.apple.co
 ## 发布前人工检查
 
 - [ ] 使用授权校园测试账号验证登录、课表和 PAY-01～05；真实支付只由测试者在明确授权的小额环境中手动确认。
-- [ ] 验证隐私 v5 接受/拒绝/撤回、可见 CAS 首登、首次及过期校园服务隐藏认证、OCR 失败重试，以及只含课表+设置的体验账户；邮箱会话应在退出/撤回后清除。
+- [ ] 验证隐私 v6 接受/拒绝/撤回、可见 CAS 首登、首次及过期校园服务隐藏认证、OCR 失败重试，以及只含课表+设置的体验账户；邮箱会话应在退出/撤回后清除，Sentry 仅在确认且同意当前政策时启动。
 - [ ] 确认 Apple target 不编译 Rust `/login` 与外部 OCR 链路；Release Archive 会拒绝包含旧 OCR 端点的二进制。
 - [x] PAY-01、PAY-03、PAY-05 的客户端签名与 PAY-02 安全键盘兼容逻辑已按 Android `2c33b0b` 隔离实现；协议常量只存在于私有支付兼容层，值不得进入日志、文档、诊断或验收记录。
 - [x] CI/自动测试通过应用级禁写开关、runner 域名阻断和 URLProtocol/Mock 禁止连接真实扣款接口。
@@ -120,4 +120,4 @@ python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
 
 ### Sentry 诊断与调试符号
 
-SDK 9.31.0 已连接 `ratatoskr / ahutong-ios`。当前隐私 v6 确认后才启用过滤后的诊断，普通测试不发事件；真实合成收件和数据边界见 [Sentry 运维说明](../operations/sentry.md)。IPA 与 Archive 工作流保留匹配的 dSYM，只有设置 `SENTRY_AUTH_TOKEN` 后才自动上传；令牌授权和实际上传验证仍是待办，不能将缺失符号的堆栈当作已经完成源码定位。
+SDK 9.31.0 已连接 `ratatoskr / ahutong-ios`。当前隐私 v6 确认后才启用过滤后的诊断，普通测试不发事件；真实合成收件和数据边界见 [Sentry 运维说明](../operations/sentry.md)。2026-10-24 用户已授权创建 CI 令牌并保存为仓库 `SENTRY_AUTH_TOKEN`；IPA 与 Archive 的 App / Widget dSYM 自动上传及服务端处理均通过，项目页面可见对应 Debug ID。历史合成 Debug 事件未上传其对应 Debug dSYM，不将 Release 上传成功当作该历史事件已完成源码定位。

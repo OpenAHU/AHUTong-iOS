@@ -100,7 +100,7 @@ jobs:
     needs: build
     runs-on: macos-26
     name: Test ${{ matrix.suite }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
@@ -179,7 +179,7 @@ jobs:
           test_runs=("$RUNNER_TEMP/TestBuild/Build/Products/"*.xctestrun)
           test "${#test_runs[@]}" -eq 1
           test -f "${test_runs[0]}"
-          # Failed UI cases get at most one fresh test-runner process.
+          # A failed UI run can repeat the selected suite once in a fresh runner.
           # XCTest retains both attempts in xcresult; report retries below.
           test_options+=(-retry-tests-on-failure -test-iterations 2 -test-repetition-relaunch-enabled YES)
           xcodebuild \

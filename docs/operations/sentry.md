@@ -24,10 +24,12 @@
 
 `ios-unsigned-ipa.yml` 保存与本次 IPA 同构建的 App / Widget dSYM；`ios-release-readiness.yml` 保留 Archive 中的 dSYM。两条工作流通过 `scripts/upload-sentry-symbols.sh` 上传本次生成的 `.dSYM`，不上传源文件，不把令牌放进命令参数、App 或源码。
 
-自动上传需仓库 Actions Secret `SENTRY_AUTH_TOKEN`。组织为 `ratatoskr`，项目为 `ahutong-ios`。Sentry 的组织令牌使用固定的 `org:ci` 权限，创建与写入 Secret 需用户确认；未配置时明确警告并保留符号产物供手动上传，不谎报已完成符号化。此令牌用于构建操作，不用于读取用户事件。
+仓库已配置 Actions Secret `SENTRY_AUTH_TOKEN`，组织为 `ratatoskr`，项目为 `ahutong-ios`。2026-10-24 经用户明确授权，创建 `AHUTong-iOS GitHub Actions` 组织令牌并保存到该仓库；权限为 Sentry 固定的 `org:ci`。令牌只用于构建操作，不用于读取用户事件，不进入源码或 IPA。未配置 Secret 的其他仓库仍明确警告并保留符号产物供手动上传。
 
 本地显式测试通过临时 `.xctestrun` 将 `AHUTONG_SENTRY_SMOKE=1` 仅传给 `AppDiagnosticsTests/testOptInSentryDelivery`；发送固定的合成事件后关闭 SDK 并删除测试缓存，不启用真实校园账号的诊断或接受其隐私政策。
 
-2026-10-23：在 iPhone 17 Pro / iOS 26.5 上，事件 `3161569339c145ed86d6a19fe133f81a` 已在 [AHUTONG-IOS-1](https://ratatoskr.sentry.io/issues/155737038/) 收到，环境为 `integration-test`，用户数为 0。自动符号上传的授权尚待用户确认；这条 Debug 事件也尚未上传对应 Debug dSYM，不能将收件成功当成符号化完成。
+2026-10-23：在 iPhone 17 Pro / iOS 26.5 上，事件 `3161569339c145ed86d6a19fe133f81a` 已在 [AHUTONG-IOS-1](https://ratatoskr.sentry.io/issues/155737038/) 收到，环境为 `integration-test`，用户数为 0。这条历史 Debug 事件尚未上传对应 Debug dSYM，不能将收件成功当成该事件的符号化完成。
+
+2026-10-24：[IPA #144](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39972435501/attempts/2) 和 [Archive](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/39972435437/attempts/2) 均实际上传两份 dSYM，`--wait` 返回 `File processing complete` 与两个 `OK`；[项目 Debug Files 页面](https://ratatoskr.sentry.io/settings/projects/ahutong-ios/debug-symbols/) 已确认四份符号均包含 `symtab`、`debug` 和 `unwind`。IPA 的 App / Widget Debug ID 为 `bd51da6b-9870-3854-93b3-cb2c22521c69` / `b6acaaaa-0a3c-3547-8028-083e48194663`，Archive 为 `8c0ea3a4-2e60-31e8-b5c8-57952eb37486` / `021f6b57-e5a7-35c3-bead-6b32ace5f009`。两种构建的符号分别匹配各自产物，不互相替代；后续构建会自动上传本次符号。
 
 参考：[Sentry 数据采集边界](https://docs.sentry.io/platforms/apple/guides/ios/data-management/data-collected/)、[上传调试符号](https://docs.sentry.io/platforms/apple/guides/ios/dsym/)。
