@@ -8,13 +8,13 @@
 | --- | --- |
 | 总体状态 | 当前 iOS 范围为 25 个切片，教学评价已按产品决策整体移除；余下 25 / 25 个切片均有客户端实现，五个支付切片仍待物理 iPhone 授权账号验收 |
 | 当前里程碑 | iOS 登录为官方可见 WebView 首登和前台隐藏 WebView 校园服务认证；隐私 v6 保留 OCR 与学校邮箱说明，新增经过过滤的 Sentry 诊断用途与撤回控制，接受或拒绝隐私后仍可选择只含课表与设置的体验账户 |
-| 当前焦点 | PR #11 已将 Widget/课表/校园码修复合入 develop `f7a79e0`。本轮新增 Sentry 隐私过滤诊断，项目 ahutong-ios 已实际收件；依据用户安装摘要明确主 App 缺少 App Group 授权，见 E-20261023-02 |
-| 下一步 | Sentry 收件与 IPA/Archive 自动 dSYM 上传均已验证；用户设备需重新签名时同时授权 App/Widget 的同一 App Group，随后复验 iOS 27 Widget；不将模拟器或未签名 IPA 当作权限修复 |
+| 当前焦点 | 小工具按用户参考图改为四分类标题与双列浅底描边卡片，复用轻触觉及按压反馈，见 E-20261026-03；16 个入口保留。必吃榜真实公开查询已通过，真实考勤与实机续期待验。用户确认当日下午 OCR 失败与 OpenAHU 短时故障有关，Vision OCR 由另一 agent 探索 |
+| 下一步 | 保持 Actions 暂停；完成紧凑工具页和新业务验收后，优先规划自定义课程/校园公告及 APNs 服务端边界。现有正式标识的真机签名、Sideloadly 安装及 Widget 共同 App Group 授权仍待实机，不创建独立标识或更改生产 Bundle ID |
 | 客户端实现覆盖 | 历史固定范围 25 / 25；本轮新增的培养方案、账单/统计独立列示，不将历史分母当作最新 Android 全量覆盖率 |
-| Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `595e63c` 的新增业务差距见 §9.1，本分支已补培养方案与只读账单/基础统计 |
-| 严格完成定义 | 14 / 25（56.0%）；原摘要 16 与矩阵实际 15 不一致，本轮校准并将用户报告不可用的 SYS-01 重新置为待真机验证；不以本轮 Mock 或未签名包增加严格完成数 |
-| 当前维护 | `codex/ios-sentry-widget-diagnostics`；基于 develop `f7a79e0`。保持 1.0.4（6）版本和 AIO gitlink；SDK 固定版本、符号上传和授权状态见 docs/operations/sentry.md |
-| 最近更新 | 2026-10-23 |
+| Android 生产行为对齐 | 历史固定基线、既定 iOS 范围为 25 / 25；不代表当前 Android master 全量对齐。最新 `680abc29`（3.4.7-beta1）的源码审计见 §9.2；历史差距见 §9.1，本分支已补培养方案、只读账单/基础统计、教务考勤与只读必吃榜；考勤真实账号待验，必吃榜公开查询已验 |
+| 严格完成定义 | 12 / 25（48.0%）；按当前主矩阵“已完成”逐行统计，修正此前摘要 14 与矩阵 13 不一致；本轮 OPS-01 因安装回归重开为待验证，SYS-01 仍待真机验证 |
+| 当前维护 | `codex/ios-sentry-widget-diagnostics`；基于 develop `f7a79e0`。最新 1.0.5（11）已在测试 iPhone 覆盖安装并正常启动，保留四分类 UI 与服务器 OCR；用户决定 Widget 共享授权留到下一版，见 E-20261027-02。AIO gitlink 不变；符号与授权状态见 docs/operations/sentry.md |
+| 最近更新 | 2026-10-27 |
 
 ## 1. 目标与边界
 
@@ -30,7 +30,7 @@
 - 四个主入口：主页、课表、小工具、设置。
 - 课表、成绩、考试、空闲教室、校历和电话本；本科培养方案完成情况。
 - 校园卡余额与付款码、只读账单及消费统计、校园卡充值、招商银行充值、浴室缴费、电控缴费和网费充值。
-- 天气、失物招领、学习资料浏览/Markdown 阅读/下载管理。
+- 天气、失物招领、学习资料浏览/Markdown 阅读/下载管理；教务考勤和只读必吃榜。
 - 首页自定义、课表桌面组件、课程提醒与可选 Live Activity。
 - 测试、CI、辅助功能、隐私、安全与 App Store 发布准备。
 
@@ -47,10 +47,10 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 ### 1.4 UI 完全一致硬约束
 
 1. 固定基线表中的 Android commit 及其 Compose 实际渲染结果是唯一视觉真源；不得以“更符合 iOS”“更简洁”或个人审美为由重新设计。
-2. 页面信息架构、组件类型、内容顺序、中文文案、图标语义、颜色、字号/字重、圆角、阴影、间距、留白、对齐、卡片尺寸、列表密度、底栏和顶部栏必须与 Android 保持一致；第 8～11 条记录的用户显式覆盖除外。
+2. 页面信息架构、组件类型、内容顺序、中文文案、图标语义、颜色、字号/字重、圆角、阴影、间距、留白、对齐、卡片尺寸、列表密度、底栏和顶部栏必须与 Android 保持一致；第 8～16 条记录的用户显式覆盖除外。
 3. 正常、加载、空数据、错误、弹窗、菜单、搜索、展开/收起、刷新和权限降级等可见状态都必须逐一对齐；不能只对齐首屏静态状态。
 4. iOS 只允许保留系统强制差异：安全区、Home Indicator、系统权限弹窗、系统返回手势、拨号/分享/Quick Look 等系统控制器。差异必须限制在系统边界内，并记录在平台差异表中。
-5. SwiftUI 可以使用等价实现，但不得用默认 `List`、`Form` 或系统导航样式替代 Android 已明确设计的自定义外观；需要时应以自定义组件复现 Compose 布局。四入口底栏按第 8 条使用系统 `TabView`，设置表单与课表弹层按第 11 条优先使用系统组件。
+5. 在未被用户原生 UI 要求覆盖的页面，SwiftUI 使用等价实现对齐 Android 外观；需要时应以自定义组件复现 Compose 布局。四入口底栏按第 8 条使用系统 `TabView`，设置表单与课表弹层按第 11 条优先使用系统组件；小工具列表、搜索和引导按第 16 条使用原生组件。
 6. 每个页面完成前必须保存同一设备尺寸、同一数据状态的 Android 与 iOS 截图，检查关键几何尺寸与颜色；主要页面必须有 UI 测试覆盖可见文案、入口和交互状态。
 7. 本约束追溯适用于此前已标记完成的 APP-01、AUTH-01、INFO-01、INFO-02、INFO-03、CONTENT-03；这些切片在 UI 复验通过前统一回到“实现中”。
 8. 2026-07-16 用户进一步明确四入口必须使用 iOS 原生底部导航，而非仅在自绘容器上调用 Liquid Glass API。根容器必须使用系统 `TabView`/`UITabBar`，iOS 26+ 的 Liquid Glass、折射、触控、辅助功能和后续系统演进全部交给系统；禁止自绘 `HStack + Button` 冒充原生 Tab Bar。Liquid Glass 默认启用，设置页不得提供开关、关闭路径或单独说明入口。入口顺序、图标、中文文案和选中语义仍与 Android 一致。
@@ -63,10 +63,14 @@ iOS 对应能力分别使用 App Store/TestFlight、UserNotifications/Background
 14. 2026-10-22 用户要求极光蓝替代默认紫，原紫命名为“鸢尾紫”；总览中的非本周课程使用灰色且与当周卡片圆角一致。校园邮箱尽量使用系统 List / Form / Menu / Toolbar，官方邮箱页仅作为富文本及复杂附件回退。点击小工具和设置均回到根页，包含外部跳转后的切换。
 15. 2026-10-22 用户要求课表设置新增默认关闭的“每周开始于周日”，开启后按周日—周六连续日期展示，课程实际日期保持不变。总览非本周卡片进一步使用浅中性灰底与自适应灰色文字。
 
+16. 2026-10-26 用户要求小工具页更多原生体验并保持代码简洁，后否定系统 List 并提供 Android 参考图。最终采用缴费充值、学业教务、校园生活、学习工具四分类标题与双列浅底描边卡片；系统 searchable、NavigationLink、Toolbar、TabView 和 Widget Form 保留。卡片整面可点，复用轻触觉、高亮及短缩放；减弱动态效果时禁用缩放。优先保留分类及正常字号，允许滚动；所有已有工具继续可达，首页已固定的工具仍显示。Swift 单元测试上限 500，UI/Python/Rust 不计入；按风险选择独立用例并删除有依据的冗余或过期测试，不合并场景或跳过规避。
+
 ## 2. 固定基线
 
 | 仓库 | 基线 | 说明 |
 | --- | --- | --- |
+| Android 2026-10-26 最新源码审计 | `680abc29e2df7da0c2c650e2f88c8355327bc01d` | master/develop 同尖端，3.4.7-beta1；只读源码审计，不代表 Android 运行验收；详见 §9.2 |
+| iOS 2026-10-26 上游 | main `9e8478a` / develop `f7a79e0` | 仅 fetch 和读取；当前开发仍在既有维护分支，不推送/合并、不触发 Actions |
 | iOS 本轮原生 UI / 校园码基线 | `7897a54e92a929814d9a74776eab8d423604a842` | 官方 main；1.0.2 集成后起点 |
 | Android 2026-10-22 邮箱参考 | `b6961a3aee85da67cfc5300dd8ed829da2a123a2` | 官方 master（3.4.5），仅只读对照；邮箱协议/会话的主体与既有 `595e63c` 一致，另核对下载取消与 ViewModel 后台调度修复 |
 | iOS 2026-10-22 维护基线 | `6b843b7e7db66087304ae9186a9e9cb3b1adb8c1` | 最新 main，PR #7–#9 已合入；本轮不改 AIO gitlink |
@@ -283,12 +287,12 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 
 | ID | 功能切片 | Android 参考 | iOS 目标 | 优先级 / 依赖 | 状态 | 核心验收 | 验证 / Commit | 更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏；冷启动本地会话就绪即进入首页，网络校验不阻塞开屏；最终 UI smoke 见 E-20261014-01。 | 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 原生四标签、顺序/选中语义及无玻璃偏好入口复核见 `E-20261019-02`；本轮以 Android 实际路径修正四图标、App 图标开屏及默认动态效果，见 `E-20261019-03` | 2026-10-19 |
+| APP-01 | App Shell、四入口与统一状态 | `ui/screen/Main.kt`、`BottomNavBar.kt` | `App/`、`Core/DesignSystem/` | P1 | 已完成 | 主页/课表/小工具/设置顺序、图标、文案、选中态、Android 色板/卡片/标题/搜索组件和统一页面背景保持不变；按用户显式覆盖，底栏由系统 `TabView`/`UITabBar` 承载，iOS 26+ 自动采用系统 Liquid Glass；每个入口保留独立导航栈，详情页由系统隐藏底栏；冷启动本地会话就绪即进入首页，网络校验不阻塞开屏；最终 UI smoke 见 E-20261014-01。  2026-10-26 用户提供参考图后，小工具采用四分类标题与双列浅底描边卡片、共享按压反馈、系统搜索和原生导航，保留 16 个工具与返回语义，Widget 引导使用 Form/sheet，见 E-20261026-03。| 原双端对照见 `E-20260714-01`；系统 Tab Bar 类型、四标签、隐藏/恢复和双返回手势最终回归见 `E-20260716-01`；Commits `0a8f855`、`4bb2bab`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 原生四标签、顺序/选中语义及无玻璃偏好入口复核见 `E-20261019-02`；本轮以 Android 实际路径修正四图标、App 图标开屏及默认动态效果，见 `E-20261019-03`  原生工具页与测试清理见 E-20261026-01。| 2026-10-26 |
 | AUTH-01 | 启动、三份协议与首登流程 | `ui/screen/Splash.kt`、`ui/screen/setup/*` | `Features/Onboarding/` | P1 / APP-01 | 已完成 | Android 对话框几何、内容滚动区、按钮和三页标题顺序已对齐；同意状态持久化，拒绝与再次查看路径明确 | `AgreementConsentStoreTests` 3 项通过；双端首启三弹窗证据见 `E-20260714-01`；Android 非活动旧弹窗残影不复制，见第 9 节；Commits `430bd45`、`d15a207`、`6561f25` | 2026-07-14 |
-| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待真机验证 | 隐私 v4 同意后以官方可见 WebView 首登，也可点“暂不登录”进入体验账户并跨启动保持；账密/Cookie 只入 ThisDeviceOnly Keychain；教务过期时前台隐藏 WebView single-flight 续期。ADWMH 首次与后续均在前台隐藏 WebView 建立校方会话，即使没有历史 Cookie 也以同域原生 GET 获取验证码并接收新会话 Cookie，只将图片发往 `https://openahu.org/ocr/captcha` 识别并用同一 `/user/login` 续期，失败提示重试，不打开第二登录页。Keychain 会话快照统一使用 SDK 的扁平 Cookie 列表，仅在识别为原生 NDJSON 且转换非空时迁移旧 Cookie 存档，离线缓存不被空数组覆盖；写请求不重放；隐藏续期失败暂显示脱敏阶段 Toast；本地 Cookie 初始化后先开放缓存身份，再完成网络校验；退出、重新登录和体验切换使旧校验失效，避免异步恢复旧身份；临时隐藏续期失败及重复过期不再清理凭据，首次校验和业务读取保存轮换 Cookie，换账号隔离旧 Cookie | `CampusCardLoginClientTests` 覆盖登录字段与失败响应，`CampusSessionStoreTests` 新增旧快照迁移；373 个单元测试已通过，旧快照离线保护见 `E-20260924-01`；最终 macOS CI `35901490865` 全绿，取图修复与 OCR 诊断见 `E-20260924-02`、`E-20260924-03`；隐私 v4 与首次校园服务隐藏登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机仍待验证；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
+| AUTH-02 | 登录、会话恢复、过期重登与退出 | `Login.kt`、`LoginViewModel.kt`、`AutoLoginInterceptor.kt`、`TokenAuthenticator.kt`、`sdk/*` | `Core/Auth/`、`Core/CampusCore/`、`Core/Networking/`、`Features/Login/` | P2 / D-003、D-004 | 待真机验证 | 隐私 v4 同意后以官方可见 WebView 首登，也可点“暂不登录”进入体验账户并跨启动保持；账密/Cookie 只入 ThisDeviceOnly Keychain；教务过期时前台隐藏 WebView single-flight 续期。ADWMH 首次与后续均在前台隐藏 WebView 建立校方会话，即使没有历史 Cookie 也以同域原生 GET 获取验证码并接收新会话 Cookie，只将图片发往 `https://openahu.org/ocr/captcha` 识别并用同一 `/user/login` 续期，失败提示重试，不打开第二登录页。Keychain 会话快照统一使用 SDK 的扁平 Cookie 列表，仅在识别为原生 NDJSON 且转换非空时迁移旧 Cookie 存档，离线缓存不被空数组覆盖；写请求不重放；隐藏续期失败暂显示脱敏阶段 Toast；本地 Cookie 初始化后先开放缓存身份，再完成网络校验；退出、重新登录和体验切换使旧校验失效，避免异步恢复旧身份；临时隐藏续期失败及重复过期不再清理凭据，首次校验和业务读取保存轮换 Cookie，换账号隔离旧 Cookie  2026-10-26：OCR 无效结果/校方验证码拒绝最多 5 次新图挑战，10012 立即停止，校园卡总预算 90 秒；不清理教务凭据，仍待实机复验。| `CampusCardLoginClientTests` 覆盖登录字段与失败响应，`CampusSessionStoreTests` 新增旧快照迁移；373 个单元测试已通过，旧快照离线保护见 `E-20260924-01`；最终 macOS CI `35901490865` 全绿，取图修复与 OCR 诊断见 `E-20260924-02`、`E-20260924-03`；隐私 v4 与首次校园服务隐藏登录见 `E-20260924-05`（CI `35959882196` 全绿）；授权账号真机仍待验证；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；2026-10-19 本轮维护与待验边界见 `E-20261019-01`  E-20261026-02。| 2026-10-26 |
 | SCH-01 | Course 模型、周次解析、API 与离线缓存 | `data/model/Course.java`、`CurrentWeekResolver.kt`、`SdkDataSource.kt`、`AHUCache.kt` | `Core/Models/`、`Features/Schedule/Data/` | P2 / AUTH-02 | 待验证 | 真实账户保留 cache-first/refresh/stale-cache，并同步不含学号的体验课表副本；体验账户绝不请求 CampusCoreAPI，可导入最大 1 MB/500 门课程的 v1 JSON，只接受当前/下学期并原子覆盖；Widget 继续读取本地快照；只解析明确的教学周字段，拒绝学期 ID/布尔值/无效数字；按账号和学期保存周数与日期锚点，离线按周一推进。 | `ExperienceScheduleStoreTests`、拒绝隐私 UI 路径与原课表回归待 macOS CI；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
 | SCH-02 | 课表 UI、课程详情与设置 | `main/Schedule.kt`、`ScheduleViewModel.kt`、`main/schedule/*` | `Features/Schedule/` | P2 / SCH-01 | 已完成 | 切换 Tab 保留所选周、20 周左右分页、真实日期、单双周、重叠课程、总览、下学期、课程详情和全状态完整；新增 Android 3.2.0 同款地点缩写、周次范围及总览可读文本；日期使用同一校园日历和周数锚点；教务周次仍按周一推进；用户可开启周日开始的连续日期周视图，周日取对应实际日期的课程，学期末周日保留；总览非本周使用浅灰底和统一圆角，回到前台自动推进日期；未知周数/下学期起始日期显示占位而不伪造日期；旧请求不覆盖下学期预览。 | 原功能证据见 `E-20260714-01`、`E-20260717-04`、`E-20260717-06`；`ScheduleTextFormatter` 与全量回归见 `E-20260726-01`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01`；本轮周日视图与浅灰总览见 `E-20261022-02` | 2026-10-22 |
-| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、编辑工具库、已放工具过滤和账号隔离持久化完整；紧凑天气点击只进入天气，不与课程入口冲突；首页复用账号隔离的教学周缓存，网络失败不回退为第 1 周；当前周未知时不将第 1 周课程误作今日课程。 | `HomeWidgetLayoutTests`、确定性紧凑天气 UI 专项及既有双端证据全部通过，见 `E-20260726-01`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
+| HOME-01 | 首页概览与 8 槽位自定义 | `main/Home.kt`、`main/home/*`、`DiscoveryViewModel.kt`、`data/gray/*` | `Features/Home/` | P2 / APP-01、SCH-01 | 已完成 | 今日课程时间线、天气详细/紧凑模式、8 槽位去重/增删/换位、首页编辑工具库的已放工具过滤和账号隔离持久化完整；小工具列表保留全部已有工具；紧凑天气点击只进入天气，不与课程入口冲突；首页复用账号隔离的教学周缓存，网络失败不回退为第 1 周；当前周未知时不将第 1 周课程误作今日课程。 | `HomeWidgetLayoutTests`、确定性紧凑天气 UI 专项及既有双端证据全部通过，见 `E-20260726-01`；2026-10-14 本机 401 单测 + 2 UI 回归通过，见 `E-20261014-01` | 2026-10-14 |
 | ACA-01 | 成绩、多学籍、GPA 与专业排名 | `main/Grade.kt`、`GradeViewModel.kt`、`data/model/Grade*` | `Features/Grades/` | P3 / AUTH-02 | 已完成 | SDK 成绩/学籍/排名、筛选/搜索与账号隔离缓存完整；教务系统返回受限的 `gradeDetail` 时只展示清理 HTML 后的服务端文本，不再跳转教评；单学籍失败不遮蔽其他学籍；缓存刷新失败新增明确提示，本轮已在授权账号模拟器完成刷新与真实内容检查，物理机回归保留 | gradeDetail-only 解析、HTML 清理、单学籍隔离和 Demo 学期回归保留；教评跳转于 2026-09-22 移除；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 | ACA-02 | 考试查询 | `main/Exam.kt`、`ExamViewModel.kt`、`data/model/Exam.java` | `Features/Exams/` | P3 / AUTH-02 | 已完成 | 固定 SDK `/exam`、刷新、搜索、进行中/未开始/已结束、时间、考场、座号和全状态均已实现；按 Android 3.2.0 折叠已结束考试、缩短地点并重做详情卡与加载/空状态；缓存刷新失败新增明确提示，本轮已在授权账号模拟器完成刷新与真实内容检查，物理机回归保留 | 原解析修复见 `E-20260717-05`；新增显示状态与全状态 UI 复验见 `E-20260726-01`；2026-10-19 本轮维护与待验边界见 `E-20261019-01` | 2026-10-19 |
 | ACA-03 | 空闲教室 | `main/FreeClassroom*.kt`、`FreeClassroomViewModel.kt` | `Features/FreeClassroom/` | P3 / AUTH-02 | 已完成 | 真实楼栋 GET 与空闲列表 POST 契约、校区/楼栋多选、节次、日期范围、查询结果和加载/空/错状态完整；页面标题、紫色查询按钮、12 间确定性结果和卡片密度与 Android 对齐 | `FreeClassroomTests` 4 项及双端正常/加载/空/错误截图在 `E-20260715-01` 通过；Commits `d8516f2`、`1c0f950` | 2026-07-15 |
@@ -297,7 +301,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | PAY-01 | 校园卡充值 | `main/CardBalanceDeposit.kt`、`CardBalanceDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 真实加载卡账户；银行卡按 Android `CardBalanceRequest`、`CardPayRequest` 和 ViewModel 的字段/签名规则建单、解析 `orderid`、最终提交并刷新余额。支付宝保留固定白名单小程序路径，不向剪贴板复制身份或支付信息。学校官方页面兜底已删除 | `PaymentReadOnlyDataSourceTests`、`PaymentTests`、`YCardProductionPaymentGatewayTests` 覆盖请求、固定签名向量、成功/拒绝/未知、恢复和去重；macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权银行卡小额真机验收 | 2026-08-01 |
 | PAY-02 | 浴室缴费 | `main/BathroomDeposit.kt`、`BathroomDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 支持 `feeitemid=409/430` 的账户查询与 `paystep=0` 建单；解析 `orderid` 后按 Android 当前协议执行安全键盘映射，再以 `paystep=2` 提交并刷新所选浴室余额。六位原始密码只短暂位于内存并在提交/退出后清空 | URLProtocol 测试分别覆盖 409/430 完整流程、字段白名单、映射、成功与刷新；共享状态机覆盖拒绝、超时、未知、恢复和重复点击。macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权浴室账户小额真机验收 | 2026-08-01 |
 | PAY-03 | 电控缴费 | `main/ElectricityDeposit.kt`、`ElectricityDepositViewModel.kt` | `Features/Payments/` | P5 / CARD-01、D-005 | 待真机验收 | 保持 `feeitemid=488` level 0→4 级联和余额查询；按 Android 兼容签名建单，每个订单单独获取动态安全键盘材料，映射后签名提交并刷新当前房间余额。拒绝或未知结果不伪造余额刷新 | URLProtocol/固定向量测试覆盖签名、每订单动态材料、最终提交、成功刷新、拒绝、超时、未知、跨启动恢复和去重；macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权房间小额真机验收 | 2026-08-01 |
-| PAY-04 | 招商银行校园卡充值 | `main/CmbCardRecharge.kt`、`YcardApi.kt`、`PreferencesManager.kt` | `Features/Payments/CMBRechargeView.swift` | P5 / CARD-01、AUTH-02 | 待验证 | 生产功能继续以 non-persistent WebView 承载真实校方页面，内存 Cookie 和内部导航严格限制到 `ycard.ahu.edu.cn`、`epay92.ahu.edu.cn`，招商银行外跳仅允许固定目标且不得携带校园凭据。隐藏验收模式改为原生 HEAD 链：不创建 WebView、不执行 JavaScript、不加载资源、不发送请求体、不自动跟随跳转；逐跳验证精确 HTTPS 主机、入口契约及扣款前路径，失败保持粘性并安全关闭 | `PaymentAcceptanceTests`、`NewPaymentFeatureTests`、隐藏 Debug UI 专项及实时官方入口探测全部通过，最终证据见 `E-20260801-01`。Simulator/Demo 只证明状态机，仍须授权账号和物理 iPhone 证据 | 2026-08-01 |
+| PAY-04 | 招商银行校园卡充值 | `main/CmbCardRecharge.kt`、`YcardApi.kt`、`PreferencesManager.kt` | `Features/Payments/CMBRechargeView.swift` | P5 / CARD-01、AUTH-02 | 待验证 | 生产校方 WebView、临时 Cookie、精确学校域和受控银行外跳保留；2026-10-26 删除 Debug 入口已不存在后不可达的 HEAD 验收分支，不保留历史报告 UI。 | 生产 URL/凭据隔离回归保留于 CMBRechargeSecurityTests；旧 HEAD 历史证据不作为当前能力，见 E-20261026-01。物理 iPhone 的网页交互/银行授权仍待验证 | 2026-10-26 |
 | PAY-05 | 网费充值 | `main/NetworkRecharge.kt`、`NetworkRechargeViewModel.kt`、`YcardApi.kt` | `Features/Payments/NetworkRechargeView.swift` | P5 / AUTH-02、D-005 | 待真机验收 | 保持真实账户、套餐统计、快捷金额、服务端限额、Bearer/Cookie/Referer 与内存响应 Cookie；生产流程完成入口预热、账户查询、兼容签名建单、每订单动态安全键盘映射、最终提交和账户刷新，不再跳转学校官方页面 | `NewPaymentFeatureTests`、`YCardProductionPaymentGatewayTests` 覆盖预热/查询顺序、字段、签名、双订单动态材料隔离、成功刷新、拒绝、未知、跨启动恢复和去重；macOS CI/IPA/Archive 见 `E-20260801-02`，仅剩授权网费账户小额真机验收 | 2026-08-01 |
 | INFO-01 | 校历 | `main/SchoolCalendar.kt`、`sdk/RustSDK.kt` | `Features/SchoolCalendar/` | P4 | 已完成 | 下载、缓存、缩放、PhotoKit 保存照片及权限降级完整；黑色全屏、校历居中、右下保存/退出与加载/错误态按 Android 重做 | `SchoolCalendarRepositoryTests` 5 项覆盖缓存、回退、损坏恢复与照片保存 adapter；校历 UI 见 `E-20260714-01`，最终 device/权限文案编译见 `E-20260715-04` | 2026-07-15 |
 | INFO-02 | 电话本 | `main/PhoneBook.kt`、`TelDirectoryViewModel.kt`、`data/model/Tel.kt` | `Features/PhoneBook/` | P4 | 已完成 | 9 类 57 个本地条目与号码保留；2026-10-20 按用户要求采用原生 List、分类 Picker、searchable 和 confirmationDialog，移除自绘撑满屏幕的校区弹窗；号码按行显示并包含区号，不申请通讯录权限 | `PhoneBookTests` 与原生交互回归见 E-20261020-02；历史条目来源见 E-20260726-01 | 2026-10-20 |
@@ -309,7 +313,7 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | SYS-01 | WidgetKit 课表组件 | `appwidget/ScheduleAppWidget.kt`、`WidgetUpdateScheduler.kt` | Widget Extension | P6 / SCH-01 | 待真机验证 | App Group 原子快照与三尺寸课表；修复仅有起止周课程被空周次过滤、缓存发布等待网络周次、测试快照覆盖真实共享目录；指引显示同步状态/数量并提供课表同步入口，保留双方唯一共同授权组适配 | 历史签名检查见 E-20261020-01；本轮契约/UI 与实机边界见 E-20261023-01，用户安装已确认缺少 App Group 授权；v2 的精确分类与团队 unknown 修复见 E-20261023-02，重新签名后的 iOS 27 显示待复验 | 2026-10-23 |
 | SYS-02 | 课程提醒与可选 Live Activity | `notification/CourseReminder*`、`CourseLiveUpdateHelper.kt` | `Core/Notifications/`、ActivityKit Extension | P6 / SCH-01 | 已实现，部署边界待验 | UserNotifications 授权、提前 10 分钟、未来三周过滤、前台/时区变化维护；可选岛卡仅课前显示，上课即结束，课中/下课不创建，独立偏好、同课复用、当天、课前 10 分钟边界和圆角安全留白；后台预算不足时提前结束。当前没有 APNs，强制终止后的准点清理不作保证 | 既有提醒证据见 `E-20260715-04`；最新前台系统结束状态、后台截止消失、独立偏好与部署边界见 `E-20261019-06`；Widget device 编译、IPA 扩展检查及物理机验收分别记录；本轮 10 分钟边界、圆角布局及原生计时回归见 E-20261020-02 | 2026-10-20 |
 | SYS-03 | Siri 与快捷指令（iOS 独立增强） | 不适用 | `Core/Shortcuts/`、`Core/Models/TeachingWeekParser.swift`、首页/课表快照与付款码路由 | P6 / AUTH-02、SCH-01、CARD-01 | 已实现，本地验证通过，真机待验 | 提供打开付款码和带日期参数的文字课表查询；冷/热启动与二级页面返回；体验账户拦截付款码；无课/无数据/学期越界分别返回；账号隔离、本机查询、Asia/Shanghai 日期、可靠周次锚点和中文短语资源 | `ScheduleShortcutTests` 18 项；Xcode 27.0 / iOS 26.5 专用模拟器 406 单测和 3 专项 UI 全绿，既有主界面 UI smoke 通过；iphoneos Release 和中文动作/短语元数据检查通过，见 `E-20261019-05`；物理 iPhone 侧载发现、Siri 识别/身份验证与真实付款码保留为验收边界 | 2026-10-19 |
-| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 已完成 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建，导航组单测及五组 UI 复用同一产物、五台独立模拟器并分别保存结果；分组校验保证 UI 无遗漏或重复（E-20261020-04）；iOS Debug 页面和隐藏入口已删除，生产支付保护仍由应用级禁写、域名阻断和 URLProtocol/Mock 覆盖；隐私 v6 下的 Sentry 崩溃/故障分类及自动 dSYM 上传已验证 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI 分组耗时见 `E-20261020-04` 和 `docs/ci.md`；Sentry 收件/过滤见 E-20261023-02，令牌授权、实际符号上传与过时审计清理见 E-20261024-01 | 2026-10-24 |
+| OPS-01 | 灰度、诊断、隐私、CI 与发布 | `data/gray/*`、`settings/Debug.kt`、`.github/workflows/ci.yaml` | `Core/Operations/`、`.github/workflows/` | P0→P7 | 待验证 | 灰度与账号摘要、脱敏日志、隐私清单、敏感扫描、Release Archive、未签名 IPA 保留；CI 一次构建及五组 UI 复用保持；Debug 页面和隐藏入口已删除，支付禁写保护保持；本地修复内嵌框架签名，Release 关闭覆盖率并裁剪发布符号，新增产物门禁；Sentry 移除校园码最终失败及旧队列，当前没有日活统计；1.0.4 (8) 通用 IPA 已在本地打包，物理设备安装与共享组验证待完成 | 既有证据见 `E-20260801-01`、`E-20260801-02`；CI 分组耗时见 `E-20261020-04`；Sentry 收件/过滤见 E-20261023-02，实际符号上传见 E-20261024-01；签名修正见 E-20261025-01，体积/性能及真机边界见 E-20261025-02；原生工具页、测试审计和新包见 E-20261026-01；本轮不触发 Actions | 2026-10-26 |
 
 2026-10-19 1.0.2 对上述矩阵的增量更新（覆盖对应旧界面描述，验证见 E-20261019-06）：
 
@@ -335,8 +339,10 @@ Android 3.2.0 复审收口证据 `E-20260726-01`：产品参考更新为远端 `
 | SYS-03 | iOS 26+ 显式前台执行；补充 Siri 搜索误匹配的简洁引导，保留旧动作标识和认证要求 | 用户实机 iOS 27 手动执行成功，语音被当作网络搜索；不宣称端到端 Siri 语音已修复 |
 | ACADEMIC-NEW-01 | 本科培养方案：教务原始 JS 数据安全解析、档案选择、模块/子模块、课程状态、未完成筛选、学分汇总与账号隔离缓存 | 真实登录模拟器查询成功；不含研究生 GMIS，不缓存原始 HTML/student 身份资料 |
 | CARD-NEW-02 | 校园卡账单分页/类型/月及全部时间筛选/金额过滤/详情；完整范围的消费总额、逐日与商户统计 | 真实查询及统计与服务端收支汇总一致；统计任一页失败不展示部分总额，未迁移 Android 高级餐次/食堂识别 |
-
 | MAIL-NEW-03 | 校园邮箱原生 List / Form / Menu / Toolbar；门户 SSO / WebVPN、独立 Keychain 会话、账号边界、一次只读续期，正文纯文本、附件限额和官方临时 WebView 回退；兼容官方跳转中的页面片段 | 真实复用会话和完整新 SSO 均读到 8 个文件夹、首批 30 封列表，见 E-20261022-02；真实发送/保存/移动/附件未操作，不将只读成功扩展为全部功能验收 |
+
+| ATTENDANCE-NEW-04 | 教务考勤：ADWMH 入口/受控 SSO、内存 JWT、状态筛选、分页/刷新、详情及真实缺勤日期 | 3 项协议/边界单测和 2 项 UI 通过；真实账号记录待验，不请求照片或提交申诉，见 E-20261026-02 |
+| CANTEEN-NEW-05 | 只读必吃榜：周期/校区、窗口/食堂排名、推荐项、样本说明、时段和趋势；5 分钟缓存和迟到请求隔离 | 3 项单测和 3 项 UI 通过；不含足迹/上传/众包，真实公开数据探测见 E-20261026-02 |
 
 ### 8.1 全量复查收口（2026-07-15）
 
@@ -372,7 +378,7 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 | 校园卡支付宝引导 | Android 将本地姓名/学号复制到剪贴板后跳转支付宝校园卡小程序 | iOS 保持同信息与支付方式弹窗，但只打开无账号、金额和凭据参数的固定白名单 URL，不把身份信息写入系统剪贴板；未安装时保留页面并明确提示，回到 App 后必须向服务端对账 |
 | 缴费数字键盘 | Android 使用平台输入法与返回操作 | iOS 数字/电话键盘没有 Return 键；本轮为缴费表单增加系统键盘工具栏“完成”，显式收起键盘，避免确认按钮被遮挡。金额、密码与订单行为不变 |
 | 支付密码与待处理订单 | Android 三类密码支付分别实现，失败/日志/恢复语义不完全一致 | iOS 使用统一状态机；六位密码仅短暂存在于提交调用栈，映射/退出后立即覆写清空。建单前以受文件保护、排除备份的原子磁盘日志保存功能与 `creating`，获得订单号后立即保存 `orderid`/功能/方式/阶段；文件和完整目录链同步失败均闭锁建单。建单结果未知时锁定为 `creationUnknown`，最终请求可能发送后锁定为 `resultUnknown`，只核验同一订单而不重复建单或重提 |
-| PAY-04 扣款前验收 | Android 直接在 WebView 中执行真实页面与外跳，没有独立的零扣款证明边界 | iOS 生产 WebView 与隐藏验收分离；验收仅用临时原生 HEAD 会话手动检查每一跳的精确主机、Cookie 和扣款前路径，不创建 WebView、不执行脚本、不加载资源、不发送请求体。通过只证明到达扣款前路由，不能替代物理 iPhone 网页交互、银行授权或真实扣款证据 |
+| PAY-04 历史扣款前验收 | Android 生产 WebView | iOS 旧 HEAD 探针已随不可达代码删除；当前只保留生产网页。历史 HEAD 证明不能替代网页交互、银行授权或真实扣款，见 E-20261026-01 |
 | 灰度身份 | Android 支持服务端灰度、本地 SHA-256 分桶和 Debug 覆盖 | iOS 保持相同 SHA-256 分桶向量与服务端开关；Debug 页面及手动覆盖入口已删除。请求前先哈希账号，游客不生成可跨启动跟踪的设备标识，远端失败回退本地结果 |
 | 课表 | 主要功能成熟；当前时间指示线有显式 TODO | 先完成行为对齐；时间线作为独立增强项，不阻塞首个课表切片 |
 | 课程数据格式 | 旧 `Course` 缓存把 weekday/周次/节次保存为字符串，新教务 Activity 使用整数和 `weekIndexes`；空 weekIndexes 的 Activity 会被丢弃 | iOS `Course` 解码同时接受字符串和整数；存在 `weekIndexes` 时以去重排序后的精确周为准，否则兼容旧起止周范围；畸形数据不触发强制转换崩溃 |
@@ -426,6 +432,10 @@ PAY-01、PAY-02、PAY-03、PAY-05 的客户端生产链路已经闭环，不再�
 校园码具体差距已在本轮修复：Android `data/crawler/PaymentQrRequest.kt` 采用学校直连、Rust HTTP 回退、再直连，单通道 12 秒预算；重新打开/强制刷新可以恢复请求，内存缓存 15 秒，后台清空。iOS 增加学校直连并保留 Rust 回退，处理 HTTP 200 的会话失效业务码；取消不启动回退、换账号拒绝旧结果；不缓存或记录真实付款码。学校失败、网络失败仍可能发生，客户端恢复不等于校方服务可用性保证。
 
 问卷 25 人：课程表 22（88%）、校园码 20（80%）、成绩/考试 19（76%）、水电网费及教务通知各 15（60%）、“安大必…”7（28%，全称未取得）、邮箱及其他各 2（8%）。多选结果不能相加当参与人数。“安大必…”不擅自等同学习通。建议先稳定登录/校园码/课表、验证成绩考试，再公告查询与可靠提醒，其后只读账单和电费预警；邮箱排后。公告订阅与用户问卷的教务通知存在关联，但不能宣称范围完全等价。
+
+### 9.2 最新 Android 3.4.7-beta1 源码审计（2026-10-26）
+
+[逐项差距、源码证据与建议顺序](2026-10-26-android-gap-audit.md)。新增确认自定义课程、考勤、详细学籍、通知多来源和食堂众包链路；区分部分已有的邮箱、培养方案、账单、网费与电控。iOS 四个原生标签保持用户确定的结构，不直接迁移 Android 插件、预测和学习通主标签。小工具保留所有已有入口并改为系统列表/搜索/引导，见 E-20261026-01。
 
 ## 10. 安全门槛
 
@@ -760,8 +770,8 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - [x] PAY-01 银行卡客户端签名/建单/最终提交/余额刷新与支付宝小程序路径已实现；学校官方页面兜底已删除。
 - [x] PAY-02 支持 409/430 建单、安全键盘映射、最终提交与余额刷新；PAY-03/PAY-05 支持每订单动态材料、兼容签名、最终提交与余额刷新。
 - [x] 六位密码只短暂位于内存，映射或退出后立即清空；不写日志、不持久化、不进入剪贴板。Demo 状态不得进入生产。
-- [x] PAY-04 隐藏验收已改为原生 HEAD、手动重定向、精确主机/路径、无请求体/无 WebView/无脚本/无资源加载。
-- [x] 通用学校官方页面及无凭据入口探测已删除；隐藏 Debug 只保留独立 PAY-04 招行扣款前 HEAD 验收。
+- [x] 历史 PAY-04 HEAD 验收曾完成；2026-10-26 已删除无可达入口的实现与专用测试，生产 WebView 安全边界保留。
+- [x] 通用学校官方探测和隐藏 Debug 均已删除；不恢复历史验收入口。
 - [x] OPS-01 完成 Android 同算法灰度、Debug 诊断、账号摘要、脱敏日志、隐私清单、数据地图、敏感信息扫描、Release Archive 和 Personal Team 发布手册。
 - [x] GitHub Actions 生成含 Widget 与双隐私清单的未签名 IPA/Archive；仓库和产物不含签名证书、描述文件或 Apple ID。
 - [x] URLProtocol/Mock 自动测试覆盖四条生产请求字段、签名固定向量、安全键盘映射、成功、拒绝、超时、未知状态、恢复和重复点击；自动测试禁止真实扣款。
@@ -863,7 +873,101 @@ python3 scripts/verify-widget-bundle.py build/branding/AHUTong-branding-unsigned
 - 仅使用 iPhone 17 Pro / iOS 26.5 / Xcode 27.0，清理后的全部 545 项单元测试中 544 通过、1 项显式投递默认跳过，设备 Release 构建通过。原 CI 首轮出现等待失败的校园码展开、体验账户进入课表两项本机均一次通过；日志为 `build/sentry-20261023/ci-wait-regression.log` 与 `privacy-audit-regression.log`。保留原失败和重试证据，不将超时结果写成通过。
 - 源码 `0644586` 的完整 CI run 39972435515 attempt 2 最终成功：五组共 48 条 UI 全部通过，设置/服务两组重跑各 14 项均在该次执行首次通过，没有隐藏的新失败；导航组的 545 单元为 544 通过、1 跳过。后续仅删除上述未使用审计数据、更新实际清单测试与 CI 预算；最终本机单元/设备构建证据使用清理后的源码。
 
+### E-20261025-01：IPA #145 内嵌资源框架签名修正（仅本地）
+
+- 用户截图为系统安装阶段“无法安装此 App，因为无法验证其完整性”，不是 App 启动或 Widget 空白。用户明确要求暂不触发新 Actions；本次没有推送、手动触发或重跑工作流，版本保持 1.0.4（6），AIO gitlink 不变。
+- 直接下载并审计成功工作流 `40071473337` 的原始 `AHUTong-unsigned-ipa-145`：SHA-256 与附件一致，ZIP 完整，App/Widget 结构、权限声明和各自签名均通过；主 App 的 `codesign --verify --deep --strict` 也通过，但单独严格检查 `Frameworks/Sentry.framework` 失败，资源未被完整签署。旧检查器未检查这一层，会错误放行该包。该缺陷与系统错误相符，尚不能仅凭通用弹窗确定它是 Windows 重签后失败的唯一原因。
+- `Sentry-Static` 代码已静态链接到 App，主程序无 Sentry 动态依赖。设备 Release 构建日志确认 Xcode 在复制静态框架资源时生成 iOS `100.0` 占位二进制并带链接器临时签名；本次保留该结构及隐私资源，修复的是遗漏的完整资源签名，不改最低系统版本或移除 SDK。
+- 打包脚本按嵌套深度先签所有 `.framework` / `.dylib`，再签 Widget/App；只有 Widget/App 声明共享组，不添加团队或描述文件。检查器在两种签名检查模式中均逐个严格验证内嵌代码，明确输出失败框架的相对路径，不依赖 `--deep`。
+- Xcode 27.0 / macOS 上的 28 项脚本测试全部通过。新增三项使用真实 arm64 iPhoneOS Mach-O 与 codesign，覆盖“外层有效、内层未封装资源”拒绝、打包后框架与 Widget 内动态库签名/隐私资源/共享声明保留，以及外层重新签署仍不能掩盖内层资源篡改。没有启动其他模拟器或操作真实账号。
+- 原始 #145 现被新检查器明确拒绝；由同一份原始 IPA 在本地重新打包的候选通过 App/Widget/框架逐个严格验证、共享声明、Intents、ZIP 与可执行权限检查。三份隐私清单逐字一致，三份 Mach-O UUID 未改变，原有构建对应的 dSYM 仍匹配。没有重新编译业务代码、创建新 Actions 构建编号或上传新符号。
+- 本地候选位于 `build/deliverables/1.0.4-145-local-signing-fix/AHUTong-1.0.4-6-145-local-signing-fix.ipa`，SHA-256 为 `37fa5a8a17dc467ddbc1396d3a57ed20d7ec5d42580a9e49b2ff4a106ea6d2a3`；检查结果为同目录 `verification.json`，原始产物及旧检查结果保留在 `build/ipa-145-install-audit/`。候选仍需用户开发者账号重签；Windows Sideloadly / iOS 27 安装、最终团队授权与 Widget 显示仍待实机复验，不将本地 ad-hoc 验证写成真机通过。
+
+### E-20261025-02：本地体积、性能与最小诊断候选
+
+- 范围：同一 worktree 和 PR #12 分支，AIO gitlink 不变。用户要求先优化大小/运行速度、打包并用本机向测试 iPhone 安装验收，继续遵守暂不触发 Actions 的约束；本轮没有推送或触发 CI。App/Widget 统一为 1.0.4 (7)。
+- 审计实际 #143/#145 IPA 与对应历史 Archive：#145 IPA 为 9,536,231 bytes，解压 35,471,706 bytes；App/Widget 含 LLVM 覆盖率，App 符号表和字符串约 19.97 MB。原 scheme 测试覆盖率泄漏到普通 Release build，且未执行发布后处理。资源图集仅约 0.79 MB，无额外 UI 运行库、模拟器片或 dSYM 混入；原生 UI 不会自动移除编译插桩或发布符号。
+- Release 开启发布后处理、符号裁剪和 whole-module `-Osize`，显式关闭覆盖率；IPA 工作流改从 Archive 打包，dSYM 来自同一 Archive。Debug 覆盖率保留。新增 `--require-release`，拒绝覆盖率/调试段、本地符号未裁剪及模拟器平台；App/Widget 和内嵌代码分别校验签名。
+- 同源码设备 Archive 的 `-Osize` / `-O` 候选分别约 6.22 / 6.32 MB。指定 iPhone 17 Pro / iOS 26.5 / Xcode 27 上，5 次离线演示测量：84 门课反复解析并生成快照 100 次，均值 0.051577 / 0.051873 秒；响应式首帧 1.110848 / 1.362457 秒。测试构建只为隔离 fixture 显式启用 DEBUG 条件，仍使用 Release 优化、无覆盖率；场景不含真实网络与 Sentry 启动，不能推断所有真机功能或声称统一提速。未见这个负载退化，选择体积优先模式。
+- 最终正式标识 IPA 为 `build/deliverables/1.0.4-7-optimized/AHUTong-1.0.4-7-optimized-resignable.ipa`：6,223,741 bytes（较 #145 −34.7%），解压 13,390,502 bytes，主程序 12,184,000、Widget 309,568 bytes；SHA-256 `e570ab74fc29dbc0d5438b5e456f113fb4b7e910e63c20c03debc1e3f2cae5e8`。只作完整临时签名及共享声明，仍需授权重签才能安装。独立保留匹配 dSYM：App `FBB25FD4-AC78-3FC5-B73F-D573BE959173`，Widget `6DFCDA48-F841-3467-96DE-645C37182F02`；新符号尚未上传 Sentry。
+- 按用户要求彻底移除校园码最终加载失败的业务信号，保留崩溃、共享权限/写入和会话续期诊断；新过滤器丢弃退役/未知分类，删除旧专用离线缓存并启用 v2 目录。关闭自动会话、MetricKit、客户端统计报告等，不设置用户标识；当前无法准确统计日活/留存。账号、凭据、课程、邮件、二维码、任意错误正文和栈变量不进入事件；隐私文案及数据映射同步收窄。
+- 验证：31 项 Python 签名/打包回归通过，49 个 UI 入口恰好分组一次；隔离的 Release 优化构建 548 单测中 547 通过、1 显式联网收件跳过，6 条 UI（协议拒绝、4 条快捷指令、启动测量）全通过。最终无 DEBUG 的普通 Release 也以单元宿主隔离通过同样 548 项（547 通过、1 跳过），见 `final-unit.log` / `final-unit.xcresult`。日志/结果位于 `build/optimized-20261025/`，`comparison-final.json` 记录精确数据，最终 Archive 与 dSYM UUID 一致。首次 CLI 默认 CommandLineTools 不含设备 SDK，改为明确 DEVELOPER_DIR 后脚本测试通过，不将环境失败当作通过。
+- 保留失败证据：首次直接使用旧 Debug xctestrun 只跑了既有用例，新性能方法未执行；改为直接构建测试。随后普通 Release 未启用演示账户，导致两条快捷指令断言失败，并误触该模拟器真实协议/体验状态；已告知用户，真机未受影响。RootView 现仅在隔离存储下接受重置/模拟同意参数，Release 单元宿主也先隔离；显式 DEBUG fixture 的优化构建复验通过。最终无 DEBUG 的设备归档曾出现 Bool getter 缺少 return，修正后 Archive 通过；不隐藏首轮失败。
+- 真机边界：已连接测试 iPhone / iOS 27.2，现有正式 App 为 1.0.4 (6)，尚未卸载、重置或安装修改。Xcode 开发账号与证书有效；最初误将证书个人标识当 Team ID，已更正。实际团队无法注册他人所属的正式 App/Widget 标识，自动签名回退的通配描述文件不授权 App Group；不能用缺少共享组的导出冒充小组件修复。准备独立验收 App/Widget 和共享组时，自动审批审查要求用户明确授权创建 Apple Developer 资源；已提出具体授权问题，安装/实机验收仍待完成。
+- 最新约束：用户随后撤回独立验收资源授权，明确“不允许创建，就一个 id”。独立标识注册命令此前被审批拦下、未执行；没有创建新 App ID/App Group 或并排安装。已删除该方案的五个本地生成配置/测试文件；正式工程仍为 `com.openahu.ahutong`、原有 Widget 扩展 `com.openahu.ahutong.widget` 和原共享组，不更换生产标识。只读复查确认无遗留 xcodebuild 任务，手机现有 App 仍为 1.0.4 (6)。后续只允许使用现有标识的有效签名进行覆盖验收；小组件共享授权未解决，不再等待或重新请求创建独立标识。
+
+### E-20261026-01：最新 Android 源码审计、原生小工具与测试精简
+
+- Android 固定 `680abc29e2df7da0c2c650e2f88c8355327bc01d`（master/develop，3.4.7-beta1）；仅只读对照。差距与优先级见 [审计](2026-10-26-android-gap-audit.md)，新增业务不标为已移植。
+- 小工具改用系统分组 List、searchable、NavigationLink、Toolbar；保留首页已固定的入口及 14 个现有目的地。删除首页布局读取/减法过滤、自绘小组件预览和不可达占位分支；小组件指引用原生 Form、半高/全高 sheet、完成按钮和 ShareLink，保留同步及不含账号/课程内容的安装检查。
+- 删除无调用的原型 APIClient、旧 HEAD 验收分支与报告；生产招行 WebView 及敏感凭据/外跳限制保持。删除 49 个有明细依据的冗余/过期单测，6 个有效招行安全回归移到现有 XCTestCase；修复一项错放在 Stub actor 内、不被发现的续期测试。源码预算 500 / 500；见 [逐项测试审计](2026-10-26-test-audit.md)。CI 添加预算检查，UI 大链路按功能拆分，67 个 UI 方法恰好分片一次。
+- 本机证据均在 `build/tools-native-20261026/`；Xcode 27.0 / 指定 iPhone 17 Pro / iOS 26.5，隔离演示数据、默认减弱动态效果关闭，没有真实充值。`native-smoke.xcresult` 为原生工具搜索、首页固定入口、Widget 引导、电话本及大字体首轮证据；`services-ui.xcresult` 保留旧网格/按钮几何假设的首次失败，复验见 `final-ui.xcresult`。脚本回归 `scripts-xcode.log` 为 31 项全通过，覆盖真实 Mach-O、资源签名、裁剪及模拟器二进制拒绝。
+- 最终 `final-unit.xcresult` 实际发现并执行 500 项 Swift 单测：499 通过、1 项显式 Sentry 收件按设计跳过，0 失败；错放 actor 的续期测试已实际执行通过。`final-ui.xcresult` 30 项全通过，连同此前成功专项共 45 个不重复 UI 方法通过；67 项分片完整性检查通过，不声称本轮运行全部 67 项。
+- Release `final.xcarchive`（无 DEBUG、无覆盖率、-Osize）和 App/Widget 双 dSYM 已在本地生成。IPA `build/deliverables/1.0.4-8-native-tools/AHUTong-1.0.4-8-native-tools-resignable.ipa` 为 **6,180,767 bytes**，解压 **13,308,198 bytes**，SHA-256 `51f18dc6a75729ccfdfcc4dcf19be45e3390e37b2d8484e99e427f2c65be6967`；比 #145 小 35.2%，比 build 7 小 42,974 bytes。打包门禁确认 arm64 iphoneos、Release 裁剪、扩展/版本/共享声明与内嵌代码签名。dSYM 独立保存，未上传。
+- 模拟器预览是同源码构建的 Simulator App；设备 IPA 不能直接在模拟器运行。真机安装和 Widget 共同组授权依旧待验，不以模拟器通过替代；保留正式 App/Widget 标识，未创建资源或卸载 App；后续预览/测试使用隔离存储，此前误用 Release 演示参数影响协议状态及保护修复已记录在 E-20261025-02。按用户要求，没有推送、合并、Actions 触发或 AIO gitlink 更新。AGENTS.md 已记录原生 UI、简洁实现、风险测试、500 Swift 单测、数据隔离与指定模拟器规范。
+
+### E-20261026-02：双列工具页、考勤、必吃榜与验证码续期
+
+- 用户明确否定系统分组 List，改用紧凑双列卡片，目标默认字号一屏呈现 16 个服务。仍使用原生按钮、搜索、导航及 Widget Form；不自绘系统 Tab Bar。具体契约、实现与 APNs 评估见 [本轮记录](2026-10-26-campus-services.md)。
+- 教务考勤从 ADWMH 应用列表和受控 CAS 回调获得内存 JWT，只读分页；状态筛选、详情、实际缺勤日期及一次 401 重取。必吃榜只请求公开聚合，不携带学校身份或上传账单；周期/校区筛选、排行、窗口详情、置信说明及系统图表已实现。暂不包含食堂足迹及众包。
+- 对照 Android `680abc29` 修复 iOS 仅尝试一次 OCR 的差异：最多 5 次新图，仅重试无效验证码结果/校方验证码拒绝；10012、网络及服务异常立即停止；Cookie 随图轮换，校园卡隐藏登录总预算 90 秒。保持凭据和教务会话，不自动重放支付请求。
+- 最终单元验证 `campus-final-unit.xcresult` 实际发现/执行 500 项：499 通过、1 个原有 Sentry 收件 opt-in 跳过、0 失败；`-Osize` 编译与新推荐项无 rank 契约也已通过。新增 10、删减 10 的逐项依据见测试审计，不将固定文案断言都称作“过期”。UI 方法当前 73 项恰好分片一次。
+- 教务考勤真实账号、实机偶发 OCR 与过期恢复仍待复验。必吃榜初期命令行 IPv4/TLS 失败后继续排查，Apple URLSession 和 IPv6 成功；同一客户端/模型在 iPhone 17 Pro 模拟器运行时实际获取 week/all 50 条与 month/longhe 34 条，食堂/时段/推荐项均解码通过，见 `canteen-live-simulator.log`。保持 HTTPS 校验，UI 截图为演示数据。
+- 相关 UI 共 20 个不重复方法通过：初轮 20 项保留 3 个原生辅助功能/几何旧假设失败，修正后的 6 项专项全通过；最终隐私说明另以 7 项同意状态单测和 1 项首启 UI 通过，合计 21 个不重复 UI 场景。73 项分片完整性验证通过，不冒称全部运行。脚本 31 项通过。
+- 考勤课程标题使用明确的系统主文字色，日期/地点保留次要色，避免标题继承整行灰色；`contrast-ui.xcresult` 的考勤筛选/详情复验通过，最终颜色在同源码模拟器构建现场查看。最终 Release 为 `primary-color-final.xcarchive`，打包门禁日志 `primary-color-package.log`；不为颜色添加静态镜像测试。
+- 当前没有 APNs；已记录公开公告订阅服务端、device token、通知授权及现有 App ID 推送能力的后续方案，未创建新资源。Actions 暂停，不推送或合并，不更改 AIO gitlink。
+
+- 最终本地候选为 1.0.4 (9)：`build/deliverables/1.0.4-9-campus-services-final/AHUTong-1.0.4-9-resignable.ipa`，6,285,901 bytes，解压 13,526,182 bytes；比 #145 小 34.08%，比此前 build 8 增加 105,134 bytes（新增两个业务及续期修正）。SHA-256 `af261316b375a16582841ad3bca36899e7aa7b2a5b2cb5000b61d82ab9727d61`。Release/arm64/扩展/版本/内嵌签名门禁通过，App/Widget dSYM UUID 一致，独立保存未上传。模拟器是同源码单独构建，设备 IPA 仍需开发者重签，实机安装和共同组授权未验。
+
+### E-20261026-03：按参考图确定分类卡片及短按压反馈
+
+- 按用户提供的 Android 截图保留四个分类标题，16 个真实服务按双列浅底细描边卡片呈现；学业组教务考勤位于组末。保留系统搜索、导航、TabView 及 Widget Form。默认字号首屏可见 15 个服务，学习资料和小组件指引滚动可达；不挤压分类标题或用户字号。
+- 按压反馈从设置域抽到 `Core/DesignSystem/PressFeedbackStyle.swift`，工具、设置及开发者页面共用轻触觉、高亮、透明度和 0.12 秒短缩放。减弱动态效果禁用缩放及动画，非动态反馈保留；详情进出交给系统转场。没有新增动画依赖或定时器。
+- `categories-final-build.log` 构建通过；指定 iPhone 17 Pro / iOS 26.5 的 `categories-ui.xcresult` 实际执行 17 项全部通过，覆盖工具双列与末尾入口、搜索/空结果/返回、5 个新业务场景、电话本及大字号、Widget 引导、设置/开发者共享反馈、真实系统减弱动态效果及外部跳转根导航。测试后减弱动态效果恢复关闭，默认字号和浅色预览恢复。
+- 预览截图 `build/tools-native-20261026/tools-categories-light.png`，短按压/系统转场录屏 `tools-card-motion.mp4`；数据为隔离演示内容。此前“一屏内全部入口可点”的 UI 假设按新设计修正，UI 总数仍 73 且每项分片一次，Swift 单测仍 500；未为布局和颜色新增镜像单测。
+- 用户明确今天下午 OCR 失败与 OpenAHU 服务短时故障有关，随后恢复；按现场反馈记录，不将这次事故归为已证实的 iOS 续期缺陷。Vision OCR 已由用户安排另一 agent 探索，本轮未修改识别器或对方工作区。
+- 此切片只更新源码、文档和模拟器预览，未重新生成设备 IPA；E-20261026-02 的 1.0.4 (9) 仍是先前归档候选。Actions 继续暂停，没有推送、合并、新增签名资源或 AIO gitlink 变更。
+
+### E-20261027-01：服务器 OCR 保留及最新 UI 设备包
+
+- 用户确定暂时使用服务器 OCR。源码只采用 `RemoteCampusCaptchaRecognizer`，`CampusWebAuthentication` / `CampusCardLoginFlow` 默认均为远端实现，App 未接入 Vision。将此约束记入 AGENTS.md；本轮没有改变认证业务代码。
+- App/Widget 版本保持 1.0.4，构建号从 9 同步到 10。使用 E-20261026-03 已验收的分类卡片、共享按压反馈及前一切片的教务考勤、只读必吃榜和有界验证码挑战，补齐此前 UI 只存在模拟器的设备包缺口。
+- `build/candidate-20261027/archive.log` 的纯 Release iphoneos Archive 成功，无 DEBUG、无覆盖率，保持 -Osize 和发布裁剪；`package.log` 确认版本/扩展/Intents/共享声明、发布裁剪、App/Widget/内嵌代码签名均通过。App/Widget dSYM UUID 逐一匹配。功能源码沿用此前 500 项单测（499 通过、1 个显式 Sentry 收件跳过）及分类 UI 17 项通过的证据；本轮仅版本和文档变动，没有重复整套测试。
+- 最终 IPA `build/deliverables/1.0.4-10-native-tools/AHUTong-1.0.4-10-resignable.ipa`，6,289,426 bytes，解压 13,542,792 bytes；直接读取本地原始 #145 的 9,536,231 / 35,471,706 bytes 比较，分别减少 34.05% / 61.82%。SHA-256 `7a4fd8db81ccb918a1cee6eb0076bd4221a724c8a970119495ab72eb3a525ce8`。manifest 与 dSYM ZIP 独立保存在同目录。
+- 本地临时签名仍需开发者重签；物理安装、Sideloadly 最终共享授权和真实账号考勤未验。未创建资源、未改生产标识、未推送/合并/触发 Actions，未上传新 dSYM，AIO gitlink 不变。去除插桩和局部优化不等于已量化相对 #145 的实机整体提速。
+
+### E-20261027-02：1.0.5 真机覆盖安装
+
+- 按用户要求将 App/Widget 同步提升为 1.0.5（11），本地 Release Archive 成功；发布裁剪、扩展/版本/Intents 结构及逐个内嵌代码签名检查通过。业务源码沿用上一切片，无重复整套测试；Swift 单测预算仍为 500/500。
+- 使用现有开发证书和包含测试设备的有效描述文件签名，未创建 App ID 或 App Group。首次安装被系统以旧包 application-identifier 带团队后缀为由拒绝；沿用系统报告的已有签名标识重新签名后，覆盖安装成功。正式 Bundle ID 保持不变，未卸载、清空数据或使用演示参数。
+- `build/candidate-20261027/install-1.0.5-compatible.json` 确认安装成功，`physical-after-1.0.5.json` 确认版本 1.0.5（11）且数据容器可访问；`physical-launch-1.0.5.json` 确认正常启动。登录状态和业务内容仍由后续实机验收确认，不把启动成功记成业务全量通过。
+- 已签名 IPA：`build/deliverables/1.0.5-11-device/AHUTong-1.0.5-11-device-signed.ipa`，6,319,236 bytes，解压 13,631,396 bytes，SHA-256 `75d625ed1698cdb6dd8d739cea760d03f984db117d848f5b0d046038c9012959`。匹配 dSYM 独立保留，未上传。
+- 用户明确先覆盖安装、小组件下版处理。现有 profile 不授权 App Group，本次签名未声明未经授权的共享权限，Widget 扩展仍在，设备返回共享组为空；未通过完整 Widget 共享签名门禁，不宣称小组件已修复。Actions 继续暂停，无推送、合并或 AIO gitlink 改动。
+
+### E-20261027-03：恢复推送与云端 IPA 构建
+
+- 用户随后明确要求将当前改动推送，让 Actions 生成可替代 #145 的最新 IPA，恢复本次推送与构建授权。沿用 PR #12 的维护分支，不改 AIO gitlink，不上传本机证书、描述文件或真机签名 IPA。
+- 推送内容包含 1.0.5（11）、分类小工具、教务考勤/只读必吃榜、服务器 OCR 有界重试、Sentry 收窄与 Release 裁剪。云端采用 Archive，关闭覆盖率并独立保留/上传匹配 dSYM；打包时从内到外签署框架、动态库、Widget 与 App，逐个严格验证，修复 #145 漏检资源框架签名的问题。
+- 推送前：本机 Release Archive 及真机覆盖安装/启动证据见 E-20261027-02；同一 Archive 经云端打包脚本再次产出 re-signable IPA，发布裁剪和权限声明门禁通过。31 项脚本测试全部通过，Swift 单测预算 500/500，73 项 UI 测试恰好分片一次，`git diff --check` 通过；业务单测和 UI 沿用前一切片的实际结果。
+- Actions 产物是供重签的 IPA，保留原共享声明，不含开发者私钥或设备 profile；不能将打包成功等同于任何签名工具都能授予 App Group。实际运行结果、下载地址与校验值以对应提交的 Actions 及 PR 检查记录为准。
+
 ## 14. 变更日志
+
+- 2026-10-27：用户恢复推送及 Actions 授权，准备将当前 1.0.5 完整改动更新至 PR #12，由云端打包流程替代 #145，见 E-20261027-03。
+
+- 2026-10-27：提升为 1.0.5（11），沿用旧包签名标识完成测试 iPhone 覆盖安装及启动，Widget 共享授权按用户安排留到下一版，见 E-20261027-02。
+
+- 2026-10-27：保留服务器 OCR，将最新四分类 UI 归档进本地 1.0.4 (10)；核对原始 #145 对比，IPA 体积减少 34.05%，解压文件总量减少 61.82%，Release/签名门禁与 dSYM 匹配通过，见 E-20261027-01。
+
+- 2026-10-26：按用户参考图确定四分类双列浅底描边工具卡片，复用设置域按压反馈并保留系统转场；17 项相关 UI 全部通过，更新服务故障归因与独立 Vision 探索边界，见 E-20261026-03。
+
+- 2026-10-26：按用户最新要求将 List 替换为 16 入口双列卡片；新增教务考勤、只读必吃榜与验证码有界重取流程，评估公告/APNs 边界。500 项单测通过，真实环境边界保留，见 E-20261026-02。
+
+- 2026-10-26：对照 Android 3.4.7-beta1 最新源码并记录功能差距；小工具改为系统 List/搜索/导航与 Form 引导，清理不可达代码和过时测试，Swift 单测上限仅计单测且固定 500；拆分 UI 大链路，更新 AGENTS.md。生成本地 1.0.4 (8) 候选，Actions 继续暂停，见 E-20261026-01。
+
+- 2026-10-25：本地 1.0.4 (7) Release 裁剪、无覆盖率和体积优先编译，IPA 缩小 34.7%；收窄 Sentry 并清理旧校园码事件队列，补测试参数隔离保护；未触发 Actions。用户取消独立验收标识，保留正式 App 与数据；真机验收待现有标识的有效签名授权，见 E-20261025-02。
+
+- 2026-10-25：修复 #145 内嵌 Sentry 资源框架漏签和验证遗漏；28 项脚本回归及原始产物重打包通过。遵守用户暂不触发 Actions 的约束，保留 Windows 重签/实机安装验收，见 E-20261025-01。
 
 - 2026-10-24：经用户授权配置 Sentry CI Secret，实际验证 IPA/Archive dSYM 上传与服务端处理；同步隐私 v6 数据映射，删除过时的未采集标志和测试，见 E-20261024-01。
 

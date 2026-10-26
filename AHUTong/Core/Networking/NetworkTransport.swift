@@ -19,3 +19,10 @@ struct URLSessionTransport: NetworkTransport {
         return (data, response)
     }
 }
+
+enum NetworkError: Error, Equatable, Sendable {
+    case invalidURL
+    case nonHTTPResponse
+    case unacceptableStatusCode(Int)
+    case decodingFailed
+}

@@ -22,18 +22,18 @@ struct SettingsView: View {
                 NavigationLink {
                     AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
                 } label: { Label("偏好设置", systemImage: "slider.horizontal.3") }
-                .buttonStyle(SettingsPressFeedbackStyle())
+                .buttonStyle(PressFeedbackStyle())
                 .accessibilityIdentifier("settings.preferences")
             }
             Section("关于") {
                 NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
                     Label("开源协议", systemImage: "doc.text")
                 }
-                .buttonStyle(SettingsPressFeedbackStyle())
+                .buttonStyle(PressFeedbackStyle())
                 NavigationLink { ContributorsView().androidDetailScreen() } label: {
                     Label("贡献名单", systemImage: "person.2")
                 }
-                .buttonStyle(SettingsPressFeedbackStyle())
+                .buttonStyle(PressFeedbackStyle())
                 .accessibilityIdentifier("settings.contributors")
                 settingsButton("意见反馈", systemImage: AndroidParitySymbol.feedback) {
                     openURL(AgreementDocument.communityQQGroupURL) { accepted in
@@ -157,7 +157,7 @@ struct SettingsView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(SettingsPressFeedbackStyle())
+            .buttonStyle(PressFeedbackStyle())
             .accessibilityIdentifier("settings.account-login")
         }
         .padding(.vertical, 8)
@@ -167,7 +167,7 @@ struct SettingsView: View {
         Button(action: action) {
             Label(title, systemImage: systemImage).frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(SettingsPressFeedbackStyle())
+        .buttonStyle(PressFeedbackStyle())
     }
 
 }
@@ -189,14 +189,14 @@ private struct ShortcutsGuideView: View {
                             Button("前往系统设置") {
                                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                             }
-                            .buttonStyle(SettingsPressFeedbackStyle())
+                            .buttonStyle(PressFeedbackStyle())
                             .accessibilityIdentifier("shortcuts.siri-settings")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading).padding(20)
                     }
                     ShortcutsLink()
                         .shortcutsLinkStyle(.automaticOutline)
-                        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
+                        .buttonStyle(PressFeedbackStyle(cornerRadius: 16))
                         .accessibilityIdentifier("shortcuts.open")
                     guideCard(
                         "打开付款码", icon: "qrcode",
@@ -239,49 +239,6 @@ private struct ShortcutsGuideView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
         }
-    }
-}
-
-struct SettingsPressFeedbackState: Equatable {
-    let scale: CGFloat
-    let opacity: Double
-    let highlightOpacity: Double
-
-    init(isPressed: Bool, reduceMotion: Bool) {
-        scale = isPressed && !reduceMotion ? 0.985 : 1
-        opacity = isPressed ? 0.78 : 1
-        highlightOpacity = isPressed ? 0.08 : 0
-    }
-}
-
-struct SettingsPressFeedbackStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let cornerRadius: CGFloat
-
-    init(cornerRadius: CGFloat = 12) {
-        self.cornerRadius = cornerRadius
-    }
-
-    func makeBody(configuration: Configuration) -> some View {
-        let state = SettingsPressFeedbackState(
-            isPressed: configuration.isPressed,
-            reduceMotion: reduceMotion
-        )
-        return configuration.label
-            .scaleEffect(state.scale)
-            .opacity(state.opacity)
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(state.highlightOpacity))
-                    .allowsHitTesting(false)
-            }
-            .animation(
-                reduceMotion ? nil : .easeOut(duration: 0.12),
-                value: configuration.isPressed
-            )
-            .sensoryFeedback(.impact(weight: .light, intensity: 0.55), trigger: configuration.isPressed) { oldValue, newValue in
-                !oldValue && newValue
-            }
     }
 }
 
@@ -412,7 +369,7 @@ private struct AndroidPreferencesView: View {
                     identifier: "preferences.privacy-consent"
                 )
                 Button("查看隐私政策", systemImage: "hand.raised") { showsPrivacyConsent = true }
-                    .buttonStyle(SettingsPressFeedbackStyle())
+                    .buttonStyle(PressFeedbackStyle())
                     .accessibilityIdentifier("preferences.privacy-policy")
             }
             .accessibilityElement(children: .contain)
@@ -427,7 +384,7 @@ private struct AndroidPreferencesView: View {
                         Text("语音打开校园码，查询课表").font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
-                .buttonStyle(SettingsPressFeedbackStyle())
+                .buttonStyle(PressFeedbackStyle())
                 .accessibilityIdentifier("preferences.shortcuts")
             }
 
@@ -460,7 +417,7 @@ private struct AndroidPreferencesView: View {
                     Button("管理系统实时活动权限") {
                         if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                     }
-                    .buttonStyle(SettingsPressFeedbackStyle())
+                    .buttonStyle(PressFeedbackStyle())
                 } header: { Text("通知增强") } footer: {
                     Text("打开 App 或刷新课表时更新。课中不显示；后台运行受限时会提前结束。")
                 }
@@ -570,7 +527,7 @@ private struct AndroidPreferencesView: View {
                     .fixedSize()
             }
         }
-        .buttonStyle(SettingsPressFeedbackStyle())
+        .buttonStyle(PressFeedbackStyle())
         .accessibilityLabel(name)
         .accessibilityValue(selected ? "已选中" : "")
         .accessibilityIdentifier("preferences.theme.\(custom ? "custom" : value)")
@@ -690,7 +647,7 @@ private struct ThirdPartyLicensesView: View {
                             .padding(16)
                             .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 16))
                         }
-                        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
+                        .buttonStyle(PressFeedbackStyle(cornerRadius: 16))
                         .padding(.horizontal, 16)
                     }
                 }

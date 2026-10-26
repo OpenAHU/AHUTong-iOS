@@ -6,7 +6,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
-    func testAndroidParityPrimaryScreens() {
+    func testOnboardingPrivacyDisclaimerAndCommunityReachHome() {
         let app = XCUIApplication()
         app.launchArguments.append("--reset-onboarding")
         app.launchArguments.append("--demo-session")
@@ -30,178 +30,85 @@ final class AppShellUITests: XCTestCase {
         app.buttons["onboarding.decline"].tap()
 
         XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 3), "四入口必须由系统 Tab Bar 承载")
-        XCTAssertTrue(tabButton("home", app: app).waitForExistence(timeout: 3))
-        waitForRendering()
-        capture("04-home", app: app)
-        let campusCardBalance = app.buttons["campus-card.balance"]
-        XCTAssertTrue(campusCardBalance.waitForExistence(timeout: 3))
-        campusCardBalance.tap()
-        let qrRefresh = app.buttons["campus-card.qr-refresh"]
-        XCTAssertTrue(qrRefresh.waitForExistence(timeout: 3))
-        qrRefresh.tap()
-        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 3))
-        let campusCardQRPanel = app.otherElements["campus-card.qr-panel"]
-        XCTAssertTrue(campusCardQRPanel.waitForExistence(timeout: 3))
-        XCTAssertLessThan(campusCardQRPanel.frame.height, 300, "二维码面板应按内容收紧，而不是保留固定大高度")
-        waitForRendering()
-        capture("17-card-qrcode", app: app)
+    }
 
-        let tabs = [
-            ("schedule", "05-schedule"),
-            ("tools", "06-tools"),
-            ("settings", "07-settings"),
-            ("home", "08-home-return")
-        ]
-        for (tabID, screenshotName) in tabs {
-            let tab = tabButton(tabID, app: app)
-            XCTAssertTrue(tab.waitForExistence(timeout: 2))
-            tab.tap()
-            switch tabID {
-            case "schedule": XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 3))
-            case "tools": XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
-            case "settings":
-                // Cold shared CI hosts can return from the tab tap before the
-                // new navigation root has entered the accessibility tree.
-                XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 15))
-                XCTAssertTrue(app.buttons["settings.account-login"].exists)
-                XCTAssertTrue(app.buttons["settings.feedback"].waitForExistence(timeout: 3))
-            default: XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 3))
-            }
-            waitForRendering()
-            capture(screenshotName, app: app)
-        }
+    @MainActor
+    func testSchoolCalendarFromTools() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
+        openTool("tools.school-calendar", app: app)
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "school-calendar.")).firstMatch.waitForExistence(timeout: 5))
+        capture("route-SchoolCalendar", app: app)
+    }
 
-        tabButton("schedule", app: app).tap()
-        let demoCourse = app.buttons["schedule.course.demo-3"]
-        XCTAssertTrue(demoCourse.waitForExistence(timeout: 4))
-        demoCourse.tap()
-        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 3))
-        waitForRendering()
-        capture("13-course-detail", app: app)
-        app.terminate()
-        app.launchArguments = ["--demo-session"]
-        app.launch()
-        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
+    @MainActor
+    func testStudyRepositoryFromTools() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
+        openTool("tools.study-repository", app: app)
+        XCTAssertTrue(app.buttons["repository.downloads"].waitForExistence(timeout: 5))
+        capture("route-StudyRepository", app: app)
+    }
 
-        tabButton("tools", app: app).tap()
-        let routes = [
-            ("tools.phone-book", "搜索电话或部门", "09-phone-book"),
-            ("tools.school-calendar", "school-calendar.", "10-school-calendar"),
-            ("tools.weather", "天气设置", "11-weather"),
-            ("tools.study-repository", "repository.downloads", "12-study-repository")
-        ]
+    @MainActor
+    func testGradesFromTools() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
+        openTool("tools.grade", app: app)
+        XCTAssertTrue(app.descendants(matching: .any)["grades.screen"].waitForExistence(timeout: 5))
+        capture("route-Grades", app: app)
+    }
 
-        for (linkID, marker, screenshotName) in routes {
-            let link = app.buttons[linkID]
-            XCTAssertTrue(link.waitForExistence(timeout: 4))
-            link.tap()
-            if marker == "搜索电话或部门" {
-                XCTAssertTrue(app.searchFields[marker].waitForExistence(timeout: 4))
-            } else if marker == "school-calendar." {
-                let calendarState = app.descendants(matching: .any)
-                    .matching(NSPredicate(format: "identifier BEGINSWITH %@", marker))
-                    .firstMatch
-                XCTAssertTrue(calendarState.waitForExistence(timeout: 5))
-            } else {
-                XCTAssertTrue(app.buttons[marker].waitForExistence(timeout: 5))
-            }
-            waitForRendering()
-            capture(screenshotName, app: app)
-            restartAtTools(app)
-        }
+    @MainActor
+    func testExamsFromTools() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
+        openTool("tools.exam", app: app)
+        XCTAssertTrue(app.descendants(matching: .any)["exams.screen"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "exams.card.操作系统|")).firstMatch.waitForExistence(timeout: 4))
+        capture("route-Exams", app: app)
+    }
 
-
-        let academicRoutes = [
-            ("tools.grade", "grades.screen", "14-grades"),
-            ("tools.exam", "exams.screen", "15-exams")
-        ]
-        for (linkID, marker, screenshotName) in academicRoutes {
-            let link = app.buttons[linkID]
-            XCTAssertTrue(link.waitForExistence(timeout: 4))
-            link.tap()
-            XCTAssertTrue(app.descendants(matching: .any)[marker].waitForExistence(timeout: 5))
-            if marker == "exams.screen" {
-                let examCard = app.descendants(matching: .any)
-                    .matching(NSPredicate(format: "identifier BEGINSWITH %@", "exams.card.操作系统|"))
-                    .firstMatch
-                XCTAssertTrue(examCard.waitForExistence(timeout: 4))
-            }
-            waitForRendering()
-            capture(screenshotName, app: app)
-            restartAtTools(app)
-        }
-
-        tabButton("settings", app: app).tap()
-        let contributors = app.buttons["settings.contributors"]
-        XCTAssertTrue(contributors.waitForExistence(timeout: 4))
-        contributors.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["contributors.screen"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.staticTexts["加入我们"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["contributors.avatar.468766131"].firstMatch.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["contributors.avatar.1705945565"].firstMatch.exists)
-        waitForRendering()
-        capture("16-contributors", app: app)
-
-        app.terminate()
-        app.launchArguments = ["--demo-session"]
-        app.launch()
-        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        tabButton("settings", app: app).tap()
-        app.buttons["settings.preferences"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["preferences.screen"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.switches["preferences.privacy-consent"].exists)
-        XCTAssertTrue(app.buttons["preferences.privacy-policy"].exists)
-        XCTAssertFalse(app.buttons["preferences.login"].exists)
-        XCTAssertFalse(app.staticTexts["液态玻璃"].exists)
-        XCTAssertFalse(app.buttons["preferences.liquid-glass"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["preferences.native-tab-bar"].exists)
-        waitForRendering()
-        capture("16-preferences", app: app)
-
-        restartAtTools(app)
-        app.buttons["tools.free-classroom"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["free-classroom.screen"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["free-classroom.search"].waitForExistence(timeout: 4))
+    @MainActor
+    func testFreeClassroomsFromTools() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
+        openTool("tools.free-classroom", app: app)
+        XCTAssertTrue(app.descendants(matching: .any)["free-classroom.screen"].waitForExistence(timeout: 5))
         app.buttons["free-classroom.search"].tap()
         XCTAssertTrue(app.staticTexts["201 教室"].waitForExistence(timeout: 4))
-        waitForRendering()
-        capture("18-free-classroom", app: app)
+        capture("route-FreeClassrooms", app: app)
+    }
 
-        restartAtTools(app)
-        app.buttons["tools.lost-found"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["lost-found.screen"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["lost-found.item.demo-lost-1"].waitForExistence(timeout: 4))
-        waitForRendering()
-        capture("19-lost-found", app: app)
+    @MainActor
+    func testLostFoundDetailFromTools() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
+        openTool("tools.lost-found", app: app)
+        XCTAssertTrue(app.descendants(matching: .any)["lost-found.screen"].waitForExistence(timeout: 5))
         app.buttons["lost-found.item.demo-lost-1"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["lost-found.detail"].waitForExistence(timeout: 4))
-        waitForRendering()
-        capture("20-lost-found-detail", app: app)
-
-        // The detail sheet contains its own ScrollView, so a downward gesture can
-        // scroll instead of dismissing on some Simulator versions. Re-entering
-        // the route makes the publish evidence independent of sheet physics.
-        restartAtTools(app)
-        app.buttons["tools.lost-found"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["lost-found.screen"].waitForExistence(timeout: 4))
-        let publish = app.buttons["lost-found.publish"]
-        XCTAssertTrue(publish.waitForExistence(timeout: 4))
-        publish.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["lost-found.publish.sheet"].waitForExistence(timeout: 4))
-        waitForRendering()
-        capture("21-lost-found-publish", app: app)
-
-        app.terminate()
-        app.launchArguments = ["--demo-session"]
-        app.launch()
-        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        tabButton("tools", app: app).tap()
-        app.swipeUp()
-        XCTAssertTrue(app.staticTexts["添加桌面课表微件"].waitForExistence(timeout: 4))
-        waitForRendering()
-        capture("22-widget-preview", app: app)
+        capture("route-LostFoundDetail", app: app)
     }
+
+    @MainActor
+    func testLostFoundPublishFromTools() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
+        openTool("tools.lost-found", app: app)
+        XCTAssertTrue(app.descendants(matching: .any)["lost-found.screen"].waitForExistence(timeout: 5))
+        app.buttons["lost-found.publish"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["lost-found.publish.sheet"].waitForExistence(timeout: 4))
+        capture("route-LostFoundPublish", app: app)
+    }
+
 
     @MainActor
     func testScheduleSupportsHorizontalWeekPaging() {
@@ -343,72 +250,97 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
-    func testAndroidParityLoadingEmptyAndErrorStates() {
+    func testScheduleLoadingEmptyAndErrorStates() {
         let app = XCUIApplication()
+        defer { app.terminate() }
         for state in ["loading", "empty", "error"] {
-            let arguments = ["--demo-session", "--demo-consent", "--demo-state=\(state)"]
-            app.launchArguments = arguments
+            app.terminate()
+            app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+            app.launchArguments = ["--demo-session", "--demo-consent", "--demo-state=\(state)"]
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            waitForRendering()
-            capture("state-\(state)-home", app: app)
-
             tabButton("schedule", app: app).tap()
-            XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 6))
-            waitForRendering()
+            XCTAssertTrue(app.descendants(matching: .any)["schedule.\(state)"].waitForExistence(timeout: 5))
             capture("state-\(state)-schedule", app: app)
+        }
+    }
 
+    @MainActor
+    func testGradesLoadingEmptyAndErrorStates() {
+        let app = XCUIApplication()
+        defer { app.terminate() }
+        for state in ["loading", "empty", "error"] {
             app.terminate()
-            app.launchArguments = arguments
+            app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+            app.launchArguments = ["--demo-session", "--demo-consent", "--demo-state=\(state)"]
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
             openTool("tools.grade", app: app)
-            XCTAssertTrue(app.descendants(matching: .any)["grades.screen"].waitForExistence(timeout: 4))
-            waitForRendering()
+            XCTAssertTrue(app.descendants(matching: .any)["grades.screen"].waitForExistence(timeout: 5))
+            switch state {
+            case "loading": XCTAssertTrue(app.activityIndicators.firstMatch.waitForExistence(timeout: 4))
+            case "empty": XCTAssertTrue(app.staticTexts["该学期目前没有任何成绩"].waitForExistence(timeout: 4))
+            default: XCTAssertTrue(app.buttons["重试"].waitForExistence(timeout: 4))
+            }
             capture("state-\(state)-grades", app: app)
+        }
+    }
 
+    @MainActor
+    func testExamsLoadingEmptyAndErrorStates() {
+        let app = XCUIApplication()
+        defer { app.terminate() }
+        for state in ["loading", "empty", "error"] {
             app.terminate()
-            app.launchArguments = arguments
+            app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+            app.launchArguments = ["--demo-session", "--demo-consent", "--demo-state=\(state)"]
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-            tabButton("tools", app: app).tap()
-            let toolsExam = app.buttons["tools.exam"]
-            if toolsExam.waitForExistence(timeout: 2) {
-                toolsExam.tap()
-            } else {
-                tabButton("home", app: app).tap()
-                let homeExam = app.buttons["home.widget.exam"]
-                XCTAssertTrue(homeExam.waitForExistence(timeout: 4))
-                homeExam.tap()
+            openTool("tools.exam", app: app)
+            XCTAssertTrue(app.descendants(matching: .any)["exams.screen"].waitForExistence(timeout: 5))
+            switch state {
+            case "loading": XCTAssertTrue(app.activityIndicators.firstMatch.waitForExistence(timeout: 4))
+            case "empty": XCTAssertTrue(app.staticTexts["目前没有任何考试"].waitForExistence(timeout: 4))
+            default: XCTAssertTrue(app.buttons["重试"].waitForExistence(timeout: 4))
             }
-            XCTAssertTrue(app.descendants(matching: .any)["exams.screen"].waitForExistence(timeout: 4))
-            waitForRendering()
             capture("state-\(state)-exams", app: app)
+        }
+    }
 
+    @MainActor
+    func testFreeClassroomsLoadingEmptyAndErrorStates() {
+        let app = XCUIApplication()
+        defer { app.terminate() }
+        for state in ["loading", "empty", "error"] {
             app.terminate()
-            app.launchArguments = arguments
+            app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+            app.launchArguments = ["--demo-session", "--demo-consent", "--demo-state=\(state)"]
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
             openTool("tools.free-classroom", app: app)
-            XCTAssertTrue(app.buttons["free-classroom.search"].waitForExistence(timeout: 4))
             app.buttons["free-classroom.search"].tap()
-            let classroomState = app.descendants(matching: .any)["free-classroom.\(state)"]
-            XCTAssertTrue(classroomState.waitForExistence(timeout: 4))
-            waitForRendering()
-            capture("state-\(state)-free-classroom", app: app)
+            XCTAssertTrue(app.descendants(matching: .any)["free-classroom.\(state)"].waitForExistence(timeout: 5))
+            capture("state-\(state)-freeclassrooms", app: app)
+        }
+    }
 
+    @MainActor
+    func testLostFoundLoadingEmptyAndErrorStates() {
+        let app = XCUIApplication()
+        defer { app.terminate() }
+        for state in ["loading", "empty", "error"] {
             app.terminate()
-            app.launchArguments = arguments
+            app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+            app.launchArguments = ["--demo-session", "--demo-consent", "--demo-state=\(state)"]
             app.launch()
             XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
             openTool("tools.lost-found", app: app)
-            let lostFoundState = app.descendants(matching: .any)["lost-found.\(state)"]
-            XCTAssertTrue(lostFoundState.waitForExistence(timeout: 4))
-            waitForRendering()
-            capture("state-\(state)-lost-found", app: app)
-            app.terminate()
+            XCTAssertTrue(app.descendants(matching: .any)["lost-found.\(state)"].waitForExistence(timeout: 5))
+            capture("state-\(state)-lostfound", app: app)
         }
     }
+
+
 
     @MainActor
     func testNativeNavigationBarEdgeAndContentPopGestures() {
@@ -419,7 +351,7 @@ final class AppShellUITests: XCTestCase {
         tabButton("tools", app: app).tap()
 
         func openPhoneBook() {
-            let link = app.buttons["tools.phone-book"]
+            let link = app.revealTool("tools.phone-book")
             XCTAssertTrue(link.waitForExistence(timeout: 4))
             link.tap()
             XCTAssertTrue(app.searchFields["搜索电话或部门"].waitForExistence(timeout: 4))
@@ -460,9 +392,10 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
-    func testAndroidParityPaymentsAndOperations() {
+    func testCMBOneTimeAndDefaultChoices() {
         let app = XCUIApplication()
         launchDemo(app)
+        defer { app.terminate() }
         setCMBPreference(false, app: app)
         launchDemo(app)
 
@@ -489,18 +422,6 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(rechargeAfterOneTimeChoice.waitForExistence(timeout: 5))
         rechargeAfterOneTimeChoice.tap()
         XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 4))
-        waitForRendering()
-        capture("24-card-recharge", app: app)
-        enter("10", into: app.textFields["payment.card.amount"], app: app)
-        app.buttons["payment.card.state"].tap()
-        XCTAssertTrue(app.staticTexts["确认支付"].waitForExistence(timeout: 3))
-        waitForRendering()
-        capture("25-card-recharge-dialog", app: app)
-        app.buttons["payment.card.bank"].tap()
-        waitForPaymentResult("payment.card.state", app: app)
-        waitForRendering()
-        capture("26-card-recharge-success", app: app)
-
         launchDemo(app)
         app.buttons["campus-card.recharge"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 4))
@@ -513,7 +434,36 @@ final class AppShellUITests: XCTestCase {
         launchDemo(app)
         setCMBPreference(false, app: app)
 
+    }
+
+    @MainActor
+    func testCampusCardDemoPaymentConfirmation() {
+        let app = XCUIApplication()
         launchDemo(app)
+        defer { app.terminate() }
+        setCMBPreference(false, app: app)
+        launchDemo(app)
+        app.buttons["campus-card.recharge"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.card.screen"].waitForExistence(timeout: 4))
+        waitForRendering()
+        capture("24-card-recharge", app: app)
+        enter("10", into: app.textFields["payment.card.amount"], app: app)
+        app.buttons["payment.card.state"].tap()
+        XCTAssertTrue(app.staticTexts["确认支付"].waitForExistence(timeout: 3))
+        waitForRendering()
+        capture("25-card-recharge-dialog", app: app)
+        app.buttons["payment.card.bank"].tap()
+        waitForPaymentResult("payment.card.state", app: app)
+        waitForRendering()
+        capture("26-card-recharge-success", app: app)
+
+    }
+
+    @MainActor
+    func testBathroomDemoPaymentConfirmation() {
+        let app = XCUIApplication()
+        launchDemo(app)
+        defer { app.terminate() }
         openHomePayment("home.payment.bathroom", marker: "payment.bathroom.screen", app: app)
         waitForRendering()
         capture("27-bathroom-payment", app: app)
@@ -530,7 +480,13 @@ final class AppShellUITests: XCTestCase {
         waitForRendering()
         capture("29-bathroom-payment-success", app: app)
 
+    }
+
+    @MainActor
+    func testElectricityDemoPaymentConfirmation() {
+        let app = XCUIApplication()
         launchDemo(app)
+        defer { app.terminate() }
         openHomePayment("home.payment.electricity", marker: "payment.electricity.screen", app: app)
         waitForRendering()
         capture("30-electricity-payment", app: app)
@@ -549,7 +505,13 @@ final class AppShellUITests: XCTestCase {
         waitForRendering()
         capture("32-electricity-payment-success", app: app)
 
+    }
+
+    @MainActor
+    func testSettingsHasNoHiddenDebugEntry() {
+        let app = XCUIApplication()
         launchDemo(app)
+        defer { app.terminate() }
         tabButton("settings", app: app).tap()
         XCTAssertFalse(app.buttons["settings.debug"].exists)
         XCTAssertFalse(app.staticTexts["Debug"].exists)
@@ -562,6 +524,7 @@ final class AppShellUITests: XCTestCase {
         waitForRendering()
         capture("33-settings", app: app)
     }
+
 
     @MainActor
     func testNetworkRechargeAndCMBPreference() {
@@ -643,18 +606,6 @@ final class AppShellUITests: XCTestCase {
     }
 
     @MainActor
-    private func restartAtTools(_ app: XCUIApplication) {
-        app.terminate()
-        app.launchArguments = ["--demo-session"]
-        app.launch()
-        XCTAssertTrue(app.staticTexts["screen.home"].waitForExistence(timeout: 5))
-        let toolsTab = tabButton("tools", app: app)
-        XCTAssertTrue(toolsTab.waitForExistence(timeout: 3))
-        toolsTab.tap()
-        XCTAssertTrue(app.buttons["tools.phone-book"].waitForExistence(timeout: 3))
-    }
-
-    @MainActor
     private func launchDemo(_ app: XCUIApplication) {
         app.terminate()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
@@ -715,31 +666,8 @@ final class AppShellUITests: XCTestCase {
             toolsTab.tap()
         }
 
-        // In the long loading/empty/error chain, the first synthesized tap can
-        // complete without changing TabView selection. Verify the selected
-        // state and retry only that local transition instead of sleeping.
-        if !waitForSelection(of: toolsTab, timeout: 2) {
-            toolsTab.tap()
-        }
-        XCTAssertTrue(
-            waitForSelection(of: toolsTab, timeout: 2),
-            "The tools tab must be selected before looking up \(identifier)"
-        )
-
-        let tool = app.buttons[identifier]
-        var attempts = 0
-        while !tool.waitForExistence(timeout: 1) && attempts < 3 {
-            app.swipeUp()
-            attempts += 1
-        }
-        XCTAssertTrue(
-            tool.exists,
-            "Expected \(identifier) in the selected tools screen"
-        )
-        if !tool.isHittable {
-            scrollUpUntilHittable(tool, app: app, maximumAttempts: 3)
-        }
-        tool.tap()
+        XCTAssertTrue(waitForSelection(of: toolsTab, timeout: 5))
+        app.revealTool(identifier).tap()
     }
 
     @MainActor

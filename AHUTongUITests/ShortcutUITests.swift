@@ -62,7 +62,7 @@ final class ShortcutUITests: XCTestCase {
         XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["campus-card.qr-refresh"].wait(for: \.isHittable, toEqual: true, timeout: 15))
         tools.tap()
-        app.buttons["tools.phone-book"].tap()
+        app.revealTool("tools.phone-book").tap()
         app.open(URL(string: "ahutong://payment-code")!)
         XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["campus-card.qr-refresh"].wait(for: \.isHittable, toEqual: true, timeout: 15))

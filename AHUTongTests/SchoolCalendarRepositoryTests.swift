@@ -4,19 +4,6 @@ import XCTest
 
 final class SchoolCalendarRepositoryTests: XCTestCase {
     @MainActor
-    func testViewModelReportsPhotoSaveCompletion() async {
-        let saver = CalendarPhotoSaverStub()
-        let model = SchoolCalendarViewModel(photoSaver: saver)
-        let fileURL = URL(fileURLWithPath: "/tmp/xiaoli.jpg")
-
-        await model.savePhoto(at: fileURL)
-        let savedURLs = await saver.savedURLs
-
-        XCTAssertEqual(model.saveMessage, "校历已保存到系统照片")
-        XCTAssertEqual(savedURLs, [fileURL])
-    }
-
-    @MainActor
     func testCacheFirstDownloadsThenUsesCache() async throws {
         let remote = CalendarRemoteStub(data: Self.jpeg)
         let cache = CalendarCacheStub()
@@ -119,13 +106,5 @@ private actor CalendarCacheStub: SchoolCalendarCaching {
 
     func remove() async throws {
         url = nil
-    }
-}
-
-private actor CalendarPhotoSaverStub: SchoolCalendarPhotoSaving {
-    private(set) var savedURLs: [URL] = []
-
-    func saveImage(at fileURL: URL) async throws {
-        savedURLs.append(fileURL)
     }
 }

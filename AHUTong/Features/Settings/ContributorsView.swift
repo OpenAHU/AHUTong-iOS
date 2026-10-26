@@ -101,7 +101,7 @@ struct ContributorsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading).padding(24)
                             .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 24))
                         }
-                        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 24))
+                        .buttonStyle(PressFeedbackStyle(cornerRadius: 24))
                         .padding(.horizontal, 16)
                     }
                 }
@@ -210,7 +210,7 @@ private struct ContributorAvatarRow: View {
             .frame(width: cellWidth)
             .contentShape(Rectangle())
         }
-        .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 16))
+        .buttonStyle(PressFeedbackStyle(cornerRadius: 16))
         .highPriorityGesture(
             TapGesture(count: 2).exclusively(before: TapGesture()).onEnded { gesture in
                 switch gesture {
@@ -248,7 +248,7 @@ private struct ContributorDetailPopover: View {
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
                 }
-                .buttonStyle(SettingsPressFeedbackStyle(cornerRadius: 22))
+                .buttonStyle(PressFeedbackStyle(cornerRadius: 22))
                 .accessibilityLabel("关闭")
                 .accessibilityIdentifier("contributors.detail.close")
             }

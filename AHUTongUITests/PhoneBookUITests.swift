@@ -79,7 +79,7 @@ final class PhoneBookUITests: XCTestCase {
         let tools = app.tabBars.buttons["小工具"]
         XCTAssertTrue(tools.waitForExistence(timeout: 15))
         tools.tap()
-        let phone = app.buttons["tools.phone-book"]
+        let phone = app.revealTool("tools.phone-book")
         XCTAssertTrue(phone.waitForExistence(timeout: 5))
         phone.tap()
         XCTAssertTrue(app.navigationBars["电话本"].waitForExistence(timeout: 5))

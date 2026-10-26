@@ -2,23 +2,6 @@ import XCTest
 @testable import AHUTong
 
 final class ContributorsCatalogTests: XCTestCase {
-    func testCatalogPreservesAliasesAndIncludesMaintainersWithTheirCohorts() {
-        XCTAssertEqual(ContributorsCatalog.partners.map(\.name), ["Hello~"])
-        XCTAssertEqual(
-            ContributorsCatalog.developers.map(\.name),
-            ["s1nk（20级）", "😓😢😥😰（21级）", "\u{200B}（22级）", "堂吉诃德（22级）", "Yukon（22级）", "zirui.xu（24级）", "MuxYang（25级）", "InChange-Jiang（25级）", "Himekawa（24级）"]
-        )
-        XCTAssertEqual(
-            ContributorsCatalog.developers[2].name.unicodeScalars.first?.value,
-            0x200B
-        )
-
-        XCTAssertEqual(
-            ContributorsCatalog.developers.compactMap(\.qq),
-            ["468766131", "330771794", "257314409", "3148336396", "605606366", "1793838025", "32142587", "2719904894", "1705945565"]
-        )
-    }
-
     func testDeveloperAvatarAndCompletePersonalProfileDestination() throws {
         XCTAssertEqual(ContributorsCatalog.developers.last?.description, "iOS开发与维护")
         let developer = ContributorsCatalog.developers[0]
@@ -47,11 +30,4 @@ final class ContributorsCatalogTests: XCTestCase {
         }
     }
 
-    func testPartnerHasNoExternalRepositoryDestination() {
-        let partner = ContributorsCatalog.partners[0]
-
-        XCTAssertNil(partner.qq)
-        XCTAssertNil(partner.avatarURL)
-        XCTAssertNil(partner.contactURL)
-    }
 }

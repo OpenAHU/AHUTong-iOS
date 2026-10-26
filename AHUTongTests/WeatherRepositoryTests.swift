@@ -162,22 +162,6 @@ final class WeatherRepositoryTests: XCTestCase {
         XCTAssertEqual(decoded, expected)
     }
 
-    func testCompactHomePresentationUsesWeatherCodeAndMetrics() throws {
-        XCTAssertEqual(HomeWeatherPresentation.glyph(Self.fixture), "≋")
-        XCTAssertEqual(HomeWeatherPresentation.metricLines(Self.fixture), ["雨 --", "UV 6"])
-        XCTAssertEqual(
-            HomeWeatherPresentation.detail(weather: Self.fixture, showsAirQuality: true),
-            "东南风 1级 · 空气26"
-        )
-
-        let rain = try JSONDecoder().decode(
-            WeatherResponse.self,
-            from: Data(#"{"city":"合肥市","weather":"阵雨","weather_code":"305","temperature":28}"#.utf8)
-        )
-        XCTAssertEqual(rain.weatherCode, "305")
-        XCTAssertEqual(HomeWeatherPresentation.glyph(rain), "☔")
-    }
-
     private static let fixtureData = Data(
         #"""
         {

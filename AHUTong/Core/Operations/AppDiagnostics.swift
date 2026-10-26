@@ -4,13 +4,12 @@ import Sentry
 enum DiagnosticSignal: String, CaseIterable, Sendable {
     case widgetSharingUnavailable = "widget-sharing-unavailable"
     case widgetWriteFailed = "widget-write-failed"
-    case campusCodeFailed = "campus-code-failed"
     case sessionRefreshFailed = "session-refresh-failed"
     case verification = "installation-verification"
 }
 
 enum DiagnosticStage: String, CaseIterable, Sendable {
-    case startup, widgetPublish, firstParty, rust, renewed, refresh, verification
+    case startup, widgetPublish, refresh, verification
 }
 
 enum DiagnosticFailure: String, CaseIterable, Sendable {
@@ -57,7 +56,10 @@ struct DiagnosticRecord: Hashable, Sendable {
 }
 
 enum DiagnosticsSanitizer {
-    static func sanitize(_ event: Event) -> Event {
+    static func sanitize(_ event: Event) -> Event? {
+        if let signal = event.tags?["ahu.signal"], DiagnosticSignal(rawValue: signal) == nil {
+            return nil
+        }
         let tags = safeTags(event.tags ?? [:])
         let signal = tags["ahu.signal"].flatMap(DiagnosticSignal.init(rawValue:))
         event.message = SentryMessage(formatted: signal.map { "AHUTong: \($0.rawValue)" }
@@ -130,9 +132,19 @@ enum DiagnosticsSanitizer {
 }
 
 enum SentryConfiguration {
-    static var cacheURL: URL {
+    private static var cachesDirectory: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AHUTongDiagnostics", isDirectory: true)
+    }
+
+    static var cacheURL: URL {
+        cachesDirectory.appendingPathComponent("AHUTongDiagnostics-v2", isDirectory: true)
+    }
+
+    // Old SDK envelopes can bypass beforeSend when drained. Retire that queue
+    // when narrowing collection so cached campus-code events cannot be sent.
+    static func removeRetiredCache(in directory: URL? = nil) {
+        try? FileManager.default.removeItem(at: (directory ?? cachesDirectory)
+            .appendingPathComponent("AHUTongDiagnostics", isDirectory: true))
     }
 
     static func options(bundle: Bundle = .main) -> Options {
@@ -161,6 +173,10 @@ enum SentryConfiguration {
         options.enableMetrics = false
         options.enableAppHangTracking = false
         options.enableWatchdogTerminationTracking = false
+        options.enableMetricKit = false
+        options.enableMetricKitRawPayload = false
+        options.enableTimeToFullDisplayTracing = false
+        options.sendClientReports = false
         options.enableMemoryIntrospection = false
         options.attachScreenshot = false
         options.attachViewHierarchy = false
@@ -196,6 +212,7 @@ final class AppDiagnostics: @unchecked Sendable {
             return true
         }
         if allowed, changed {
+            SentryConfiguration.removeRetiredCache()
             let options = SentryConfiguration.options()
             options.beforeSend = { [weak self] event in
                 guard self?.isEnabled == true else { return nil }
@@ -206,6 +223,7 @@ final class AppDiagnostics: @unchecked Sendable {
         } else if !allowed, !AppRuntime.usesIsolatedUITestStorage {
             if changed { SentrySDK.close() }
             try? FileManager.default.removeItem(at: SentryConfiguration.cacheURL)
+            SentryConfiguration.removeRetiredCache()
         }
     }
 

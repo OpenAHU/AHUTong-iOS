@@ -4,6 +4,7 @@
 import argparse
 import json
 import plistlib
+import struct
 import subprocess
 import tempfile
 import zipfile
@@ -13,6 +14,41 @@ from pathlib import Path
 def read_plist(path):
     with path.open("rb") as source:
         return plistlib.load(source)
+
+
+def verify_release_binary(path):
+    data = path.read_bytes()
+    if len(data) < 32 or struct.unpack_from("<II", data) != (0xFEEDFACF, 0x100000C):
+        raise ValueError("Release bundle must contain a thin arm64 device executable")
+    commands, command_bytes = struct.unpack_from("<II", data, 16)
+    position, limit = 32, 32 + command_bytes
+    if limit > len(data):
+        raise ValueError("Invalid Mach-O load commands")
+    platform, local_symbols = None, None
+    for _ in range(commands):
+        if position + 8 > limit:
+            raise ValueError("Invalid Mach-O load commands")
+        command, size = struct.unpack_from("<II", data, position)
+        if size < 8 or position + size > limit:
+            raise ValueError("Invalid Mach-O load commands")
+        if command == 0x32 and size >= 24:  # LC_BUILD_VERSION
+            platform = struct.unpack_from("<I", data, position + 8)[0]
+        elif command == 0xB and size >= 80:  # LC_DYSYMTAB
+            local_symbols = struct.unpack_from("<I", data, position + 12)[0]
+        elif command == 0x19 and size >= 72:  # LC_SEGMENT_64
+            count = struct.unpack_from("<I", data, position + 64)[0]
+            if 72 + count * 80 > size:
+                raise ValueError("Invalid Mach-O sections")
+            for index in range(count):
+                section, segment = struct.unpack_from("<16s16s", data, position + 72 + index * 80)
+                if b"llvm" in section or segment.rstrip(b"\0") in (b"__LLVM_COV", b"__DWARF"):
+                    raise ValueError("Release executable contains coverage or embedded debug data")
+        position += size
+    if platform != 2:  # PLATFORM_IOS, not the arm64 simulator platform
+        raise ValueError("Release bundle must contain an iPhoneOS device executable")
+    # A fully stripped Xcode executable retains at most its linker sentinel.
+    if local_symbols is None or local_symbols > 1:
+        raise ValueError("Release executable has not been stripped of local symbols")
 
 
 def signed_entitlements(bundle):
@@ -25,6 +61,20 @@ def signed_entitlements(bundle):
         check=True, capture_output=True,
     )
     return plistlib.loads(result.stdout)
+
+
+def verify_embedded_code(app):
+    # Verifying the outer App (even with --deep) can miss a linker-signed
+    # resource framework. Check each nested framework/library explicitly.
+    embedded = [path for path in app.rglob("*")
+                if (path.suffix == ".framework" and path.is_dir())
+                or (path.suffix == ".dylib" and path.is_file())]
+    for code in sorted(embedded):
+        try:
+            subprocess.run(["codesign", "--verify", "--strict", str(code)],
+                           check=True, capture_output=True)
+        except subprocess.CalledProcessError as error:
+            raise ValueError(f"Embedded code signature invalid: {code.relative_to(app)}") from error
 
 
 def profile_entitlements(bundle):
@@ -64,7 +114,7 @@ def verify_shared_group(configured, app_entitlements, widget_entitlements, app_p
     return group
 
 
-def verify(app, require_signature, require_entitlements=False):
+def verify(app, require_signature, require_entitlements=False, require_release=False):
     app_info = read_plist(app / "Info.plist")
     candidates = []
     for bundle in (app / "PlugIns").glob("*.appex"):
@@ -100,6 +150,8 @@ def verify(app, require_signature, require_entitlements=False):
         executable = bundle / info["CFBundleExecutable"]
         if not executable.is_file():
             raise ValueError("A bundle is missing its executable")
+        if require_release:
+            verify_release_binary(executable)
     if require_signature:
         verify_shared_group(group, signed_entitlements(app), signed_entitlements(widget),
                             profile_entitlements(app), profile_entitlements(widget))
@@ -107,11 +159,15 @@ def verify(app, require_signature, require_entitlements=False):
         for bundle in (app, widget):
             if group not in signed_entitlements(bundle).get("com.apple.security.application-groups", []):
                 raise ValueError("Re-signable App/Widget must both preserve the configured App Group declaration")
+    if require_signature or require_entitlements:
+        verify_embedded_code(app)
     print("PASS: embedded Widget, bundle IDs, versions, executables, shared group and App Intents metadata")
+    if require_release:
+        print("PASS: arm64 iPhoneOS Release executables are stripped and contain no coverage/debug sections")
     if require_signature:
-        print("PASS: signatures and shared-group entitlements (profiles checked when present)")
+        print("PASS: App/Widget and embedded code signatures; shared-group entitlements (profiles checked when present)")
     elif require_entitlements:
-        print("PASS: ad-hoc signatures preserve App Group declarations; developer re-signing is still required")
+        print("PASS: App/Widget and embedded code signatures; App Group declarations preserved; developer re-signing is still required")
     else:
         print("Structure checks only; repeat with --require-signature after re-signing")
 
@@ -121,10 +177,11 @@ def main():
     parser.add_argument("artifact", type=Path, help=".app bundle or .ipa file")
     parser.add_argument("--require-signature", action="store_true")
     parser.add_argument("--require-entitlements", action="store_true", help="Check re-signable ad-hoc App Group declarations, without requiring a developer team")
+    parser.add_argument("--require-release", action="store_true", help="Require stripped arm64 iPhoneOS executables without test coverage")
     args = parser.parse_args()
     try:
         if args.artifact.is_dir():
-            verify(args.artifact, args.require_signature, args.require_entitlements)
+            verify(args.artifact, args.require_signature, args.require_entitlements, args.require_release)
         else:
             with tempfile.TemporaryDirectory(prefix="ahutong-widget-check-") as temporary:
                 root = Path(temporary).resolve()
@@ -136,8 +193,8 @@ def main():
                 apps = [bundle for bundle in (root / "Payload").glob("*.app") if bundle.is_dir()]
                 if len(apps) != 1:
                     raise ValueError("Expected exactly one application in IPA Payload")
-                verify(apps[0], args.require_signature, args.require_entitlements)
-    except (OSError, ValueError, KeyError, zipfile.BadZipFile, subprocess.CalledProcessError, plistlib.InvalidFileException) as error:
+                verify(apps[0], args.require_signature, args.require_entitlements, args.require_release)
+    except (OSError, ValueError, KeyError, struct.error, zipfile.BadZipFile, subprocess.CalledProcessError, plistlib.InvalidFileException) as error:
         # Never dump profiles or codesign output, which can contain device IDs.
         parser.exit(1, f"FAIL: {error if not isinstance(error, subprocess.CalledProcessError) else 'signature or profile validation failed'}\n")
 

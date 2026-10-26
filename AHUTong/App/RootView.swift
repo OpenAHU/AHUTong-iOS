@@ -78,12 +78,13 @@ struct RootView: View {
         .defaultAppStorage(AppRuntime.sessionDefaults)
         .overlay { AppToastOverlay(center: toastCenter) }
         .task {
-            if ProcessInfo.processInfo.arguments.contains("--reset-onboarding") {
+            let isolated = AppRuntime.usesIsolatedUITestStorage
+            if isolated && ProcessInfo.processInfo.arguments.contains("--reset-onboarding") {
                 AppRuntime.sessionDefaults.removeObject(forKey: AppModel.experienceEnabledKey)
             }
             await onboardingModel.load(
-                resetForUITesting: ProcessInfo.processInfo.arguments.contains("--reset-onboarding"),
-                acceptForUITesting: ProcessInfo.processInfo.arguments.contains("--demo-consent")
+                resetForUITesting: isolated && ProcessInfo.processInfo.arguments.contains("--reset-onboarding"),
+                acceptForUITesting: isolated && ProcessInfo.processInfo.arguments.contains("--demo-consent")
             )
             await restoreForCurrentConsent()
         }

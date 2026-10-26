@@ -52,7 +52,9 @@ jobs:
         run: cargo test --manifest-path Vendor/sdk/Cargo.toml --all-features
 
       - name: Test CI and artifact verification
-        run: python3 -m unittest discover -s scripts/tests -v
+        run: |
+          python3 scripts/check-swift-test-budget.py
+          python3 -m unittest discover -s scripts/tests -v
 
       - name: Verify complete UI shard coverage
         id: shards

@@ -38,6 +38,9 @@ final class AppDiagnosticsTests: XCTestCase {
         XCTAssertFalse(options.enableNetworkTracking)
         XCTAssertFalse(options.enableLogs)
         XCTAssertFalse(options.enableMetrics)
+        XCTAssertFalse(options.sendClientReports)
+        XCTAssertFalse(options.enableMetricKit)
+        XCTAssertFalse(options.enableMetricKitRawPayload)
         XCTAssertFalse(options.enableMemoryIntrospection)
         XCTAssertFalse(options.attachScreenshot)
         XCTAssertFalse(options.attachViewHierarchy)
@@ -57,8 +60,8 @@ final class AppDiagnosticsTests: XCTestCase {
         event.logger = "PRIVATE-LOGGER"
         event.modules = ["PRIVATE-MODULE": "PRIVATE-VERSION"]
         event.transaction = "PRIVATE-URL"
-        event.tags = ["ahu.signal": DiagnosticSignal.campusCodeFailed.rawValue,
-                      "ahu.stage": DiagnosticStage.firstParty.rawValue,
+        event.tags = ["ahu.signal": DiagnosticSignal.sessionRefreshFailed.rawValue,
+                      "ahu.stage": DiagnosticStage.refresh.rawValue,
                       "ahu.failure": DiagnosticFailure.network.rawValue,
                       "ahu.network_code": "-1009", "student": "PRIVATE-STUDENT"]
         event.context = ["device": ["model": "iPhone18,1", "name": "PRIVATE-NAME", "id": "PRIVATE-ID"],
@@ -74,14 +77,14 @@ final class AppDiagnosticsTests: XCTestCase {
         let exception = Exception(value: "PRIVATE-REASON", type: "NSException")
         exception.stacktrace = SentryStacktrace(frames: [frame], registers: ["r0": "PRIVATE-REGISTER"])
         event.exceptions = [exception]
-        let result = DiagnosticsSanitizer.sanitize(event)
+        let result = try XCTUnwrap(DiagnosticsSanitizer.sanitize(event))
         let data = try JSONSerialization.data(withJSONObject: result.serialize())
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertFalse(json.contains("PRIVATE-"), json)
         XCTAssertTrue(json.contains("iPhone18,1"))
         XCTAssertTrue(json.contains("0x1234"))
         XCTAssertTrue(json.contains("NSException"))
-        XCTAssertTrue(json.contains("campus-code-failed"))
+        XCTAssertTrue(json.contains("session-refresh-failed"))
         XCTAssertEqual(result.tags?["ahu.network_code"], "-1009")
         XCTAssertNil(result.user)
         XCTAssertNil(result.error)
@@ -98,19 +101,35 @@ final class AppDiagnosticsTests: XCTestCase {
         ]), [:])
     }
 
+    func testRetiredCampusCodeAndUnknownSignalsAreDropped() {
+        for signal in ["campus-code-failed", "unknown-signal"] {
+            let event = Event(level: .warning)
+            event.tags = ["ahu.signal": signal]
+            XCTAssertNil(DiagnosticsSanitizer.sanitize(event))
+        }
+        XCTAssertNotNil(DiagnosticsSanitizer.sanitize(Event(level: .fatal)))
+    }
+
+    func testRetiredQueueRemovalPreservesCurrentCacheAndUnrelatedFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for name in ["AHUTongDiagnostics", "AHUTongDiagnostics-v2", "unrelated"] {
+            let directory = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data("synthetic envelope".utf8).write(to: directory.appendingPathComponent("event"))
+        }
+        SentryConfiguration.removeRetiredCache(in: root)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("AHUTongDiagnostics").path))
+        for name in ["AHUTongDiagnostics-v2", "unrelated"] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(name + "/event").path))
+        }
+    }
+
     func testErrorClassificationDoesNotNeedErrorTextOrUserInfo() {
         XCTAssertEqual(DiagnosticFailure.classify(URLError(.notConnectedToInternet,
             userInfo: [NSURLErrorFailingURLStringErrorKey: "PRIVATE-URL"])), .network)
         XCTAssertEqual(DiagnosticFailure.classify(CampusCoreError.unauthorized), .sessionExpired)
         XCTAssertEqual(DiagnosticFailure.classify(CampusCoreError.campus("PRIVATE-RESPONSE")), .service)
-    }
-
-    func testPrivacyExplainsDiagnosticsAndRequiresNewConsent() {
-        let copy = AgreementDocument.privacy.body
-        for value in ["Sentry", "崩溃堆栈", "不会上传学号", "屏幕回放", "撤回同意后停止"] {
-            XCTAssertTrue(copy.contains(value), value)
-        }
-        XCTAssertGreaterThan(AgreementConsent.currentPrivacyPolicyVersion, 5)
     }
 
     /// Explicit local integration check. Normal unit/UI/CI runs never send events.

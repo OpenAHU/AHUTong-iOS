@@ -76,6 +76,10 @@ struct RemoteCampusCaptchaRecognizer: CampusCaptchaRecognizing {
         let response: URLResponse
         do {
             (responseData, response) = try await session.data(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch let error as URLError where error.code == .timedOut {
             throw CampusCaptchaRecognitionError.timedOut
         } catch {

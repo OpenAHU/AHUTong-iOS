@@ -50,7 +50,7 @@ jobs:
           xcodegen --version
           xcodegen generate --spec project.yml
 
-      - name: Build unsigned app for iPhone
+      - name: Build unsigned Release archive for iPhone
         shell: bash
         run: |
           set -euo pipefail
@@ -62,10 +62,12 @@ jobs:
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -archivePath "$RUNNER_TEMP/AHUTong.xcarchive" \
+            ENABLE_CODE_COVERAGE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean build
+            clean archive
 
       - name: Package unsigned IPA
         id: package
@@ -73,22 +75,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          products_dir="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos"
-          app_path="$(find "$products_dir" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          app_path="$RUNNER_TEMP/AHUTong.xcarchive/Products/Applications/AHUTong.app"
 
-          if [[ -z "$app_path" ]]; then
-            echo "No .app bundle was produced in $products_dir" >&2
+          if [[ ! -d "$app_path" ]]; then
+            echo "No .app bundle was produced at $app_path" >&2
             exit 1
           fi
 
           ipa_path="$RUNNER_TEMP/AHUTong-unsigned.ipa"
           checksum_path="$RUNNER_TEMP/AHUTong-unsigned.ipa.sha256"
 
-          python3 scripts/package-resignable-ipa.py "$app_path" "$ipa_path"
+          python3 scripts/package-resignable-ipa.py "$app_path" "$ipa_path" --require-release
 
           shasum -a 256 "$ipa_path" > "$checksum_path"
           unzip -t "$ipa_path"
-          python3 scripts/verify-widget-bundle.py "$ipa_path" --require-entitlements
+          python3 scripts/verify-widget-bundle.py "$ipa_path" --require-entitlements --require-release
           unzip -l "$ipa_path"
 
           echo "ipa_path=$ipa_path" >> "$GITHUB_OUTPUT"
@@ -108,7 +109,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: AHUTong-dSYMs-${{ github.run_number }}
-          path: ${{ runner.temp }}/DerivedData/Build/Products/Release-iphoneos/*.dSYM
+          path: ${{ runner.temp }}/AHUTong.xcarchive/dSYMs/*.dSYM
           if-no-files-found: error
           retention-days: 30
 
@@ -119,4 +120,4 @@ jobs:
       - name: Upload matching debug symbols to Sentry
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-        run: bash scripts/upload-sentry-symbols.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos"
+        run: bash scripts/upload-sentry-symbols.sh "$RUNNER_TEMP/AHUTong.xcarchive/dSYMs"

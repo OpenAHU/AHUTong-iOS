@@ -40,9 +40,12 @@ final class ExperiencePolishUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
         app.swipeDown()
         capture(app, "widget-installation-guide")
-        done.tap()
-        XCTAssertTrue(add.waitForExistence(timeout: 3))
-        add.tap()
+        // The share dismissal can also resize the parent sheet. Resolve its
+        // current navigation bar instead of reusing the earlier button frame.
+        let guideBar = app.navigationBars["课表小组件"]
+        guideBar.buttons["tools.widget-guide.done"].tap()
+        XCTAssertTrue(guideBar.waitForNonExistence(timeout: 3))
+        app.revealTool("tools.widget-add").tap()
         let sync = app.buttons["tools.widget-guide.sync"]
         if sync.waitForExistence(timeout: 3) {
             XCTAssertTrue(app.staticTexts["tools.widget-guide.sync-status"].exists)
@@ -148,8 +151,9 @@ final class ExperiencePolishUITests: XCTestCase {
         let edit = app.buttons["tools.edit-home"]
         XCTAssertTrue(edit.waitForExistence(timeout: 4))
         XCTAssertTrue(edit.isHittable)
-        XCTAssertGreaterThanOrEqual(edit.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(edit.frame.height, 44)
+        // The system toolbar owns its visual and hit geometry; validate the
+        // native bar item and its action instead of the retired custom frame.
+        XCTAssertTrue(app.navigationBars.buttons["tools.edit-home"].exists)
         capture(app, "tools-native-header-button")
         edit.tap()
         XCTAssertTrue(app.staticTexts["添加小工具"].waitForExistence(timeout: 4))

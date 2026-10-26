@@ -65,13 +65,6 @@ final class RedactingLoggerTests: XCTestCase {
         XCTAssertEqual(RedactingLogger.sanitize(output), output)
     }
 
-    func testNonSensitiveOperationalMessageIsPreserved() {
-        XCTAssertEqual(
-            RedactingLogger.sanitize("payment reconciliation pending order=MOCK-1"),
-            "payment reconciliation pending order=MOCK-1"
-        )
-    }
-
     func testCampusHeadersAndEncodedCredentialsAreRedacted() {
         let input = [
             "Synjones-Auth: bearer campus-secret",

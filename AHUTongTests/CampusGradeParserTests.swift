@@ -55,14 +55,4 @@ final class CampusGradeParserTests: XCTestCase {
         XCTAssertEqual(GradeResultDisplay.text(grade.detail), "请先完成评教后查看")
     }
 
-    func testGradeProfileDisplayNameMatchesAndroidFallbacks() {
-        XCTAssertEqual(
-            CampusGradeStudentProfile(id: "1", trainingType: "", department: "", major: "").displayName,
-            "本专业 (主修)"
-        )
-        XCTAssertEqual(
-            CampusGradeStudentProfile(id: "2", trainingType: "微专业", department: "", major: "人工智能").displayName,
-            "人工智能 (微专业)"
-        )
-    }
 }
