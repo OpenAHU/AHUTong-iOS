@@ -2,7 +2,9 @@ import SwiftUI
 
 @MainActor
 final class WeatherViewModel: ObservableObject {
+    static let automaticRefreshInterval: TimeInterval = 600
     @Published private(set) var state: LoadableState<WeatherSnapshot> = .idle
+    @Published private(set) var isRefreshing = false
     @Published private(set) var preferences = WeatherDisplayPreferences()
     @Published var notice: String?
 
@@ -10,15 +12,19 @@ final class WeatherViewModel: ObservableObject {
     private let preferencesStore: WeatherPreferencesStore
     private let locationProvider: any WeatherLocationProviding
     private var lastQuery: WeatherQuery = .ip
+    private var lastRefreshAttempt: Date?
+    private let now: @Sendable () -> Date
 
     init(
         repository: WeatherRepository = .live(),
         preferencesStore: WeatherPreferencesStore = WeatherPreferencesStore(),
-        locationProvider: any WeatherLocationProviding = CoreLocationWeatherProvider()
+        locationProvider: any WeatherLocationProviding = CoreLocationWeatherProvider(),
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.repository = repository
         self.preferencesStore = preferencesStore
         self.locationProvider = locationProvider
+        self.now = now
     }
 
     func start(autoLocate: Bool = false) async {
@@ -52,6 +58,13 @@ final class WeatherViewModel: ObservableObject {
         await load(query: lastQuery)
     }
 
+    func refreshIfNeeded() async {
+        guard !AppRuntime.isDemoSession else { return }
+        if let lastRefreshAttempt,
+           now().timeIntervalSince(lastRefreshAttempt) < Self.automaticRefreshInterval { return }
+        await refresh()
+    }
+
     func useCurrentLocation() async {
         do {
             let city = try await locationProvider.requestCity()
@@ -64,9 +77,13 @@ final class WeatherViewModel: ObservableObject {
     }
 
     private func load(query: WeatherQuery) async {
-        guard !state.isLoading else { return }
+        guard !isRefreshing else { return }
+        lastRefreshAttempt = now()
+        let keepsSnapshot = query == lastQuery && state.value != nil
         lastQuery = query
-        state = .loading
+        isRefreshing = true
+        defer { isRefreshing = false }
+        if !keepsSnapshot { state = .loading }
         do {
             let snapshot = try await repository.load(query: query)
             state = snapshot.response.isMeaningful ? .loaded(snapshot) : .empty

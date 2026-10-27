@@ -27,7 +27,9 @@ struct CardBillingView: View {
             Section {
                 if let summary = model.summary {
                     LabeledContent("支出", value: summary.expenses.map(CardBill.money) ?? "—")
+                        .nativeNumericTransition(value: summary.expenses)
                     LabeledContent("收入", value: summary.income.map(CardBill.money) ?? "—")
+                        .nativeNumericTransition(value: summary.income)
                 }
                 if let summaryError = model.summaryError { Text(summaryError).font(.footnote).foregroundStyle(.secondary) }
                 NavigationLink("消费统计") { CardBillingStatsView(api: api, range: range) }
@@ -116,8 +118,11 @@ private struct CardBillingStatsView: View {
             if let report = model.analytics {
                 Section(range.map { "\($0.from) 至 \($0.to)" } ?? "服务器当月") {
                     LabeledContent("总支出", value: CardBill.money(report.expense))
+                        .nativeNumericTransition(value: report.expense)
                     LabeledContent("总收入", value: CardBill.money(report.income))
+                        .nativeNumericTransition(value: report.income)
                     LabeledContent("消费笔数", value: String(report.expenseCount))
+                        .nativeNumericTransition(value: report.expenseCount)
                 }
                 if report.expenseCount == 0 { Text("该时间范围暂无消费记录") }
                 else {

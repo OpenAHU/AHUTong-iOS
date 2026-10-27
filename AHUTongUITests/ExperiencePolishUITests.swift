@@ -63,6 +63,37 @@ final class ExperiencePolishUITests: XCTestCase {
         }
     }
 
+    func testHomeRefreshPreservesCourseStatusAndNavigation() {
+        let app = launch()
+        let title = app.staticTexts["screen.home"]
+        let label = title.label
+        app.scrollViews.firstMatch.swipeDown()
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        XCTAssertEqual(title.label, label)
+        title.tap()
+        XCTAssertTrue(app.buttons["schedule.settings"].waitForExistence(timeout: 4))
+        app.tabBars.buttons["设置"].tap()
+        XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 4))
+        app.tabBars.buttons["小工具"].tap()
+        XCTAssertTrue(app.searchFields["搜索小工具"].waitForExistence(timeout: 4))
+        app.tabBars.buttons["主页"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 4))
+    }
+
+    func testHomeRefreshWithoutCoursesRemainsInteractive() {
+        let app = launch(additionalArguments: ["--demo-state=empty"])
+        let title = app.staticTexts["screen.home"]
+        let label = title.label
+        app.scrollViews.firstMatch.swipeDown()
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        XCTAssertEqual(title.label, label)
+        app.tabBars.buttons["小工具"].tap()
+        XCTAssertTrue(app.searchFields["搜索小工具"].waitForExistence(timeout: 4))
+        app.tabBars.buttons["主页"].tap()
+        title.tap()
+        XCTAssertTrue(app.buttons["schedule.settings"].waitForExistence(timeout: 4))
+    }
+
     func testSettingsTabReturnsToRootAfterLeavingDetailViaShortcut() {
         let app = launch()
         app.tabBars.buttons["设置"].tap()
@@ -123,7 +154,7 @@ final class ExperiencePolishUITests: XCTestCase {
     }
 
     func testHeaderActionsRemainUsableWithNativeMaterials() {
-        let app = launch(additionalArguments: ["-debug.gray.home_edit", "enabled"])
+        let app = launch()
         app.tabBars.buttons["课表"].tap()
         let currentWeek = app.buttons["回到当前周"]
         let settings = app.buttons["schedule.settings"]

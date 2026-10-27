@@ -31,7 +31,7 @@ struct ScheduleWeekPresentation: Equatable, Sendable {
 
 enum ScheduleInactiveCourseStyle {
     static func background(_ scheme: ColorScheme) -> Color {
-        Color(white: scheme == .dark ? 0.18 : 0.90)
+        Color(white: scheme == .dark ? 0.24 : 0.90)
     }
     static func foreground(_ scheme: ColorScheme) -> Color {
         Color(white: scheme == .dark ? 0.76 : 0.36)

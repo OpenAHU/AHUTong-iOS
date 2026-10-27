@@ -183,11 +183,8 @@ struct GradeView: View {
         )
         : GradeView.currentSemesterName
     @State private var isSearching = false
-    @State private var showsSemesterMenu = false
-    private let appModel: AppModel
 
     init(appModel: AppModel) {
-        self.appModel = appModel
         let userID = if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "demo" }
         _model = StateObject(wrappedValue: GradeViewModel(api: appModel.campusAPI, userID: userID))
     }
@@ -196,7 +193,6 @@ struct GradeView: View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 24) {
-                    header
                     if let message = model.refreshMessage {
                         Label(message, systemImage: "exclamationmark.arrow.circlepath")
                             .font(.footnote)
@@ -218,6 +214,15 @@ struct GradeView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .navigationTitle("成绩单")
+        .toolbar(.visible, for: .navigationBar)
+        .searchable(text: $query, isPresented: $isSearching, prompt: "搜索课程")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("刷新成绩", systemImage: "arrow.clockwise") { Task { await model.load(demo: AppRuntime.isDemoSession) } }
+                    .disabled(model.state.isLoading)
+            }
+        }
         .task { await model.load(demo: AppRuntime.isDemoSession) }
         .refreshable { await model.load(demo: AppRuntime.isDemoSession) }
         .accessibilityIdentifier("grades.screen")
@@ -226,73 +231,28 @@ struct GradeView: View {
     @ViewBuilder
     private var profileSelector: some View {
         if model.profiles.count > 1 {
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(model.profiles) { profile in
-                        Button(profile.displayName) { model.selectProfile(profile) }
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(model.selectedProfileID == profile.id ? Color.white : AndroidParityPalette.systemTheme)
-                            .padding(.horizontal, 14)
-                            .frame(height: 38)
-                            .background(
-                                model.selectedProfileID == profile.id ? AndroidParityPalette.systemTheme : AndroidParityPalette.surface(colorScheme),
-                                in: Capsule()
-                            )
-                    }
+            Picker("学籍", selection: Binding(
+                get: { model.selectedProfileID },
+                set: { id in
+                    if let profile = model.profiles.first(where: { $0.id == id }) { model.selectProfile(profile) }
                 }
-                .padding(.horizontal, 16)
-            }
-            .scrollIndicators(.hidden)
+            )) { ForEach(model.profiles) { Text($0.displayName).tag($0.id) } }
+            .pickerStyle(.menu)
+            .padding(.horizontal, 16)
             .accessibilityIdentifier("grades.profile-selector")
-        }
-    }
-
-    @ViewBuilder
-    private var header: some View {
-        if isSearching {
-            HStack(spacing: 8) {
-                AndroidSearchField(text: $query, prompt: "搜索课程")
-                AndroidIconButton(systemName: "xmark", accessibilityLabel: "关闭搜索") {
-                    isSearching = false
-                    query = ""
-                }
-            }
-            .padding(.horizontal, 16).padding(.top, 24)
-        } else {
-            AndroidHeader(title: "成绩单", large: true) {
-                HStack(spacing: 0) {
-                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新成绩") { Task { await model.load(demo: AppRuntime.isDemoSession) } }
-                    AndroidIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索成绩") { isSearching = true }
-                }
-                .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
-            }
         }
     }
 
     private func semesterSelector(_ report: CampusGradeReport) -> some View {
         let semesters = [Self.currentSemesterName] + report.grades.map(\.semesterName).filter { !$0.isEmpty && $0 != Self.currentSemesterName }
         let unique = semesters.reduce(into: [String]()) { values, value in if !values.contains(value) { values.append(value) } }
-        return Button { showsSemesterMenu.toggle() } label: {
-            HStack {
-                Text(displaySemester(selectedSemester)).font(.title3)
-                Spacer()
-                Image(systemName: "chevron.down").font(.caption.bold())
-            }
-            .padding(.horizontal, 16).frame(height: 56)
-            .overlay(Capsule().stroke(.secondary.opacity(0.55), lineWidth: 1.5))
-            .overlay(alignment: .topLeading) {
-                Text("选择学期").font(.caption).foregroundStyle(.secondary)
-                    .padding(.horizontal, 5).background(AndroidParityPalette.background(colorScheme))
-                    .offset(x: 12, y: -8)
-            }
+        return Picker("选择学期", selection: $selectedSemester) {
+            ForEach(unique, id: \.self) { Text(displaySemester($0)).tag($0) }
         }
-        .buttonStyle(.plain)
+        .pickerStyle(.menu)
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .overlay(Capsule().stroke(.secondary.opacity(0.55), lineWidth: 1.5))
         .padding(.horizontal, 16)
-        .confirmationDialog("选择学期", isPresented: $showsSemesterMenu) {
-            ForEach(unique, id: \.self) { semester in
-                Button(displaySemester(semester)) { selectedSemester = semester }
-            }
-        }
         .accessibilityIdentifier("grades.semester-filter")
     }
 

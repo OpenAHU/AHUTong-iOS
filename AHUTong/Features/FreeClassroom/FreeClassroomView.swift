@@ -122,7 +122,6 @@ struct FreeClassroomView: View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 24) {
-                    AndroidHeader(title: "空闲教室", large: true)
                     if !collapsed { filters.transition(.opacity.combined(with: .move(edge: .top))) }
                     searchControls
                     results
@@ -131,6 +130,8 @@ struct FreeClassroomView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .navigationTitle("空闲教室")
+        .toolbar(.visible, for: .navigationBar)
         .task { await model.loadBuildings() }
         .accessibilityIdentifier("free-classroom.screen")
     }
@@ -215,23 +216,22 @@ struct FreeClassroomView: View {
                 Task { await model.search() }
                 withAnimation { collapsed = true }
             } label: {
-                Text(model.rooms.isLoading ? "查询中..." : "开始查询空闲教室")
-                    .font(.headline.bold())
-                    .foregroundStyle(.primary)
+                Text(model.rooms.isLoading ? "查询中…" : "开始查询空闲教室")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(AndroidParityPalette.primaryTone90, in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
             .disabled(model.rooms.isLoading || model.buildings.isEmpty)
             .accessibilityIdentifier("free-classroom.search")
-
-            AndroidIconButton(
-                systemName: collapsed ? "chevron.down" : "chevron.up",
-                accessibilityLabel: collapsed ? "展开筛选条件" : "收起筛选条件"
-            ) { withAnimation { collapsed.toggle() } }
-            .padding(4)
-            .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
+            Button(collapsed ? "展开筛选条件" : "收起筛选条件", systemImage: collapsed ? "chevron.down" : "chevron.up") {
+                withAnimation { collapsed.toggle() }
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
         }
         .padding(.horizontal, 16)
     }
@@ -295,15 +295,10 @@ struct FreeClassroomView: View {
     }
 
     private func chip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(Color.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(selected ? AndroidParityPalette.primaryTone90 : AndroidParityPalette.background(colorScheme), in: Capsule())
-        }
-        .buttonStyle(.plain)
+        Toggle(text, isOn: Binding(get: { selected }, set: { _ in action() }))
+            .toggleStyle(.button)
+            .buttonBorderShape(.capsule)
+            .font(.subheadline)
     }
 
     private func shortcut(_ text: String, range: ClosedRange<Int>) -> some View {

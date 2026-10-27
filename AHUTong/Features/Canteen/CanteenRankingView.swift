@@ -2,6 +2,8 @@ import Charts
 import SwiftUI
 
 struct CanteenRankingView: View {
+    let appModel: AppModel
+    @State private var showsCanteens = false
     @StateObject private var model = CanteenRankingViewModel()
     @State private var query = CanteenQuery()
     var body: some View {
@@ -13,6 +15,8 @@ struct CanteenRankingView: View {
                 Picker("校区", selection: $query.campus) {
                     ForEach(CanteenCampus.allCases) { Text($0.title).tag($0) }
                 }.accessibilityIdentifier("canteen.campus")
+                CanteenFilterButton(selection: query.selectedCanteens) { showsCanteens = true }
+                    .accessibilityIdentifier("canteen.canteens")
             }
             if model.isLoading { ProgressView(model.saved == nil ? "正在查询必吃榜" : "正在更新榜单") }
             if let error = model.error {
@@ -40,17 +44,15 @@ struct CanteenRankingView: View {
                         ContentUnavailableView("暂无榜单", systemImage: "fork.knife", description: Text("所选范围内的样本还不足以生成排行"))
                     }
                 } header: {
-                    Text("\(saved.query.campus.title) · \(saved.query.period.title)热度榜")
+                    Text("\(saved.query.title) · \(saved.query.period.title)热度榜")
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
                         if let start = data.startDay, let end = data.endDay { Text("\(start) 至 \(end)") }
                         if let sample = data.sample { Text("\(sample.txns ?? 0) 笔样本 · \(sample.terminals ?? 0) 个窗口 · \(sample.days ?? 0) 天") }
-                        if let note = data.confidence?.note, !note.isEmpty { Text(note) }
-                        Text("热度来自已贡献的正餐样本，不代表口味评分。")
                     }
                 }
                 if let highlights = data.superlatives, highlights.hasContent {
-                    Section("吃什么") {
+                    Section("人气推荐") {
                         highlight("午餐人气", highlights.lunchTopWindow)
                         highlight("晚餐人气", highlights.dinnerTopWindow)
                         highlight("常青窗口", highlights.mostConsistent)
@@ -88,18 +90,30 @@ struct CanteenRankingView: View {
                         }.frame(height: 160).accessibilityLabel("每日消费人次变化")
                     }
                 }
-                if let notes = data.notes, !notes.isEmpty {
-                    Section("榜单说明") { ForEach(Array(notes.enumerated()), id: \.offset) { _, note in Text(note).font(.footnote).foregroundStyle(.secondary) } }
-                }
             }
         }
         .navigationTitle("必吃榜")
         .accessibilityIdentifier("canteen.screen")
+        .sheet(isPresented: $showsCanteens) { CanteenSelectionSheet(options: query.campus.names, selection: $query.selectedCanteens) }
+        .onChange(of: query.campus) { _, _ in query.selectedCanteens = [] }
         .task(id: query) { await load() }
         .refreshable { await load(refresh: true) }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("刷新", systemImage: "arrow.clockwise") { Task { await load(refresh: true) } }.disabled(model.isLoading)
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NavigationLink { CanteenRecordsView(appModel: appModel) } label: {
+                    Label("我的记录", systemImage: "person.crop.rectangle")
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("canteen.my-records")
+                NavigationLink { CanteenDrawView(query: query) } label: {
+                    Label("吃什么", systemImage: "shuffle")
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("canteen.draw")
+                Button("刷新", systemImage: "arrow.clockwise") { Task { await load(refresh: true) } }
+                    .labelStyle(.iconOnly)
+                    .disabled(model.isLoading)
+                    .accessibilityIdentifier("canteen.refresh")
             }
         }
     }
@@ -112,7 +126,7 @@ struct CanteenRankingView: View {
     }
 }
 
-private struct CanteenWindowDetail: View {
+struct CanteenWindowDetail: View {
     let window: CanteenInsights.Window
     var body: some View {
         Form {

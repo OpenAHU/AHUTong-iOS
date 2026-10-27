@@ -364,16 +364,19 @@ struct ScheduleView: View {
 
     var body: some View {
         AndroidScreen {
-            VStack(spacing: 8) {
+            ScrollView(.vertical) {
+                content
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
+            }
+            .scrollIndicators(.hidden)
+            .accessibilityIdentifier("schedule.scroll")
+            .nativeTopBar {
                 controls
-                ScrollView(.vertical) {
-                    content
-                        .padding(.bottom, 16)
-                }
-                .scrollIndicators(.hidden)
-                .accessibilityIdentifier("schedule.scroll")
+                    .padding(.vertical, 8)
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
         .task(id: previewNextSemester) {
             if loadedSemesterPreview != previewNextSemester {
                 selectedWeek = 1

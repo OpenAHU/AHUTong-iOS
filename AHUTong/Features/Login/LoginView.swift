@@ -90,6 +90,7 @@ struct LoginView: View {
                 }
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(isPresented: $showsWebLogin) {
             CampusWebLoginScreen(mode: .visibleAcademic, title: "校园账号登录") { result in
                 handle(result)

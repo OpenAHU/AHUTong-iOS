@@ -41,7 +41,7 @@ enum AndroidParityPalette {
 
     static func background(_ scheme: ColorScheme) -> Color {
         scheme == .dark
-            ? Color(red: 26 / 255, green: 26 / 255, blue: 26 / 255)
+            ? Color(uiColor: .systemGroupedBackground)
             : Color(red: 248 / 255, green: 247 / 255, blue: 253 / 255)
     }
 
@@ -150,7 +150,6 @@ struct AndroidScreen<Content: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AndroidParityPalette.background(colorScheme).ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

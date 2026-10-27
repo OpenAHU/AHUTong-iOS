@@ -138,7 +138,11 @@ struct SettingsView: View {
         default: nil
         }
         return VStack(alignment: .leading, spacing: 28) {
-            Text(user?.name ?? "未登录").font(.title2)
+            Text(appModel.isExperienceMode ? user?.name ?? "未登录" : user?.studentID ?? "未登录")
+                .font(.title2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("settings.account-id")
             Button {
                 if appModel.isExperienceMode {
                     if onboardingModel.consent.privacyDecision == .accepted {

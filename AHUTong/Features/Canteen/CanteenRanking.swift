@@ -13,19 +13,30 @@ enum CanteenCampus: String, CaseIterable, Identifiable, Sendable {
     var canteens: String? {
         switch self {
         case .all: nil
-        case .qingyuan: "榴园,桔园,梅园,桂园,蕙园食堂,梧桐园食堂"
+        case .qingyuan: "榴园,桔园,梅园,桂园,蕙园,梧桐园,蕙园食堂,梧桐园食堂"
         case .longhe: "本部二食堂,本部三食堂,二食堂餐厅,三食堂,外招餐厅"
         case .jinzhai: "江淮学院食堂"
         }
     }
+    var names: [String] { Array(Set((canteens ?? CanteenCampus.allCases.dropFirst().compactMap(\.canteens).joined(separator: ",")).split(separator: ",").map { CanteenNames.canonical(String($0)) })).sorted() }
 }
 
 struct CanteenQuery: Hashable, Sendable {
     var period: CanteenPeriod = .week
     var campus: CanteenCampus = .all
+    var selectedCanteens: Set<String> = []
+    var limit = 50
+    var title: String { selectedCanteens.isEmpty ? campus.title : selectedCanteens.sorted().joined(separator: "、") }
+    func includes(_ name: String) -> Bool {
+        let scope = selectedCanteens.isEmpty ? Set(campus.names) : selectedCanteens
+        return campus == .all && selectedCanteens.isEmpty || scope.contains(CanteenNames.canonical(name))
+    }
     var url: URL {
-        var items: [URLQueryItem] = [.init(name: "period", value: period.rawValue), .init(name: "limit", value: "50"), .init(name: "minTxns", value: "20")]
-        if let canteens = campus.canteens { items.append(.init(name: "canteens", value: canteens)) }
+        var items: [URLQueryItem] = [.init(name: "period", value: period.rawValue), .init(name: "limit", value: String(limit)), .init(name: "minTxns", value: "20")]
+        if !selectedCanteens.isEmpty {
+            let names = selectedCanteens.sorted().flatMap(CanteenNames.serverNames)
+            items.append(.init(name: "canteens", value: names.joined(separator: ",")))
+        } else if let canteens = campus.canteens { items.append(.init(name: "canteens", value: canteens)) }
         return URL(string: "https://inchangejiang.cn/api/canteen/insights")!.appendingQueryItems(items)
     }
 }
@@ -35,8 +46,8 @@ struct CanteenInsights: Decodable, Sendable {
     let endDay: String?
     let sample: Sample?
     let confidence: Confidence?
-    let ranking: [Window]?
-    let canteenRanking: [Canteen]?
+    var ranking: [Window]?
+    var canteenRanking: [Canteen]?
     let segments: [Segment]?
     let hourly: [Hour]?
     let trend: [Day]?
@@ -45,7 +56,7 @@ struct CanteenInsights: Decodable, Sendable {
 
     struct Sample: Decodable, Sendable { let terminals: Int?; let days: Int?; let txns: Int? }
     struct Confidence: Decodable, Sendable { let level: String?; let note: String? }
-    struct Window: Decodable, Sendable {
+    struct Window: Decodable, Identifiable, Sendable {
         let rank: Int?
         let terminal: String
         let name: String?
@@ -54,6 +65,8 @@ struct CanteenInsights: Decodable, Sendable {
         let txns: Int
         let share: Double?
         let avgCentsPerTxn: Double?
+        var id: String { terminal }
+        var isNamed: Bool { name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
         var title: String { if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { name } else { "未命名窗口" } }
         var location: String { [canteen, floor].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
     }
@@ -116,19 +129,26 @@ final class CanteenRankingViewModel: ObservableObject {
         let revision = generation
         let force = refresh || !hasEntered
         hasEntered = true; error = nil
+        if saved?.query != query { saved = nil }
         if !force, let cached = cache[query], cached.date.timeIntervalSinceNow > -300 {
             saved = cached; isLoading = false; return
         }
         isLoading = true
         defer { if revision == generation, !(demo && DemoDataState.current == .loading) { isLoading = false } }
         do {
-            let value: CanteenInsights
+            var value: CanteenInsights
             if demo {
                 switch DemoDataState.current {
                 case .loading: return
                 case .error: throw CampusWebError.server("榜单加载失败，请检查网络后重试")
                 case .empty: value = try JSONDecoder().decode(CanteenInsights.self, from: Data(#"{"ranking":[]}"#.utf8))
-                case .normal: value = try JSONDecoder().decode(CanteenInsights.self, from: Data(Self.demoJSON.utf8))
+                case .normal:
+                    value = try JSONDecoder().decode(CanteenInsights.self, from: Data(Self.demoJSON.utf8))
+                    value.ranking = value.ranking?.filter { query.includes($0.canteen ?? "") }.enumerated().map { index, window in
+                        .init(rank: index + 1, terminal: window.terminal, name: window.name, canteen: window.canteen, floor: window.floor,
+                              txns: window.txns, share: window.share, avgCentsPerTxn: window.avgCentsPerTxn)
+                    }
+                    value.canteenRanking = value.canteenRanking?.filter { query.includes($0.canteen) }
                 }
             } else { value = try await remote.load(query) }
             try Task.checkCancellation()

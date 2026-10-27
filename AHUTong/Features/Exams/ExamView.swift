@@ -134,7 +134,6 @@ struct ExamView: View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 16) {
-                    header
                     if let message = model.refreshMessage {
                         Label(message, systemImage: "exclamationmark.arrow.circlepath")
                             .font(.footnote)
@@ -147,31 +146,18 @@ struct ExamView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .navigationTitle("考场查询")
+        .toolbar(.visible, for: .navigationBar)
+        .searchable(text: $query, isPresented: $isSearching, prompt: "搜索课程名称")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("刷新考试", systemImage: "arrow.clockwise") { Task { await model.load(demo: isDemo) } }
+                    .disabled(model.state.isLoading)
+            }
+        }
         .task { await model.load(demo: isDemo) }
         .refreshable { await model.load(demo: isDemo) }
         .accessibilityIdentifier("exams.screen")
-    }
-
-    @ViewBuilder
-    private var header: some View {
-        if isSearching {
-            HStack(spacing: 8) {
-                AndroidIconButton(systemName: "arrow.left", accessibilityLabel: "返回") {
-                    isSearching = false
-                    query = ""
-                }
-                AndroidSearchField(text: $query, prompt: "搜索课程名称…")
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-        } else {
-            AndroidHeader(title: "考场查询", large: true) {
-                AndroidIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索") { isSearching = true }
-                AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") {
-                    Task { await model.load(demo: isDemo) }
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -220,29 +206,14 @@ struct ExamView: View {
                 LazyVStack(spacing: 12) {
                     ForEach(active) { exam in examCard(exam) }
                     if !finished.isEmpty {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showsFinishedExams.toggle()
-                            }
-                        } label: {
-                            HStack {
-                                Text("已结束 (\(finished.count))")
-                                    .font(.subheadline.weight(.medium))
-                                Spacer()
-                                Image(systemName: showsFinishedExams ? "chevron.up" : "chevron.down")
-                            }
-                            .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-                            .padding(.horizontal, 20)
-                            .frame(height: 52)
-                            .background(AndroidParityPalette.surface(colorScheme), in: RoundedRectangle(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("exams.finished-toggle")
-                        .accessibilityValue(showsFinishedExams ? "收起" : "展开")
-
-                        if showsFinishedExams {
+                        DisclosureGroup("已结束 (\(finished.count))", isExpanded: $showsFinishedExams) {
                             ForEach(finished) { exam in examCard(exam) }
                         }
+                        .font(.subheadline)
+                        .padding(16)
+                        .background(AndroidParityPalette.surface(colorScheme), in: .rect(cornerRadius: 12))
+                        .accessibilityIdentifier("exams.finished-toggle")
+                        .accessibilityValue(showsFinishedExams ? "收起" : "展开")
                     }
                 }
                 .padding(.horizontal, 16)

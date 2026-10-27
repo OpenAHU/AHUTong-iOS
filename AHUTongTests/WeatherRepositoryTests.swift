@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import AHUTong
@@ -126,19 +127,34 @@ final class WeatherRepositoryTests: XCTestCase {
     }
 
     @MainActor
-    func testFirstWeatherScreenEntryRequestsLocationBeforeIPFallback() async {
+    func testLocatedWeatherKeepsSnapshotDuringRefresh() async {
         let remote = WeatherRemoteStub(response: Self.fixture)
+        let clock = MutableTestClock()
         let model = WeatherViewModel(
             repository: WeatherRepository(remote: remote, cache: InMemoryDataStore()),
             preferencesStore: WeatherPreferencesStore(store: InMemoryDataStore()),
-            locationProvider: WeatherLocationStub(city: "芜湖市")
+            locationProvider: WeatherLocationStub(city: "芜湖市"),
+            now: { clock.now() }
         )
 
         await model.start(autoLocate: true)
-        let queries = await remote.queries
-
-        XCTAssertEqual(queries, [.city("芜湖市")])
         XCTAssertTrue(model.notice?.contains("当前位置") == true)
+        var lostSnapshot = false
+        let observation = model.$state.sink { state in
+            if state.value == nil { lostSnapshot = true }
+        }
+        clock.advance(seconds: 599)
+        await model.refreshIfNeeded()
+        let earlyQueries = await remote.queries
+        XCTAssertEqual(earlyQueries, [.city("芜湖市")])
+        clock.advance(seconds: 1)
+        await model.refreshIfNeeded()
+        observation.cancel()
+
+        let queries = await remote.queries
+        XCTAssertEqual(queries, [.city("芜湖市"), .city("芜湖市")])
+        XCTAssertFalse(lostSnapshot, "Refreshing the same location must keep the displayed numbers alive")
+        XCTAssertFalse(model.isRefreshing)
     }
 
     func testHomeModesRecoverUnknownValuesAndConfigurationRoundTrips() throws {

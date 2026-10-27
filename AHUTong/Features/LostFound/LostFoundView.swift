@@ -7,6 +7,13 @@ final class LostFoundViewModel: ObservableObject {
         case working
         case succeeded(String)
         case failed(String)
+
+        var message: String? {
+            switch self {
+            case let .succeeded(message), let .failed(message): message
+            case .idle, .working: nil
+            }
+        }
     }
 
     @Published private(set) var catalog = LostFoundCatalog(campuses: [], types: [])
@@ -190,9 +197,7 @@ final class LostFoundViewModel: ObservableObject {
 }
 
 struct LostFoundView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: LostFoundViewModel
-    @State private var searchExpanded = false
     @State private var selectedItem: LostFoundItem?
     @State private var showPublish = false
     @State private var showMyPosts = false
@@ -202,177 +207,153 @@ struct LostFoundView: View {
     }
 
     var body: some View {
-        AndroidScreen {
-            ZStack(alignment: .bottomTrailing) {
-                ScrollView {
-                    LazyVStack(spacing: 24) {
-                        header
-                        if searchExpanded {
-                            AndroidSearchField(text: $model.searchQuery, prompt: "搜索全部信息")
-                                .padding(.horizontal, 24)
-                        } else {
-                            filters
-                        }
-                        summary
-                        if model.needsCampusLogin {
-                            Button("重试连接校园服务") {
-                                Task { await model.loginCampusService() }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(model.isLoggingIntoCampus)
-                            .padding(.horizontal, 24)
-                            .accessibilityIdentifier("lost-found.login-campus-service")
-                        }
-                        content
+        ScrollView {
+            LazyVStack(spacing: 24) {
+                filters
+                HStack {
+                    Text("共 \(model.filteredItems.count) 条记录").font(.headline)
+                    Spacer()
+                    Button("管理我的帖子") { showMyPosts = true }.buttonStyle(.bordered)
+                }
+                .padding(.horizontal, 24)
+                if model.needsCampusLogin {
+                    Button(model.isLoggingIntoCampus ? "正在连接…" : "重试连接校园服务") {
+                        Task { await model.loginCampusService() }
                     }
-                    .padding(.bottom, 104)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.isLoggingIntoCampus)
+                    .accessibilityIdentifier("lost-found.login-campus-service")
                 }
-                .scrollIndicators(.hidden)
-                .accessibilityIdentifier("lost-found.screen")
-
-                Button { showPublish = true } label: {
-                    Image(systemName: "plus")
-                        .font(.title.bold())
-                        .foregroundStyle(AndroidParityPalette.systemTheme)
-                        .frame(width: 64, height: 64)
-                        .background(
-                            AndroidParityPalette.primaryTone90,
-                            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        )
-                        .shadow(color: .black.opacity(0.22), radius: 10, y: 6)
+                content
+                if model.hasMore && model.filteredItems.isEmpty {
+                    Button { Task { await model.loadMore() } } label: {
+                        if model.isLoadingMore { ProgressView() } else { Text("加载更多") }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(model.isLoadingMore)
+                } else if model.isLoadingMore {
+                    ProgressView().padding(24)
                 }
-                .buttonStyle(.plain)
-                .padding(24)
-                .accessibilityLabel("发布帖子")
-                .accessibilityIdentifier("lost-found.publish")
+            }
+            .padding(.top, 16)
+            .padding(.bottom, 104)
+        }
+        .accessibilityIdentifier("lost-found.screen")
+        .background(Color(uiColor: .systemGroupedBackground))
+        .overlay(alignment: .bottomTrailing) {
+            publishButton.accessibilityIdentifier("lost-found.publish").padding(24)
+        }
+        .navigationTitle("失物招领")
+        .searchable(text: $model.searchQuery, prompt: "搜索帖子或联系人")
+        .refreshable { await model.load() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("刷新帖子", systemImage: "arrow.clockwise") { Task { await model.load() } }
+                    .disabled(model.state.isLoading)
             }
         }
         .task { await model.load() }
-        .sheet(item: $selectedItem) {
-            LostFoundDetailView(item: $0)
-                .presentationDetents([.fraction(0.6)])
+        .sheet(item: $selectedItem) { item in
+            NavigationStack { LostFoundDetailView(item: item) }
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showPublish) {
-            LostFoundPublishView(model: model, isPresented: $showPublish)
-                .presentationDetents([.fraction(0.6)])
-                .presentationDragIndicator(.visible)
+            NavigationStack { LostFoundPublishView(model: model, isPresented: $showPublish) }
         }
         .sheet(isPresented: $showMyPosts) {
-            LostFoundMyPostsView(model: model)
-                .presentationDetents([.fraction(0.6)])
+            NavigationStack { LostFoundMyPostsView(model: model) }
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .alert("操作结果", isPresented: mutationAlert) {
+        .alert("操作结果", isPresented: Binding(
+            get: { !showPublish && !showMyPosts && model.mutation.message != nil },
+            set: { if !$0 { model.clearMutation() } }
+        )) {
             Button("确定", role: .cancel) { model.clearMutation() }
-        } message: { Text(mutationMessage) }
-    }
-
-    private var header: some View {
-        HStack(spacing: 0) {
-            HStack { stateChip("失物招领", value: 1); Spacer() }
-                .frame(maxWidth: .infinity)
-            HStack { Spacer(); stateChip("寻物启事", value: 2); Spacer() }
-                .frame(maxWidth: .infinity)
-            HStack {
-                Spacer()
-                HStack(spacing: 0) {
-                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") { Task { await model.load() } }
-                    AndroidIconButton(systemName: searchExpanded ? "xmark" : "magnifyingglass", accessibilityLabel: "搜索") {
-                        searchExpanded.toggle()
-                        if !searchExpanded { model.searchQuery = "" }
-                    }
-                }
-                .padding(2)
-                .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
+        } message: { Text(model.mutation.message ?? "") }
     }
 
     private var filters: some View {
-        VStack(spacing: 24) {
-            filterContainer {
-                filterChip("全部校区", selected: model.selectedCampusID == nil) { model.selectedCampusID = nil }
-                ForEach(model.catalog.campuses) { campus in
-                    filterChip(campus.campusName, selected: model.selectedCampusID == campus.id) { model.selectedCampusID = campus.id }
-                }
+        VStack(spacing: 16) {
+            Picker("帖子类型", selection: Binding(
+                get: { model.currentState },
+                set: { value in Task { await model.switchState(value) } }
+            )) {
+                Text("失物招领").tag(1)
+                Text("寻物启事").tag(2)
             }
-            filterContainer {
-                filterChip("全部类型", selected: model.selectedTypeID == nil) { model.selectedTypeID = nil }
-                ForEach(model.catalog.types) { type in
-                    filterChip(type.typeName, selected: model.selectedTypeID == type.id) { model.selectedTypeID = type.id }
+            .pickerStyle(.segmented)
+            LabeledContent("校区") {
+                Picker("校区", selection: $model.selectedCampusID) {
+                    Text("全部校区").tag(String?.none)
+                    ForEach(model.catalog.campuses) { Text($0.campusName).tag(Optional($0.id)) }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
             }
-        }
-    }
-
-    private func filterContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) { content() }
-                .padding(8)
-        }
-        .scrollIndicators(.hidden)
-        .background(AndroidParityPalette.surface(colorScheme), in: Capsule())
-        .padding(.horizontal, 16)
-    }
-
-    private var summary: some View {
-        HStack {
-            Text(summaryText).font(.headline)
-            Spacer()
-            Button("管理我的帖子") { showMyPosts = true }
-                .buttonStyle(.plain)
-                .foregroundStyle(AndroidParityPalette.systemTheme)
+            LabeledContent("物品类型") {
+                Picker("物品类型", selection: $model.selectedTypeID) {
+                    Text("全部类型").tag(String?.none)
+                    ForEach(model.catalog.types) { Text($0.typeName).tag(Optional($0.id)) }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+            }
         }
         .padding(.horizontal, 24)
     }
 
-    private var summaryText: String {
-        if searchExpanded && !model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "搜索「\(model.searchQuery)」到 \(model.filteredItems.count) 条记录"
+    private var publishAction: some View {
+        Button { showPublish = true } label: {
+            Image(systemName: "plus").font(.title2).frame(width: 28, height: 28)
         }
-        return "共 \(model.filteredItems.count) 条记录"
+        .buttonBorderShape(.roundedRectangle(radius: 20))
+        .controlSize(.large)
+        .accessibilityLabel("发布帖子")
+    }
+
+    @ViewBuilder
+    private var publishButton: some View {
+        if #available(iOS 26, *) { publishAction.buttonStyle(.glassProminent) }
+        else { publishAction.buttonStyle(.borderedProminent) }
     }
 
     @ViewBuilder
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView("加载失物招领…")
-                .padding(64)
+            ProgressView("加载失物招领…").padding(64)
                 .accessibilityIdentifier("lost-found.loading")
         case .empty:
-            AndroidEmptyState(text: "暂无相关帖子").accessibilityIdentifier("lost-found.empty")
+            ContentUnavailableView("暂无相关帖子", systemImage: "tray")
+                .accessibilityIdentifier("lost-found.empty")
         case let .failed(error):
-            VStack(spacing: 12) {
-                Text("加载失败").font(.headline)
-                Text(error.message).font(.caption).foregroundStyle(.secondary)
-                Button("重试") { Task { await model.load() } }
+            ContentUnavailableView {
+                Label("加载失败", systemImage: "wifi.exclamationmark")
+            } description: { Text(error.message) } actions: {
+                Button("重试") { Task { await model.load() } }.buttonStyle(.bordered)
             }
-            .padding(48)
             .accessibilityIdentifier("lost-found.error")
         case .loaded:
             if model.filteredItems.isEmpty {
-                AndroidEmptyState(text: "没有符合筛选条件的帖子")
-            } else {
-                ForEach(model.filteredItems) { item in
-                    Button { selectedItem = item } label: { itemCard(item) }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("lost-found.item.\(item.id)")
-                        .onAppear {
-                            if item.id == model.filteredItems.last?.id { Task { await model.loadMore() } }
-                        }
-                }
-                if model.isLoadingMore { ProgressView().padding(24) }
+                ContentUnavailableView("没有匹配的帖子", systemImage: "magnifyingglass",
+                                       description: Text("试试其他关键词或筛选条件。"))
+            }
+            ForEach(model.filteredItems) { item in
+                Button { selectedItem = item } label: { itemCard(item) }
+                    .buttonStyle(PressFeedbackStyle(cornerRadius: 20))
+                    .padding(.horizontal, 16)
+                    .accessibilityIdentifier("lost-found.item.\(item.id)")
+                    .onAppear {
+                        if item.id == model.filteredItems.last?.id { Task { await model.loadMore() } }
+                    }
             }
         }
     }
 
     private func itemCard(_ item: LostFoundItem) -> some View {
-        AndroidCard(radius: 4) {
+        AndroidCard(radius: 20) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.title).font(.headline.bold())
                 Text("联系人：\(item.linkman ?? "未知")")
@@ -380,125 +361,88 @@ struct LostFoundView: View {
                 Text("校区：\(item.campusName ?? "未知")")
                 Text("类型：\(item.lostType?.typeName ?? "未知")")
                 Text("证件号：\(item.num1 ?? "未知")")
-                Text(item.createtime ?? "未知时间").foregroundStyle(.secondary)
+                Text(item.createtime ?? "未知时间").foregroundStyle(Color.secondary)
             }
+            .foregroundStyle(Color.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
         }
-        .padding(.horizontal, 16)
     }
 
-    private func stateChip(_ text: String, value: Int) -> some View {
-        let selected = model.currentState == value
-        return Button { Task { await model.switchState(value) } } label: {
-            Text(text)
-                .font(.system(size: 18))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(selected ? AndroidParityPalette.primaryTone90 : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    if !selected {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(AndroidParityPalette.separator(colorScheme), lineWidth: 1)
-                    }
-                }
+}
+
+private struct LostFoundItemRow: View {
+    let item: LostFoundItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.title).font(.headline).foregroundStyle(Color.primary)
+            Text([item.campusName, item.lostType?.typeName, item.createtime]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                .font(.subheadline).foregroundStyle(Color.secondary)
         }
-        .buttonStyle(.plain)
-    }
-
-    private func filterChip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(text)
-                .foregroundStyle(Color.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(selected ? AndroidParityPalette.primaryTone90 : Color.clear, in: Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var mutationAlert: Binding<Bool> {
-        Binding(
-            get: {
-                if case .succeeded = model.mutation { return true }
-                if case .failed = model.mutation { return true }
-                return false
-            },
-            set: { if !$0 { model.clearMutation() } }
-        )
-    }
-
-    private var mutationMessage: String {
-        switch model.mutation {
-        case let .succeeded(message), let .failed(message): message
-        default: ""
-        }
+        .padding(.vertical, 4)
     }
 }
 
 private struct LostFoundDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     let item: LostFoundItem
     @State private var selectedImageIndex: Int?
 
     var body: some View {
-        AndroidScreen {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(item.title)
-                        .font(.title2.bold())
-                        .fixedSize(horizontal: false, vertical: true)
-                    detail("联系人", item.linkman)
-                    detail("联系电话", item.phone)
-                    detail("校区", item.campusName)
-                    detail("类型", item.lostType?.typeName)
-                    detail("发布时间", item.createtime)
-                    detail("证件号", item.num1)
-                    if !item.imgs.isEmpty {
-                        Text("相关图片").font(.headline)
-                        ScrollView(.horizontal) {
-                            HStack {
-                                ForEach(item.imgs) { image in
-                                    Button {
-                                        selectedImageIndex = item.imgs.firstIndex(where: { $0.id == image.id })
-                                    } label: {
-                                        AsyncImage(url: imageURL(image.imgPath)) { image in
-                                            image.resizable().scaledToFill()
-                                        } placeholder: { ProgressView() }
-                                        .frame(width: 180, height: 180)
-                                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                                    }
-                                    .buttonStyle(.plain)
+        Form {
+            Section {
+                Text(item.title).textSelection(.enabled)
+            }
+            Section("联系信息") {
+                LabeledContent("联系人", value: item.linkman ?? "未提供")
+                LabeledContent("联系电话", value: item.phone ?? "未提供")
+            }
+            .textSelection(.enabled)
+            Section("物品信息") {
+                LabeledContent("校区", value: item.campusName ?? "未提供")
+                LabeledContent("类型", value: item.lostType?.typeName ?? "未提供")
+                LabeledContent("证件号", value: item.num1 ?? "未提供")
+                LabeledContent("发布时间", value: item.createtime ?? "未提供")
+            }
+            .textSelection(.enabled)
+            if !item.imgs.isEmpty {
+                Section("相关图片") {
+                    ScrollView(.horizontal) {
+                        HStack {
+                            ForEach(Array(item.imgs.enumerated()), id: \.element.id) { index, photo in
+                                Button { selectedImageIndex = index } label: {
+                                    AsyncImage(url: imageURL(photo.imgPath)) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: { ProgressView() }
+                                    .frame(width: 160, height: 160)
+                                    .clipShape(.rect(cornerRadius: 12))
                                 }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("预览第 \(index + 1) 张图片")
                             }
                         }
                     }
                 }
-                .padding(24)
             }
         }
-        .fullScreenCover(
-            isPresented: Binding(
-                get: { selectedImageIndex != nil },
-                set: { if !$0 { selectedImageIndex = nil } }
-            )
-        ) {
+        .navigationTitle("帖子详情")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        .fullScreenCover(isPresented: Binding(
+            get: { selectedImageIndex != nil },
+            set: { if !$0 { selectedImageIndex = nil } }
+        )) {
             LostFoundImageGallery(
                 images: item.imgs,
-                selectedIndex: Binding(
-                    get: { selectedImageIndex ?? 0 },
-                    set: { selectedImageIndex = $0 }
-                ),
+                selectedIndex: Binding(get: { selectedImageIndex ?? 0 }, set: { selectedImageIndex = $0 }),
                 imageURL: imageURL,
                 onClose: { selectedImageIndex = nil }
             )
         }
         .accessibilityIdentifier("lost-found.detail")
-    }
-
-    private func detail(_ label: String, _ value: String?) -> some View {
-        Text("\(label)：\(value ?? "未知")")
     }
 
     private func imageURL(_ value: String) -> URL? {
@@ -514,30 +458,22 @@ private struct LostFoundImageGallery: View {
     let onClose: () -> Void
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Color.black.ignoresSafeArea()
+        NavigationStack {
             TabView(selection: $selectedIndex) {
                 ForEach(Array(images.enumerated()), id: \.element.id) { index, item in
                     AsyncImage(url: imageURL(item.imgPath)) { image in
                         image.resizable().scaledToFit()
-                    } placeholder: {
-                        ProgressView().tint(.white)
-                    }
+                    } placeholder: { ProgressView() }
                     .tag(index)
-                    .padding(.vertical, 56)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.headline.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.black.opacity(0.55), in: Circle())
-            }
-            .padding(16)
-            .accessibilityLabel("关闭图片预览")
+            .background(.black)
+            .navigationTitle("相关图片")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成", action: onClose) } }
         }
+        .preferredColorScheme(.dark)
         .accessibilityIdentifier("lost-found.image-gallery")
     }
 }
@@ -548,127 +484,120 @@ private struct LostFoundPublishView: View {
     @State private var draft = LostFoundPublishDraft()
 
     var body: some View {
-        AndroidScreen {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("*目前智慧安大图片功能有时无法使用，请大家文字描述尽量详尽")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("发布帖子").font(.title2.bold())
-                    field("联系人 *", text: $draft.contact)
-                    field("联系电话 *", text: $draft.phone)
-                    field("描述内容 *", text: $draft.title, axis: .vertical)
-                    field("证件号（可选）", text: $draft.documentNumber)
-                    selector("选择校区") {
-                        ForEach(model.catalog.campuses) { campus in
-                            selectionChip(campus.campusName, selected: draft.campusID == campus.id) { draft.campusID = campus.id }
-                        }
-                    }
-                    selector("选择类型") {
-                        ForEach(model.catalog.types) { type in
-                            selectionChip(type.typeName, selected: draft.typeID == type.id) { draft.typeID = type.id }
-                        }
-                    }
-                    selector("选择事件类型") {
-                        selectionChip("失物招领", selected: draft.state == 1) { draft.state = 1 }
-                        selectionChip("寻物启事", selected: draft.state == 2) { draft.state = 2 }
-                    }
-                    Button {
-                        Task { if await model.publish(draft) { isPresented = false } }
-                    } label: {
-                        Text(model.mutation == .working ? "发布中…" : "发布")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(14)
-                            .background(AndroidParityPalette.systemTheme, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(model.mutation == .working)
-                    .accessibilityIdentifier("lost-found.publish.submit")
+        Form {
+            Section("帖子类型") {
+                Picker("帖子类型", selection: $draft.state) {
+                    Text("失物招领").tag(1)
+                    Text("寻物启事").tag(2)
                 }
-                .padding(24)
+                .pickerStyle(.segmented)
+            }
+            Section("联系信息") {
+                TextField("联系人", text: $draft.contact).textContentType(.name)
+                TextField("联系电话", text: $draft.phone)
+                    .keyboardType(.phonePad).textContentType(.telephoneNumber)
+            }
+            Section {
+                TextField("描述物品及拾取或遗失地点", text: $draft.title, axis: .vertical)
+                    .lineLimit(3...6)
+                TextField("证件号（可选）", text: $draft.documentNumber)
+                Picker("校区", selection: $draft.campusID) {
+                    Text("请选择").tag(String?.none)
+                    ForEach(model.catalog.campuses) { Text($0.campusName).tag(Optional($0.id)) }
+                }
+                Picker("物品类型", selection: $draft.typeID) {
+                    Text("请选择").tag(String?.none)
+                    ForEach(model.catalog.types) { Text($0.typeName).tag(Optional($0.id)) }
+                }
+            } header: {
+                Text("物品信息")
+            } footer: {
+                Text("除证件号外均为必填，请尽量描述清楚物品特征。")
             }
         }
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("发布帖子")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("取消") { isPresented = false } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(model.mutation == .working ? "发布中…" : "发布") {
+                    Task {
+                        if await model.publish(draft) {
+                            model.clearMutation()
+                            isPresented = false
+                        }
+                    }
+                }
+                .disabled(model.mutation == .working || draft.validationMessage != nil)
+                .accessibilityIdentifier("lost-found.publish.submit")
+            }
+        }
+        .alert("无法发布", isPresented: Binding(
+            get: { if case .failed = model.mutation { return true }; return false },
+            set: { if !$0 { model.clearMutation() } }
+        )) {
+            Button("确定", role: .cancel) { model.clearMutation() }
+        } message: { Text(model.mutation.message ?? "") }
         .accessibilityIdentifier("lost-found.publish.sheet")
-    }
-
-    private func field(_ title: String, text: Binding<String>, axis: Axis = .horizontal) -> some View {
-        TextField(title, text: text, axis: axis)
-            .padding(16)
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.secondary.opacity(0.75), lineWidth: 1)
-            }
-    }
-
-    private func selector<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            ScrollView(.horizontal) { HStack(spacing: 8) { content() } }.scrollIndicators(.hidden)
-        }
-    }
-
-    private func selectionChip(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(text)
-                .foregroundStyle(Color.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(selected ? AndroidParityPalette.primaryTone90 : Color.secondary.opacity(0.1), in: Capsule())
-        }
-        .buttonStyle(.plain)
     }
 }
 
 private struct LostFoundMyPostsView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var model: LostFoundViewModel
+    @State private var pendingDelete: LostFoundItem?
 
     var body: some View {
-        AndroidScreen {
-            VStack(alignment: .leading, spacing: 0) {
-                AndroidHeader(title: "管理我的帖子", large: true)
-                switch model.myPostsState {
-                case .idle, .loading:
-                    ProgressView("加载我的帖子…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .empty:
-                    AndroidEmptyState(text: "暂无帖子")
-                    Spacer()
-                case let .failed(error):
-                    VStack(spacing: 16) {
-                        Text(error.message)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(AndroidParityPalette.error)
-                        Button("重试") { Task { await model.loadMyPosts() } }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(32)
-                case let .loaded(items):
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(items) { item in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(item.title).font(.headline)
-                                        Text(item.state == 1 ? "失物招领" : "寻物启事")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Text(item.createtime ?? "").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Button("删除", role: .destructive) { Task { _ = await model.delete(item) } }
-                                }
-                                .padding(16)
-                                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
-                            }
+        List {
+            switch model.myPostsState {
+            case .idle, .loading:
+                ProgressView("加载我的帖子…")
+            case .empty:
+                ContentUnavailableView("暂无帖子", systemImage: "tray")
+            case let .failed(error):
+                ContentUnavailableView {
+                    Label("加载失败", systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text(error.message)
+                } actions: {
+                    Button("重试") { Task { await model.loadMyPosts() } }.buttonStyle(.bordered)
+                }
+            case let .loaded(items):
+                ForEach(items) { item in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            LostFoundItemRow(item: item)
+                            Text(item.state == 1 ? "失物招领" : "寻物启事").font(.caption).foregroundStyle(.secondary)
                         }
-                        .padding(16)
+                        Spacer()
+                        Button("删除", systemImage: "trash", role: .destructive) { pendingDelete = item }
+                            .labelStyle(.iconOnly)
+                            .disabled(model.mutation == .working)
                     }
                 }
             }
         }
+        .navigationTitle("我的帖子")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        .refreshable { await model.loadMyPosts() }
         .task { await model.loadMyPosts() }
+        .confirmationDialog("删除这条帖子？", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        ), titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                if let item = pendingDelete { Task { _ = await model.delete(item) } }
+                pendingDelete = nil
+            }
+        }
+        .alert("操作结果", isPresented: Binding(
+            get: { model.mutation.message != nil },
+            set: { if !$0 { model.clearMutation() } }
+        )) {
+            Button("确定", role: .cancel) { model.clearMutation() }
+        } message: { Text(model.mutation.message ?? "") }
         .accessibilityIdentifier("lost-found.my-posts")
     }
 }

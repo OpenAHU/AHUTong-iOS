@@ -39,12 +39,6 @@ final class StudyRepositoryViewModel: ObservableObject {
         await load()
     }
 
-    func goUp() async {
-        guard !currentPath.isEmpty else { return }
-        currentPath = currentPath.split(separator: "/").dropLast().joined(separator: "/")
-        await load()
-    }
-
     func navigate(to path: String) async {
         guard path != currentPath else { return }
         currentPath = path
@@ -111,7 +105,6 @@ final class StudyRepositoryViewModel: ObservableObject {
 }
 
 struct StudyRepositoryView: View {
-    @Environment(\.dismiss) private var dismiss
     @AppStorage(RepositoryAccelerationPreferences.key)
     private var accelerationSourceID = RepositoryAccelerationPreferences.defaultSource.rawValue
     @StateObject private var model: StudyRepositoryViewModel
@@ -127,7 +120,6 @@ struct StudyRepositoryView: View {
     var body: some View {
         AndroidScreen {
             VStack(spacing: 0) {
-                repositoryHeader
                 RepositoryBreadcrumb(
                     currentPath: currentVirtualPath,
                     onPathClick: navigate(to:)
@@ -140,18 +132,19 @@ struct StudyRepositoryView: View {
             }
         }
         .quickLookPreview($previewURL)
-        .fullScreenCover(isPresented: $showsRepositorySettings) {
-            RepositoryAccelerationSettingsView()
+        .navigationTitle("学习资料")
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar { repositoryToolbar }
+        .sheet(isPresented: $showsRepositorySettings) {
+            NavigationStack { RepositoryAccelerationSettingsView() }
+                .presentationDetents([.medium, .large])
         }
-        .overlay {
-            if let markdownRequest {
-                RepositoryMarkdownReaderView(
-                    request: markdownRequest,
-                    service: model.service,
-                    onDismiss: { self.markdownRequest = nil }
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        .sheet(item: $markdownRequest) { request in
+            NavigationStack {
+                RepositoryMarkdownReaderView(request: request, service: model.service,
+                                             onDismiss: { markdownRequest = nil })
             }
+            .presentationDetents([.medium, .large])
         }
         .task { await model.start() }
         .alert("提示", isPresented: Binding(
@@ -164,52 +157,20 @@ struct StudyRepositoryView: View {
         }
     }
 
-    private var repositoryHeader: some View {
-        HStack(spacing: 0) {
-            AndroidIconButton(systemName: "arrow.left", accessibilityLabel: "返回") {
-                if showsRepositorySelector {
-                    dismiss()
-                } else if model.currentPath.isEmpty {
-                    showsRepositorySelector = true
-                } else {
-                    Task { await model.goUp() }
-                }
-            }
-            Text("学习资料")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .accessibilityIdentifier("screen.study-repository")
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
+    @ToolbarContentBuilder
+    private var repositoryToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
             if !showsRepositorySelector {
-                if model.state.isLoading {
-                    ProgressView().controlSize(.small).frame(width: 48, height: 48)
-                } else {
-                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") {
-                        Task { await model.load(policy: .refresh) }
-                    }
-                }
+                Button("刷新资料", systemImage: "arrow.clockwise") { Task { await model.load(policy: .refresh) } }
+                    .disabled(model.state.isLoading)
             }
             NavigationLink {
-                RepositoryDownloadsView(service: model.service)
-                    .androidDetailScreen()
-            } label: {
-                Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 21))
-                    .foregroundStyle(.tint)
-                    .frame(width: 48, height: 48)
-            }
-            .buttonStyle(.plain)
+                RepositoryDownloadsView(service: model.service).androidDetailScreen()
+            } label: { Label("已下载", systemImage: "arrow.down.circle") }
             .accessibilityIdentifier("repository.downloads")
-            .accessibilityLabel("已下载")
-            AndroidIconButton(systemName: "slider.horizontal.3", accessibilityLabel: "学习资料设置") {
-                showsRepositorySettings = true
-            }
-            .accessibilityIdentifier("repository.settings")
+            Button("学习资料设置", systemImage: "slider.horizontal.3") { showsRepositorySettings = true }
+                .accessibilityIdentifier("repository.settings")
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10)
     }
 
     private var currentVirtualPath: String {
@@ -381,88 +342,37 @@ private enum RepositoryMarkdownRequest: Identifiable {
 }
 
 private struct RepositoryMarkdownReaderView: View {
-    @Environment(\.colorScheme) private var colorScheme
     let request: RepositoryMarkdownRequest
     let service: StudyRepositoryService
     let onDismiss: () -> Void
     @State private var state: LoadableState<RepositoryMarkdownDocument> = .idle
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.32)
-                .ignoresSafeArea()
-                .onTapGesture(perform: onDismiss)
-
-            VStack(spacing: 12) {
-                HStack(spacing: 12) {
-                    Text(request.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("关闭", action: onDismiss)
-                        .font(.subheadline.weight(.semibold))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.tint)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
+        Group {
+            switch state {
+            case .idle, .loading:
+                ProgressView("正在加载 Markdown…")
+            case .empty:
+                ContentUnavailableView("Markdown 内容为空", systemImage: "doc.text")
+            case let .failed(error):
+                ContentUnavailableView {
+                    Label("Markdown 加载失败", systemImage: "exclamationmark.triangle")
+                } description: { Text(error.message) } actions: {
+                    Button("重试") { Task { await load() } }.buttonStyle(.bordered)
                 }
-
-                Group {
-                    switch state {
-                    case .idle, .loading:
-                        VStack(spacing: 12) {
-                            ProgressView()
-                            Text("正在加载 Markdown…")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 160)
-                    case .empty:
-                        VStack(spacing: 8) {
-                            Image(systemName: "doc.text")
-                                .font(.system(size: 30))
-                                .foregroundStyle(.secondary)
-                            Text("Markdown 内容为空")
-                                .font(.headline)
-                            Text("这个文件目前没有可阅读的正文。")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 160)
-                    case let .failed(error):
-                        VStack(spacing: 10) {
-                            Label("Markdown 加载失败", systemImage: "exclamationmark.triangle")
-                                .font(.headline)
-                                .foregroundStyle(AndroidParityPalette.error)
-                            Text(error.message)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                            Button("重试") { Task { await load() } }
-                                .buttonStyle(.borderless)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 160)
-                    case let .loaded(document):
-                        ScrollView {
-                            Text(renderedMarkdown(document.content))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
-                                .accessibilityLabel("Markdown 正文")
-                        }
-                        .frame(maxHeight: 420)
-                    }
+            case let .loaded(document):
+                ScrollView {
+                    Text(renderedMarkdown(document.content))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .textSelection(.enabled)
+                        .accessibilityLabel("Markdown 正文")
                 }
             }
-            .padding(18)
-            .background(
-                AndroidParityPalette.raisedSurface(colorScheme),
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-            )
-            .padding(.horizontal, 24)
         }
+        .navigationTitle(request.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭", action: onDismiss) } }
         .task(id: request.id) { await load() }
         .accessibilityIdentifier("repository.markdown-dialog")
     }
@@ -501,89 +411,34 @@ private struct RepositoryMarkdownReaderView: View {
 
 private struct RepositoryAccelerationSettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @AppStorage(RepositoryAccelerationPreferences.key)
     private var selectedSourceID = RepositoryAccelerationPreferences.defaultSource.rawValue
 
     var body: some View {
-        AndroidScreen {
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    AndroidIconButton(systemName: "arrow.left", accessibilityLabel: "返回") {
-                        dismiss()
-                    }
-                    Text("学习资料设置")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 10)
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("GitHub 加速源")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .padding(.horizontal, 8)
-
-                        VStack(spacing: 2) {
-                            ForEach(RepositoryAccelerationSource.allCases) { source in
-                                accelerationSourceRow(source)
+        Form {
+            Section("GitHub 加速源") {
+                ForEach(RepositoryAccelerationSource.allCases) { source in
+                    Button {
+                        selectedSourceID = source.rawValue
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(source.name).foregroundStyle(.primary)
+                                Text(source.detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if selectedSourceID == source.rawValue {
+                                Image(systemName: "checkmark").accessibilityLabel("已选择")
                             }
                         }
-                        .background(
-                            AndroidParityPalette.raisedSurface(colorScheme),
-                            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                }
-                .scrollIndicators(.hidden)
-            }
-        }
-    }
-
-    private func accelerationSourceRow(
-        _ source: RepositoryAccelerationSource
-    ) -> some View {
-        let selected = selectedSourceID == source.rawValue
-        return Button {
-            selectedSourceID = source.rawValue
-        } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(source.name)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Text(source.detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.tint)
-                        .accessibilityLabel("已选择")
+                    .accessibilityIdentifier("repository.source.\(source.rawValue)")
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(selected ? selectedSourceColor : Color.clear)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("repository.source.\(source.rawValue)")
-    }
-
-    private var selectedSourceColor: Color {
-        colorScheme == .dark
-            ? Color.accentColor.opacity(0.24)
-            : Color.accentColor.opacity(0.12)
+        .navigationTitle("学习资料设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
     }
 }
 
@@ -876,15 +731,12 @@ struct RepositoryDownloadsView: View {
             }
         }
         .quickLookPreview($previewURL)
-        .overlay {
-            if let markdownRequest {
-                RepositoryMarkdownReaderView(
-                    request: markdownRequest,
-                    service: service,
-                    onDismiss: { self.markdownRequest = nil }
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        .sheet(item: $markdownRequest) { request in
+            NavigationStack {
+                RepositoryMarkdownReaderView(request: request, service: service,
+                                             onDismiss: { markdownRequest = nil })
             }
+            .presentationDetents([.medium, .large])
         }
         .task { await reload() }
         .confirmationDialog("删除选中的 \(selectedIDs.count) 个文件？", isPresented: $showBatchConfirmation) {

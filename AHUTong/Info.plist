@@ -4,6 +4,8 @@
 <dict>
     <key>AHUTongAppGroupIdentifier</key>
     <string>$(AHUTONG_APP_GROUP)</string>
+    <key>AHUTongCanteenWriteKey</key>
+    <string>$(AHUTONG_CANTEEN_WRITE_KEY_BASE64)</string>
     <key>AHUTongSentryDSN</key>
     <string>$(AHUTONG_SENTRY_DSN)</string>
     <key>CFBundleDisplayName</key>

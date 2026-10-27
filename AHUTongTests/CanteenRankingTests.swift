@@ -25,6 +25,14 @@ final class CanteenRankingTests: XCTestCase {
         await model.load(.init(), refresh: true)
         let refreshedCount = await remote.count
         XCTAssertEqual(refreshedCount, 2)
+        let filtered = CanteenQuery(selectedCanteens: ["梅园", "榴园"], limit: 200)
+        await model.load(filtered)
+        let filteredCount = await remote.count
+        XCTAssertEqual(filteredCount, 3)
+        XCTAssertEqual(model.saved?.query, filtered)
+        let items = URLComponents(url: filtered.url, resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(items?.first { $0.name == "canteens" }?.value, "梅园,榴园")
+        XCTAssertEqual(items?.first { $0.name == "limit" }?.value, "200")
     }
 
     @MainActor

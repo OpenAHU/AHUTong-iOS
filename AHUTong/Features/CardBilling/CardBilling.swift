@@ -13,6 +13,7 @@ struct CardBill: Decodable, Equatable, Identifiable, Sendable {
     let remark: String?
     let effectdateStr: String?
     let jndatetimeStr: String?
+    let locationName: String?
     var id: String { orderId }
     var isExpense: Bool { typeFrom != "1" }
     var merchant: String { [toMerchant, resume, turnoverType].compactMap { $0 }.first { !$0.isEmpty } ?? "校园卡交易" }

@@ -46,13 +46,124 @@ final class CampusLifeUITests: XCTestCase {
         XCTAssertTrue(period.waitForExistence(timeout: 5))
         period.buttons["近30天"].tap()
         app.buttons["canteen.campus"].tap()
-        let longhe = app.buttons["龙河"]
+        let longhe = app.buttons["磬苑"]
         XCTAssertTrue(longhe.waitForExistence(timeout: 3))
         longhe.tap()
-        XCTAssertTrue(app.staticTexts["龙河 · 近30天热度榜"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["磬苑 · 近30天热度榜"].waitForExistence(timeout: 3))
         app.staticTexts["风味小炒"].tap()
         XCTAssertTrue(app.navigationBars["窗口详情"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "平均每笔", "12.50")).firstMatch.exists)
+    }
+
+    func testCanteenIndividualCanteenFilterRemovesOtherWindows() {
+        let app = open("tools.canteen")
+        defer { app.terminate() }
+        app.buttons["canteen.canteens"].tap()
+        chooseOnlyMeiyuan(app)
+        XCTAssertTrue(app.staticTexts["梅园 · 近7天热度榜"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["面食窗口"].exists)
+        XCTAssertFalse(app.staticTexts["风味小炒"].exists)
+    }
+
+    func testCanteenMultipleSelectionKeepsOnlySelectedCanteens() {
+        let app = open("tools.canteen")
+        defer { app.terminate() }
+        app.buttons["canteen.canteens"].tap()
+        XCTAssertTrue(app.buttons["canteen.clear-selection"].waitForExistence(timeout: 3))
+        app.buttons["canteen.clear-selection"].tap()
+        for name in ["梅园", "榴园"] {
+            let toggle = app.switches["canteen.select.\(name)"]
+            for _ in 0..<3 where !toggle.isHittable { app.swipeUp() }
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.5)).tap()
+            XCTAssertEqual(toggle.value as? String, "1")
+        }
+        app.buttons["canteen.selection-done"].tap()
+        XCTAssertTrue(app.staticTexts["梅园、榴园 · 近7天热度榜"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["风味小炒"].exists)
+        XCTAssertTrue(app.staticTexts["面食窗口"].exists)
+        XCTAssertFalse(app.staticTexts["未命名窗口"].exists)
+    }
+
+    func testCanteenDrawRevealsRankAndAverageForSelectedCanteen() {
+        let app = open("tools.canteen")
+        defer { app.terminate() }
+        app.buttons["canteen.draw"].tap()
+        XCTAssertTrue(app.buttons["canteen.draw-canteens"].waitForExistence(timeout: 3))
+        app.buttons["canteen.draw-canteens"].tap()
+        chooseOnlyMeiyuan(app)
+        let start = app.buttons["canteen.draw-start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 4))
+        start.tap()
+        XCTAssertTrue(app.staticTexts["正在挑选…"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["这次就吃它"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["面食窗口"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["风味小炒"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "平均消费", "9.00")).firstMatch.waitForExistence(timeout: 4))
+    }
+
+    func testCanteenLeavingDuringDrawCancelsIt() {
+        let app = open("tools.canteen")
+        defer { app.terminate() }
+        app.buttons["canteen.draw"].tap()
+        let start = app.buttons["canteen.draw-start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 4))
+        start.tap()
+        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["canteen.draw"].tap()
+        XCTAssertTrue(start.waitForExistence(timeout: 4))
+        XCTAssertTrue(start.isEnabled)
+        XCTAssertFalse(app.staticTexts["这次就吃它"].exists)
+    }
+
+    func testCanteenPersonalRecordsPreviewRequiresConsentAndDisablesDemoUpload() {
+        let app = open("tools.canteen")
+        defer { app.terminate() }
+        app.buttons["canteen.my-records"].tap()
+        XCTAssertTrue(app.navigationBars["我的记录"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "正餐次数", "3 餐")).firstMatch.waitForExistence(timeout: 4))
+        let preview = app.navigationBars.buttons["canteen.contribution-preview"]
+        XCTAssertTrue(preview.isHittable)
+        preview.tap()
+        XCTAssertTrue(app.navigationBars["贡献预览"].waitForExistence(timeout: 3))
+        let submit = app.navigationBars.buttons["canteen.contribution-submit"]
+        XCTAssertTrue(submit.exists)
+        XCTAssertFalse(submit.isEnabled)
+        app.switches["canteen.contribution-consent"].tap()
+        XCTAssertFalse(submit.isEnabled)
+        XCTAssertTrue(app.staticTexts["演示数据不会提交"].exists)
+    }
+
+    func testCanteenPersonalEmptyStateIsExplicit() {
+        let app = open("tools.canteen", state: "empty")
+        defer { app.terminate() }
+        app.buttons["canteen.my-records"].tap()
+        XCTAssertTrue(app.staticTexts["暂无用餐记录"].waitForExistence(timeout: 4))
+    }
+
+    func testCanteenPersonalFailureCanRetry() {
+        let app = open("tools.canteen", state: "error")
+        defer { app.terminate() }
+        app.buttons["canteen.my-records"].tap()
+        let retry = app.buttons["canteen.records-retry"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 4))
+        retry.tap()
+        XCTAssertTrue(retry.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["暂无用餐记录"].exists)
+    }
+
+    private func chooseOnlyMeiyuan(_ app: XCUIApplication) {
+        let clear = app.buttons["canteen.clear-selection"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 3))
+        clear.tap()
+        let meiyuan = app.switches["canteen.select.梅园"]
+        for _ in 0..<3 where !meiyuan.isHittable { app.swipeUp() }
+        XCTAssertTrue(meiyuan.isHittable)
+        meiyuan.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.5)).tap()
+        XCTAssertEqual(meiyuan.value as? String, "1")
+        let done = app.buttons["canteen.selection-done"]
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.navigationBars["选择食堂"].waitForNonExistence(timeout: 3))
     }
 
     func testCanteenEmptyStateKeepsFiltersAvailable() {

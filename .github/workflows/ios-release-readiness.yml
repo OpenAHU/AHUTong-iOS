@@ -127,6 +127,11 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 
+      - name: Configure required canteen contribution
+        env:
+          CANTEEN_WRITE_KEY: ${{ secrets.CANTEEN_WRITE_KEY }}
+        run: python3 scripts/configure-canteen-key.py "$RUNNER_TEMP/Canteen.xcconfig.local" --require-key
+
       - name: Create unsigned Release archive
         shell: bash
         run: |
@@ -135,6 +140,7 @@ jobs:
             -project AHUTong.xcodeproj \
             -scheme AHUTong \
             -configuration Release \
+            -xcconfig "$RUNNER_TEMP/Canteen.xcconfig.local" \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/AHUTong.xcarchive" \
             ENABLE_CODE_COVERAGE=NO \
@@ -142,6 +148,11 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             clean archive
+
+      - name: Verify built contribution configuration
+        env:
+          CANTEEN_WRITE_KEY: ${{ secrets.CANTEEN_WRITE_KEY }}
+        run: python3 scripts/configure-canteen-key.py "$RUNNER_TEMP/AHUTong.xcarchive/Products/Applications/AHUTong.app" --verify-app --require-key
 
       - name: Validate archive structure and privacy manifests
         shell: bash

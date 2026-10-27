@@ -42,3 +42,17 @@ App 使用 `Sentry-Static`：SDK 代码静态链接到主程序，包内 `Sentry
 2026-10-27 此前本地候选 1.0.4 (10)：App Debug ID `CE895003-E7B0-34DC-AB00-F2E78DB82723`，Widget `6DFCDA48-F841-3467-96DE-645C37182F02`；已与该 Archive 的 dSYM 匹配，文件在 `build/deliverables/1.0.4-10-native-tools/`。包含最终分类 UI，OCR 保持服务器实现，诊断采集策略不变。
 
 2026-10-27 最新真机安装版本 **1.0.5 (11)**：App Debug ID `4792A98F-8E98-3A47-96AA-0F802FD5AD11`，Widget `6DFCDA48-F841-3467-96DE-645C37182F02`；二进制与 dSYM 逐一匹配，存放于 `build/deliverables/1.0.5-11-device/`。Actions 继续暂停，新符号未上传，不宣称此 App UUID 已服务端符号化；诊断采集策略不变。
+
+2026-10-27 最新本地实机验收包 **1.0.5 (12)**：App Debug ID `9BD909DB-3235-3E91-BF45-0E596EDD612B`，Widget `80430A69-031D-3780-B988-1005B9B39258`；与 Archive 的 dSYM 逐一匹配，存放于 `build/deliverables/1.0.5-12-device/`。已覆盖安装并正常启动，用户功能验收待确认；本轮不推送、不触发Actions，符号未上传，采集策略不变。
+
+### 2026-10-27 本地验收修正版1.0.5（13）
+
+首页刷新/深色导航修正使用正式Release重新Archive并保留数据覆盖安装，同一生产标识与原授权。App dSYM UUID `843D39E6-C994-3350-8A94-C52FE1813E5C`，Widget仍为 `80430A69-031D-3780-B988-1005B9B39258`，均已匹配二进制并保存于 `build/deliverables/1.0.5-13-device/AHUTong-1.0.5-13-dSYMs.zip`；没有上传新符号或触发Actions。Sentry采集范围与同意策略未变。安装后的命令启动曾以0退出，未发现新主App崩溃报告；随后真实屏幕和最终主进程复核正常，详细本地记录见迁移路线图E-20261027-11。
+
+### 2026-10-27 必吃榜配置验收包1.0.5（14）
+
+App dSYM UUID `ACDEF577-52A0-38A1-9763-15BFC5524B5D`，Widget仍为 `80430A69-031D-3780-B988-1005B9B39258`，均与二进制匹配并保存于 `build/deliverables/1.0.5-14-device/AHUTong-1.0.5-14-dSYMs.zip`。已覆盖安装并正常启动，符号未上传，不触发Actions。IPA保留公开DSN，扫描未发现Sentry管理令牌格式或CI Secret变量名；贡献客户端密钥可提取的独立审计见迁移路线图E-20261027-13。采集与同意策略未变。
+
+### 2026-10-28 1.0.6（15）
+
+本地Release App UUID `CFE9D995-325B-3F2B-9468-9C26BE7867CD`、Widget UUID `80430A69-031D-3780-B988-1005B9B39258`均与本次Archive的dSYM匹配。用户已授权恢复Actions；本次云端产物由两条设备workflow自动上传各自匹配符号，运行结果见[PR #12](https://github.com/OpenAHU/AHUTong-iOS/pull/12)关联Checks。云端重新构建的UUID以实际产物为准，不沿用本地UUID。Sentry管理令牌仅用于符号上传步骤；采集范围不变，不新增校园码失败或日活采集。

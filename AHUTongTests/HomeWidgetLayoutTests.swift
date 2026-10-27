@@ -12,14 +12,15 @@ final class HomeWidgetLayoutTests: XCTestCase {
         XCTAssertEqual(layout.slots[3], "exam")
     }
 
-    func testDecodingRemovesRetiredWidgets() throws {
-        let data = Data(#"{"slots":["grade","evaluation","exam",null,null,null,null,null]}"#.utf8)
+    func testDecodingPreservesStoredIDsAndRemovesRetiredWidgets() throws {
+        let data = Data(#"{"slots":["phone_book","repository","evaluation","student_mail",null,null,null,null]}"#.utf8)
 
         let layout = try JSONDecoder().decode(HomeWidgetLayout.self, from: data)
 
-        XCTAssertEqual(layout.slots[0], "grade")
-        XCTAssertNil(layout.slots[1])
-        XCTAssertEqual(layout.slots[2], "exam")
+        XCTAssertEqual(layout.slots[0], "phone_book")
+        XCTAssertEqual(layout.slots[1], "repository")
+        XCTAssertNil(layout.slots[2])
+        XCTAssertEqual(layout.slots[3], "student_mail")
     }
 
     func testAddRemoveAndMovePreserveUniqueSlots() {

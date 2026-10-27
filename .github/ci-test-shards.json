@@ -51,6 +51,8 @@
     "ExperiencePolishUITests/testCourseDetailScrollsWithAccessibilityTextSize",
     "ExperiencePolishUITests/testCourseDetailShowsAllIrregularWeeksAndLongMetadata",
     "ExperiencePolishUITests/testSettingsTabReturnsToRootAfterLeavingDetailViaShortcut",
+    "ExperiencePolishUITests/testHomeRefreshPreservesCourseStatusAndNavigation",
+    "ExperiencePolishUITests/testHomeRefreshWithoutCoursesRemainsInteractive",
     "ExperiencePolishUITests/testWeekIndicatorsAreCirclesForSingleAndDoubleDigits"
   ]
 }

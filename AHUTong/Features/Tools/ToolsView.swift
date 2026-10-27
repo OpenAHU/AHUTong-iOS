@@ -2,16 +2,12 @@ import SwiftUI
 
 struct ToolsView: View {
     @ObservedObject var appModel: AppModel
-    var homeEditEnabled = true
     var onOpenSchedule: () -> Void = {}
     var onEditHome: () -> Void = {}
     @State private var searchText = ""
     @State private var showsWidgetGuide = false
     @State private var widgetSnapshot: ScheduleWidgetSnapshot?
 
-    private var accountID: String {
-        if case let .authenticated(user) = appModel.sessionState { user.studentID } else { "guest" }
-    }
     private var query: String { searchText.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var matchingTools: [ToolItem] {
         ToolItem.allCases.filter { query.isEmpty || $0.title.localizedStandardContains(query) }
@@ -31,7 +27,7 @@ struct ToolsView: View {
                                 .accessibilityAddTraits(.isHeader)
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 10) {
                                 ForEach(tools) { tool in
-                                    NavigationLink { destination(for: tool) } label: { card(for: tool) }
+                                    NavigationLink { ToolDestination(tool: tool, appModel: appModel) } label: { card(for: tool) }
                                         .buttonStyle(PressFeedbackStyle(cornerRadius: 18))
                                         .accessibilityLabel(tool.title)
                                         .accessibilityIdentifier("tools.\(tool.id)")
@@ -66,11 +62,9 @@ struct ToolsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
-            if homeEditEnabled {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("编辑首页", systemImage: "square.grid.2x2") { onEditHome() }
-                        .accessibilityIdentifier("tools.edit-home")
-                }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("编辑首页", systemImage: "square.grid.2x2") { onEditHome() }
+                    .accessibilityIdentifier("tools.edit-home")
             }
         }
         .sheet(isPresented: $showsWidgetGuide) { widgetGuide }
@@ -78,18 +72,9 @@ struct ToolsView: View {
 
     private func card(for tool: ToolItem) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: tool.symbol)
+            ToolIcon(tool: tool)
                 .font(.system(size: 22))
-                .foregroundStyle(tool.tint)
                 .frame(width: 28)
-                .overlay {
-                    if tool == .lostFound {
-                        Image(systemName: AndroidParitySymbol.lostAndFoundQuestion)
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(tool.tint)
-                    }
-                }
-                .accessibilityHidden(true)
             Text(tool.title)
                 .font(.body.weight(.medium))
                 .foregroundStyle(Color.primary)
@@ -161,73 +146,4 @@ struct ToolsView: View {
         .accessibilityIdentifier("tools.widget-guide")
     }
 
-    @ViewBuilder
-    private func destination(for tool: ToolItem) -> some View {
-        switch tool {
-        case .bathroom: BathroomPaymentView(appModel: appModel).androidDetailScreen()
-        case .electricity: ElectricityPaymentView(appModel: appModel).androidDetailScreen()
-        case .programCompletion: ProgramCompletionView(appModel: appModel).modifier(NativeServiceDetailModifier())
-        case .cardBilling: CardBillingView(appModel: appModel).modifier(NativeServiceDetailModifier())
-        case .attendance: AttendanceView(appModel: appModel).id(accountID).modifier(NativeServiceDetailModifier())
-        case .canteen: CanteenRankingView().modifier(NativeServiceDetailModifier())
-        case .grade: GradeView(appModel: appModel).androidDetailScreen()
-        case .exam: ExamView(appModel: appModel).androidDetailScreen()
-        case .networkRecharge: NetworkRechargeView(appModel: appModel).androidDetailScreen()
-        case .phoneBook: PhoneBookView()
-        case .studentMail: StudentMailView(appModel: appModel)
-        case .schoolCalendar: SchoolCalendarView().androidDetailScreen()
-        case .weather: WeatherView().androidDetailScreen()
-        case .studyRepository: StudyRepositoryView().androidDetailScreen()
-        case .freeClassroom: FreeClassroomView(appModel: appModel).androidDetailScreen()
-        case .lostFound: LostFoundView(appModel: appModel).androidDetailScreen()
-        }
-    }
-}
-
-enum ToolCategory: String, CaseIterable {
-    case payment = "缴费充值", academic = "学业教务", campus = "校园生活", learning = "学习工具"
-}
-
-enum ToolItem: String, CaseIterable, Identifiable {
-    case bathroom, electricity, networkRecharge = "network-recharge"
-    case grade, exam, schoolCalendar = "school-calendar", programCompletion = "program-completion"
-    case freeClassroom = "free-classroom", attendance
-    case lostFound = "lost-found", weather, studentMail = "student-mail", phoneBook = "phone-book"
-    case canteen, cardBilling = "card-billing", studyRepository = "study-repository"
-
-    var id: String { rawValue }
-    var title: String { presentation.title }
-    var symbol: String { presentation.symbol }
-    var tint: Color { presentation.tint }
-    var category: ToolCategory { presentation.category }
-
-    private var presentation: (title: String, symbol: String, tint: Color, category: ToolCategory) {
-        switch self {
-        case .bathroom: ("浴室缴费", "shower.fill", .teal, .payment)
-        case .electricity: ("电控缴费", "bolt.fill", .orange, .payment)
-        case .networkRecharge: ("网费充值", "network", .blue, .payment)
-        case .grade: ("成绩单", "chart.bar.doc.horizontal", .orange, .academic)
-        case .attendance: ("教务考勤", "checkmark.rectangle", .mint, .academic)
-        case .canteen: ("必吃榜", "fork.knife", .orange, .campus)
-        case .exam: ("考场查询", "mappin.and.ellipse", .green, .academic)
-        case .schoolCalendar: ("校历", "square.grid.2x2", .purple, .academic)
-        case .programCompletion: ("培养方案", "graduationcap", .indigo, .academic)
-        case .freeClassroom: ("空闲教室", "building.2", .cyan, .academic)
-        case .phoneBook: ("电话本", "person.crop.rectangle.stack", .teal, .campus)
-        case .studentMail: ("校园邮箱", "envelope", .blue, .campus)
-        case .lostFound: ("失物招领", AndroidParitySymbol.lostAndFoundBag, .blue, .campus)
-        case .weather: ("天气", "sun.max.fill", .orange, .campus)
-        case .cardBilling: ("校园卡账单", "list.bullet.rectangle", .teal, .campus)
-        case .studyRepository: ("学习资料", "doc.on.doc", .brown, .learning)
-        }
-    }
-}
-
-private struct NativeServiceDetailModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content.navigationBarTitleDisplayMode(.inline)
-            .toolbar(.visible, for: .navigationBar)
-            .toolbar(.hidden, for: .tabBar)
-            .background(NativeNavigationGestureBridge())
-    }
 }

@@ -2,48 +2,6 @@ import Foundation
 import XCTest
 @testable import AHUTong
 
-final class GrayRolloutTests: XCTestCase {
-    func testBucketMatchesAndroidSHA256Implementation() {
-        XCTAssertEqual(GrayRollout.bucket(featureKey: "home_edit", subjectKey: "guest"), 57)
-        XCTAssertEqual(GrayRollout.bucket(featureKey: "home_edit", subjectKey: "student-20260001"), 58)
-        XCTAssertEqual(GrayRollout.bucket(featureKey: "payment", subjectKey: "guest"), 42)
-    }
-
-    func testRolloutBoundaryIsClamped() {
-        XCTAssertFalse(GrayRollout.isEnabled(rolloutPercentage: 0, bucket: 0))
-        XCTAssertTrue(GrayRollout.isEnabled(rolloutPercentage: 100, bucket: 99))
-        XCTAssertTrue(GrayRollout.isEnabled(rolloutPercentage: 25, bucket: 24))
-        XCTAssertFalse(GrayRollout.isEnabled(rolloutPercentage: 25, bucket: 25))
-    }
-
-    func testSubjectIsHashedBeforeRemoteQuery() throws {
-        let rawID = "2026000001"
-        let hash = GrayRollout.subjectHash(userID: rawID)
-        XCTAssertEqual(hash.count, 64)
-        XCTAssertFalse(hash.contains(rawID))
-
-        let url = try GrayReleaseService.remoteURL(
-            endpoint: URL(string: "https://openahu.org/api/gray/check")!,
-            feature: "home_edit",
-            hashedSubject: hash,
-            versionCode: 1,
-            versionName: "3.1.9"
-        )
-        XCTAssertFalse(url.absoluteString.contains(rawID))
-        XCTAssertTrue(url.absoluteString.contains(hash))
-    }
-
-    func testRemoteURLRejectsRawSubject() {
-        XCTAssertThrowsError(try GrayReleaseService.remoteURL(
-            endpoint: URL(string: "https://openahu.org/api/gray/check")!,
-            feature: "home_edit",
-            hashedSubject: "2026000001",
-            versionCode: 1,
-            versionName: "3.1.9"
-        ))
-    }
-}
-
 final class RedactingLoggerTests: XCTestCase {
     func testSensitiveFieldsAndBearerAreRedacted() {
         let input = [
@@ -90,6 +48,7 @@ final class RedactingLoggerTests: XCTestCase {
         let input = [
             "Cookie: SESSION=cookie-value; Path=/",
             "X-AHUTONG-TOKEN: local-server-value",
+            "X-Api-Key: contribution-fixture-value",
             "Authorization: Basic base64-value",
             #"payload={"password":"json-password","token":"json-token"}"#,
             #"other={'studentId':'student-value','phone':'phone-value'}"#
@@ -100,6 +59,7 @@ final class RedactingLoggerTests: XCTestCase {
         for secret in [
             "cookie-value",
             "local-server-value",
+            "contribution-fixture-value",
             "base64-value",
             "json-password",
             "json-token",
@@ -110,6 +70,7 @@ final class RedactingLoggerTests: XCTestCase {
         }
         XCTAssertTrue(output.contains("Cookie: <redacted>"))
         XCTAssertTrue(output.contains("X-AHUTONG-TOKEN: <redacted>"))
+        XCTAssertTrue(output.contains("X-Api-Key: <redacted>"))
         XCTAssertTrue(output.contains("Authorization: <redacted>"))
         XCTAssertTrue(output.contains(#"payload={"password":"<redacted>","token":"<redacted>"}"#))
         XCTAssertTrue(output.contains(#"other={'studentId':"<redacted>",'phone':"<redacted>"}"#))

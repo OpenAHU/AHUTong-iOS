@@ -6,7 +6,6 @@ struct RootView: View {
     @State private var selectedTab: AppTab = .home
     @StateObject private var onboardingModel: OnboardingViewModel
     @StateObject private var appModel: AppModel
-    @StateObject private var grayGate = GrayFeatureGateModel()
     @StateObject private var toastCenter = AppToastCenter()
     @State private var restoredConsentKey = ""
     @StateObject private var shortcutNavigation = ShortcutNavigation.shared
@@ -59,6 +58,7 @@ struct RootView: View {
                             destination(for: tab)
                         }
                         .id(navigationID(for: tab))
+                        .modifier(TabPageEntrance())
                         .tabItem {
                             Label {
                                 Text(tab.title)
@@ -121,15 +121,11 @@ struct RootView: View {
             }
             handleShortcutRequest()
             Task {
-                await reloadGrayGate()
                 await rescheduleCourseRemindersIfNeeded()
             }
         }
         .onChange(of: shortcutNavigation.pendingRequest, initial: true) { _, _ in
             handleShortcutRequest()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .grayFeatureOverrideChanged)) { _ in
-            Task { await reloadGrayGate() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .campusCredentialsRejected)) { _ in
             guard !AppRuntime.isDemoSession else { return }
@@ -188,7 +184,6 @@ struct RootView: View {
         case .home:
             HomeView(
                 appModel: appModel,
-                homeEditEnabled: grayGate.homeEditEnabled,
                 paymentCodeRequestID: paymentCodeRequestID
             ) {
                 selectedTab = .schedule
@@ -196,7 +191,7 @@ struct RootView: View {
         case .schedule:
             ScheduleView(appModel: appModel)
         case .tools:
-            ToolsView(appModel: appModel, homeEditEnabled: grayGate.homeEditEnabled, onOpenSchedule: {
+            ToolsView(appModel: appModel, onOpenSchedule: {
                 selectedTab = .schedule
             }) {
                 AppRuntime.sessionDefaults.set(true, forKey: "home.request-edit")
@@ -249,16 +244,6 @@ struct RootView: View {
         await appModel.restore(
             privacyDecision: onboardingModel.consent.privacyDecision,
             demoSession: AppRuntime.isDemoSession
-        )
-        await reloadGrayGate()
-    }
-
-    private func reloadGrayGate() async {
-        let userID: String?
-        if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = nil }
-        await grayGate.load(
-            userID: userID,
-            demo: AppRuntime.isDemoSession
         )
     }
 
