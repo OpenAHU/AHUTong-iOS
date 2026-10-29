@@ -1,18 +1,28 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("theme.color") private var themeColor = AndroidThemeColor.defaultValue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("theme.color", store: AppRuntime.sessionDefaults) private var themeColor = AndroidThemeColor.defaultValue
     @State private var selectedTab: AppTab = .home
     @StateObject private var onboardingModel: OnboardingViewModel
     @StateObject private var appModel: AppModel
     @StateObject private var toastCenter = AppToastCenter()
     @State private var restoredConsentKey = ""
     @StateObject private var shortcutNavigation = ShortcutNavigation.shared
-    @State private var homeNavigationID = UUID()
-    @State private var settingsNavigationID = UUID()
-    @State private var toolsNavigationID = UUID()
+    @State private var homePath = NavigationPath()
+    @State private var schedulePath = NavigationPath()
+    @State private var settingsPath = NavigationPath()
+    @State private var toolsPath = NavigationPath()
+    @State private var toolsSearchText = ""
+    @State private var toolsSearchPresented = false
+    @State private var scheduleHeaderAction: ScheduleHeaderAction?
+    @State private var showsScanner = false
     @State private var paymentCodeRequestID: UUID?
+    @StateObject private var updateMonitor = AppUpdateMonitor()
+    @State private var updatePrompt: ActionsUpdate?
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -54,11 +64,13 @@ struct RootView: View {
             } else {
                 TabView(selection: tabSelection) {
                     ForEach(availableTabs) { tab in
-                        NavigationStack {
+                        NavigationStack(path: navigationPath(for: tab)) {
                             destination(for: tab)
+                                .navigationDestination(for: ToolItem.self) { tool in
+                                    ToolDestination(tool: tool, appModel: appModel)
+                                }
+                                .toolbar { rootToolbar(for: tab) }
                         }
-                        .id(navigationID(for: tab))
-                        .modifier(TabPageEntrance())
                         .tabItem {
                             Label {
                                 Text(tab.title)
@@ -72,6 +84,7 @@ struct RootView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AndroidParityRootBackground())
+                .sheet(isPresented: $showsScanner) { ScanView() }
             }
         }
         .environmentObject(toastCenter)
@@ -88,6 +101,21 @@ struct RootView: View {
             )
             await restoreForCurrentConsent()
         }
+        .task(id: canPresentUpdate) {
+            guard canPresentUpdate else { return }
+            await updateMonitor.check()
+            guard canPresentUpdate, !Task.isCancelled, let update = updateMonitor.available else { return }
+            updatePrompt = update
+            updateMonitor.markPresented(update)
+        }
+        .alert("有可用更新", isPresented: Binding(
+            get: { updatePrompt != nil }, set: { if !$0 { updatePrompt = nil } }
+        )) {
+            if let update = updatePrompt {
+                Button("查看下载") { openURL(update.destination) }
+            }
+            Button("稍后", role: .cancel) { updatePrompt = nil }
+        } message: { Text(updatePrompt?.message ?? "") }
         .onChange(of: onboardingModel.consent) { _, consent in
             AppDiagnostics.shared.updateConsent(consent)
             Task {
@@ -106,7 +134,8 @@ struct RootView: View {
             }
         }
         .tint(themeTint)
-        .onChange(of: selectedTab) { previous, _ in
+        .onChange(of: selectedTab) { previous, current in
+            AppDiagnostics.shared.page(current.rawValue, dark: colorScheme == .dark, wallpaper: AppBackgroundStore.shared.image != nil)
             // Discard a departing utility/settings stack even when selection
             // changes through a deep link instead of the system tab binding.
             if previous == .tools || previous == .settings { resetNavigationRoot(previous) }
@@ -114,7 +143,12 @@ struct RootView: View {
         .onChange(of: appModel.sessionState) { _, state in
             switch state {
             case .authenticated: break
-            default: paymentCodeRequestID = nil
+            default:
+                paymentCodeRequestID = nil
+                homePath = NavigationPath()
+                schedulePath = NavigationPath()
+                resetNavigationRoot(.tools)
+                resetNavigationRoot(.settings)
             }
             if case .experience = state, !availableTabs.contains(selectedTab) {
                 selectedTab = .schedule
@@ -145,36 +179,81 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             Task {
                 if phase == .active {
+                    AppDiagnostics.shared.foreground()
                     await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: true)
                     await rescheduleCourseRemindersIfNeeded()
                 } else if phase == .background {
+                    AppDiagnostics.shared.log(.runtime, "app.background")
                     await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: false)
                 }
             }
         }
     }
 
+    private var canPresentUpdate: Bool {
+        guard !AppRuntime.usesIsolatedUITestStorage, onboardingModel.consent.isComplete,
+              scenePhase == .active, !showsScanner, shortcutNavigation.pendingRequest == nil,
+              paymentCodeRequestID == nil, homePath.isEmpty, schedulePath.isEmpty,
+              toolsPath.isEmpty, settingsPath.isEmpty else { return false }
+        switch appModel.sessionState {
+        case .authenticated, .experience: return true
+        case .loading, .signedOut: return false
+        }
+    }
+
     private var tabSelection: Binding<AppTab> {
         Binding(get: { selectedTab }, set: { tab in
-            if tab == .tools || tab == .settings { resetNavigationRoot(tab) }
-            selectedTab = tab
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+                if tab == .tools || tab == .settings { resetNavigationRoot(tab) }
+                selectedTab = tab
+            }
         })
+    }
+
+    @ToolbarContentBuilder
+    private func rootToolbar(for tab: AppTab) -> some ToolbarContent {
+        if (tab == .schedule || tab == .tools), navigationPath(for: tab).wrappedValue.isEmpty {
+            // Both native bars receive the same update during the tab transition.
+            // UIKit can then animate its glass group instead of crossfading two unrelated groups.
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if selectedTab == .schedule {
+                    Button("回到当前周", systemImage: "location") { scheduleHeaderAction = .currentWeek }
+                        .accessibilityIdentifier("schedule.action.回到当前周")
+                    Button("课表设置", systemImage: "gearshape") { scheduleHeaderAction = .settings }
+                        .accessibilityIdentifier("schedule.settings")
+                    Button("刷新课表", systemImage: "arrow.clockwise") { scheduleHeaderAction = .refresh }
+                        .accessibilityIdentifier("schedule.refresh")
+                } else if selectedTab == .tools {
+                    Button("扫一扫", systemImage: "qrcode.viewfinder") { showsScanner = true }
+                        .accessibilityIdentifier("tools.scan")
+                    Button("编辑首页", systemImage: "square.grid.2x2") {
+                        AppRuntime.sessionDefaults.set(true, forKey: "home.request-edit")
+                        selectedTab = .home
+                    }
+                    .accessibilityIdentifier("tools.edit-home")
+                }
+            }
+        }
     }
 
     private func resetNavigationRoot(_ tab: AppTab) {
         switch tab {
-        case .tools: toolsNavigationID = UUID()
-        case .settings: settingsNavigationID = UUID()
+        case .tools:
+            toolsPath = NavigationPath()
+            toolsSearchPresented = false
+            toolsSearchText = ""
+        case .settings: settingsPath = NavigationPath()
+        case .home: homePath = NavigationPath()
         default: break
         }
     }
 
-    private func navigationID(for tab: AppTab) -> String {
+    private func navigationPath(for tab: AppTab) -> Binding<NavigationPath> {
         switch tab {
-        case .home: homeNavigationID.uuidString
-        case .settings: settingsNavigationID.uuidString
-        case .tools: toolsNavigationID.uuidString
-        default: tab.rawValue
+        case .home: $homePath
+        case .schedule: $schedulePath
+        case .settings: $settingsPath
+        case .tools: $toolsPath
         }
     }
 
@@ -189,14 +268,11 @@ struct RootView: View {
                 selectedTab = .schedule
             }
         case .schedule:
-            ScheduleView(appModel: appModel)
+            ScheduleView(appModel: appModel, headerAction: $scheduleHeaderAction)
         case .tools:
-            ToolsView(appModel: appModel, onOpenSchedule: {
+            ToolsView(appModel: appModel, searchText: $toolsSearchText, searchPresented: $toolsSearchPresented, onOpenSchedule: {
                 selectedTab = .schedule
-            }) {
-                AppRuntime.sessionDefaults.set(true, forKey: "home.request-edit")
-                selectedTab = .home
-            }
+            })
         case .settings:
             SettingsView(onboardingModel: onboardingModel, appModel: appModel)
         }
@@ -210,12 +286,12 @@ struct RootView: View {
             // Keep a cold-start request until setup and a real login finish.
             return
         case .experience:
-            settingsNavigationID = UUID()
+            resetNavigationRoot(.settings)
             selectedTab = .settings
             toastCenter.show("付款码需要登录真实校园账号，请先登录")
         case .authenticated:
             paymentCodeRequestID = request.id
-            homeNavigationID = UUID()
+            resetNavigationRoot(.home)
             selectedTab = .home
         }
         shortcutNavigation.consume(request)

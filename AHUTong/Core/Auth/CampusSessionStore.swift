@@ -192,6 +192,7 @@ final class AppModel: ObservableObject {
         guard let credentials = result.credentials else {
             throw CampusWebAuthenticationError.credentialsUnavailable
         }
+        AppDiagnostics.shared.accountChanged()
         let canonicalID = StudentIDCanonicalizer.canonical(credentials.studentID)
         let normalizedCredentials = LoginCredentials(
             studentID: canonicalID,
@@ -267,6 +268,7 @@ final class AppModel: ObservableObject {
     }
 
     func enterExperienceMode(preserveSchedule: Bool = true) async {
+        AppDiagnostics.shared.accountChanged()
         sessionGeneration = UUID()
         let snapshot = try? await sessionStore.load()
         if preserveSchedule, let studentID = snapshot?.user.studentID {
@@ -287,6 +289,7 @@ final class AppModel: ObservableObject {
     }
 
     func prepareForRealLogin() async {
+        AppDiagnostics.shared.accountChanged()
         sessionGeneration = UUID()
         defaults.set(false, forKey: Self.experienceEnabledKey)
         reauthenticationMessage = nil
@@ -294,6 +297,7 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() async {
+        AppDiagnostics.shared.accountChanged()
         sessionGeneration = UUID()
         if case let .authenticated(user) = sessionState {
             try? await credentialStore.removeCredentials(for: user.studentID)

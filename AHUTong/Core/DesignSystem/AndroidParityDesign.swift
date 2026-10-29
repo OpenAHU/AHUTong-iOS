@@ -25,15 +25,15 @@ extension View {
 }
 
 enum AndroidParityPalette {
-    private static var selectedTheme: Color {
-        AndroidThemeColor.color(for: UserDefaults.standard.string(forKey: "theme.color") ?? "default")
+    @MainActor private static var selectedTheme: Color {
+        AndroidThemeColor.color(for: AppRuntime.sessionDefaults.string(forKey: "theme.color") ?? "default")
     }
 
-    static var brand: Color { selectedTheme }
-    static var accent: Color { selectedTheme }
-    static var systemTheme: Color { selectedTheme }
-    static var primaryTone90: Color { selectedTheme.opacity(0.18) }
-    static var primaryTone80: Color { selectedTheme.opacity(0.3) }
+    @MainActor static var brand: Color { selectedTheme }
+    @MainActor static var accent: Color { selectedTheme }
+    @MainActor static var systemTheme: Color { selectedTheme }
+    @MainActor static var primaryTone90: Color { selectedTheme.opacity(0.18) }
+    @MainActor static var primaryTone80: Color { selectedTheme.opacity(0.3) }
     static let folder = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)
     static let success = Color(red: 76 / 255, green: 175 / 255, blue: 80 / 255)
     static let warning = Color(red: 255 / 255, green: 179 / 255, blue: 0 / 255)
@@ -57,7 +57,7 @@ enum AndroidParityPalette {
             : Color(red: 252 / 255, green: 252 / 255, blue: 252 / 255)
     }
 
-    static func primaryContainer(_ scheme: ColorScheme) -> Color {
+    @MainActor static func primaryContainer(_ scheme: ColorScheme) -> Color {
         selectedTheme.opacity(scheme == .dark ? 0.28 : 0.16)
     }
 
@@ -136,7 +136,6 @@ enum AndroidThemeColor {
 }
 
 struct AndroidScreen<Content: View>: View {
-    @Environment(\.colorScheme) private var colorScheme
     private let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -145,11 +144,10 @@ struct AndroidScreen<Content: View>: View {
 
     var body: some View {
         ZStack {
-            AndroidParityPalette.background(colorScheme).ignoresSafeArea()
+            AppBackgroundView()
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AndroidParityPalette.background(colorScheme).ignoresSafeArea())
     }
 }
 
@@ -290,8 +288,9 @@ private struct AndroidDetailScreenModifier: ViewModifier {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(false)
             .toolbar(.visible, for: .navigationBar)
-            .toolbar(.hidden, for: .tabBar)
+            .toolbar(.visible, for: .tabBar)
             .background(NativeNavigationGestureBridge())
+            .appBackground()
     }
 }
 

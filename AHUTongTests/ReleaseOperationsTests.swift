@@ -143,12 +143,12 @@ final class ReleaseDiagnosticsTests: XCTestCase {
         })
     }
 
-    func testPrivacyManifestDeclaresUnlinkedNonTrackingDiagnostics() throws {
+    func testPrivacyManifestDeclaresInstallationLinkedNonTrackingDiagnostics() throws {
         let root = try privacyManifest()
         let collected = try XCTUnwrap(root["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
         for type in ["NSPrivacyCollectedDataTypeCrashData", "NSPrivacyCollectedDataTypeOtherDiagnosticData"] {
             let entry = try XCTUnwrap(collected.first { $0["NSPrivacyCollectedDataType"] as? String == type })
-            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, false, type)
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, true, type)
             XCTAssertEqual(entry["NSPrivacyCollectedDataTypeTracking"] as? Bool, false, type)
             XCTAssertEqual(entry["NSPrivacyCollectedDataTypePurposes"] as? [String],
                            ["NSPrivacyCollectedDataTypePurposeAppFunctionality"], type)

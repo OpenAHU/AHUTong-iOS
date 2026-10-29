@@ -53,6 +53,13 @@ final class CampusLifeUITests: XCTestCase {
         app.staticTexts["风味小炒"].tap()
         XCTAssertTrue(app.navigationBars["窗口详情"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "平均每笔", "12.50")).firstMatch.exists)
+        XCTAssertGreaterThan(app.navigationBars["窗口详情"].frame.minY, app.frame.height * 0.35)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Canteen native detail sheet"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["canteen.window.done"].tap()
+        XCTAssertTrue(app.staticTexts["磬苑 · 近30天热度榜"].waitForExistence(timeout: 3))
     }
 
     func testCanteenIndividualCanteenFilterRemovesOtherWindows() {
@@ -99,6 +106,11 @@ final class CampusLifeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["面食窗口"].firstMatch.exists)
         XCTAssertFalse(app.staticTexts["风味小炒"].exists)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "平均消费", "9.00")).firstMatch.waitForExistence(timeout: 4))
+        app.buttons["canteen.draw.details"].tap()
+        XCTAssertTrue(app.buttons["canteen.window.done"].waitForExistence(timeout: 3))
+        app.buttons["canteen.window.done"].tap()
+        XCTAssertTrue(app.staticTexts["这次就吃它"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["canteen.draw.details"].exists)
     }
 
     func testCanteenLeavingDuringDrawCancelsIt() {

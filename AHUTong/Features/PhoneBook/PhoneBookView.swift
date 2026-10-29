@@ -47,7 +47,7 @@ struct PhoneBookView: View {
         .navigationTitle("电话本")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(.visible, for: .tabBar)
         .background(NativeNavigationGestureBridge())
         .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索电话或部门")
         .accessibilityIdentifier("phone.screen")

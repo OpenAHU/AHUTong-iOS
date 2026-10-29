@@ -204,7 +204,7 @@ final class ScheduleViewModel: ObservableObject {
             return
         } catch {
             guard requestID == id, !Task.isCancelled else { return }
-            state = .failed(AppErrorState(message: error.localizedDescription))
+            state = .failed(AppErrorState(error: error, route: "scheduleview"))
             if !previewNext { await publishWidget(.unavailable(.expired)) }
         }
     }
@@ -312,7 +312,10 @@ final class ScheduleViewModel: ObservableObject {
     ]
 }
 
+enum ScheduleHeaderAction { case currentWeek, settings, refresh }
+
 struct ScheduleView: View {
+    @Binding private var headerAction: ScheduleHeaderAction?
     @ScaledMetric(relativeTo: .headline) private var weekIndicatorSize: CGFloat = 44
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -338,7 +341,8 @@ struct ScheduleView: View {
         return presentation.clamped(presentation.page(teachingWeek: model.currentWeek, weekday: weekday))
     }
 
-    init(appModel: AppModel) {
+    init(appModel: AppModel, headerAction: Binding<ScheduleHeaderAction?>) {
+        _headerAction = headerAction
         let userID: String
         let accessMode: ScheduleAccessMode
         switch appModel.sessionState {
@@ -363,20 +367,31 @@ struct ScheduleView: View {
     @State private var isExperienceMode: Bool
 
     var body: some View {
-        AndroidScreen {
-            ScrollView(.vertical) {
-                content
-                    .padding(.top, 8)
-                    .padding(.bottom, 16)
+        GeometryReader { geometry in
+            AndroidScreen {
+                ScrollView(.vertical) {
+                    content
+                        .padding(.top, 8)
+                        .padding(.bottom, 16)
+                }
+                .scrollIndicators(.hidden)
+                .accessibilityIdentifier("schedule.scroll")
             }
-            .scrollIndicators(.hidden)
-            .accessibilityIdentifier("schedule.scroll")
-            .nativeTopBar {
-                controls
-                    .padding(.vertical, 8)
+            .toolbar { scheduleToolbar(weekWidth: max(100, geometry.size.width - 184)) }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .onChange(of: headerAction) { _, action in
+            guard let action else { return }
+            headerAction = nil
+            switch action {
+            case .currentWeek:
+                if previewNextSemester { previewNextSemester = false }
+                else { withAnimation(.easeInOut(duration: 0.25)) { selectedWeek = currentDisplayWeek } }
+            case .settings: showSettings = true
+            case .refresh: Task { await model.refresh(previewNext: previewNextSemester) }
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
         .task(id: previewNextSemester) {
             if loadedSemesterPreview != previewNextSemester {
                 selectedWeek = 1
@@ -429,54 +444,43 @@ struct ScheduleView: View {
         }
     }
 
-    private var controls: some View {
-        HStack(spacing: 8) {
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(presentation.pages, id: \.self) { week in
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    selectedWeek = week
-                                }
-                            } label: {
-                                Text(presentation.title(page: week))
-                                    .font(.headline.bold())
-                                    .foregroundStyle(selectedWeek == week ? Color.white : Color.primary)
-                                    .frame(width: weekIndicatorSize, height: weekIndicatorSize)
-                                    .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Circle())
-                                    .contentShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("schedule.week.\(week)")
-                            .accessibilityLabel(presentation.accessibilityTitle(page: week))
-                            .accessibilityAddTraits(selectedWeek == week ? .isSelected : [])
-                            .id(week)
+    @ToolbarContentBuilder
+    private func scheduleToolbar(weekWidth: CGFloat) -> some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .principal) { weekSelector.frame(width: weekWidth) }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .principal) { weekSelector.frame(width: weekWidth) }
+        }
+    }
+
+    private var weekSelector: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(presentation.pages, id: \.self) { week in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.25)) { selectedWeek = week }
+                        } label: {
+                            Text(presentation.title(page: week))
+                                .font(.headline.bold())
+                                .foregroundStyle(selectedWeek == week ? Color.white : Color.primary)
+                                .frame(width: weekIndicatorSize, height: weekIndicatorSize)
+                                .background(selectedWeek == week ? AndroidParityPalette.brand : .clear, in: Circle())
+                                .contentShape(Circle())
                         }
-                    }
-                    .padding(.horizontal, 16)
-                }
-                .scrollIndicators(.hidden)
-                .onChange(of: selectedWeek) { _, week in
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        proxy.scrollTo(max(1, week - 2), anchor: .leading)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("schedule.week.\(week)")
+                        .accessibilityLabel(presentation.accessibilityTitle(page: week))
+                        .accessibilityAddTraits(selectedWeek == week ? .isSelected : [])
+                        .id(week)
                     }
                 }
             }
-            NativeHeaderActionGroup {
-                scheduleAction("location", "回到当前周") {
-                    if previewNextSemester {
-                        previewNextSemester = false
-                    } else {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            selectedWeek = currentDisplayWeek
-                        }
-                    }
-                }
-                scheduleAction("gearshape", "课表设置", identifier: "schedule.settings") { showSettings = true }
-                scheduleAction("arrow.clockwise", "刷新课表", identifier: "schedule.refresh") { Task { await model.refresh(previewNext: previewNextSemester) } }
+            .scrollIndicators(.hidden)
+            .onChange(of: selectedWeek) { _, week in
+                withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(max(1, week - 2), anchor: .leading) }
             }
-            .padding(.trailing, 8)
         }
     }
 
@@ -507,16 +511,6 @@ struct ScheduleView: View {
                     }
                 }
         }
-    }
-
-    private func scheduleAction(
-        _ icon: String,
-        _ label: String,
-        identifier: String? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        NativeHeaderIconButton(systemName: icon, accessibilityLabel: label, grouped: true, action: action)
-            .accessibilityIdentifier(identifier ?? "schedule.action.\(label)")
     }
 
     private func schedulePager(courses: [Course]) -> some View {
@@ -566,7 +560,6 @@ struct ScheduleView: View {
             .padding(4)
         }
         .frame(height: scheduleGridHeight)
-        .background(AndroidParityPalette.raisedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 32))
     }
 
     private func grid(dayWidth: CGFloat, spacing: CGFloat, timeWidth: CGFloat, week: Int) -> some View {

@@ -18,20 +18,3 @@ extension View {
         modifier(NativeNumericTransition(value: value, countsDown: countsDown))
     }
 }
-
-/// Animate each page's arrival without replacing the system tab controller or its delegate.
-struct TabPageEntrance: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isVisible = false
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(reduceMotion || isVisible ? 1 : 0)
-            .onAppear {
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) {
-                    isVisible = true
-                }
-            }
-            .onDisappear { isVisible = false }
-    }
-}
