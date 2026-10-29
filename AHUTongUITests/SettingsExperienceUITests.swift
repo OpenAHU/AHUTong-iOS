@@ -4,6 +4,32 @@ final class SettingsExperienceUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
     @MainActor
+    func testBackgroundPhotoPickerCancellationPreservesSelection() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 8))
+        app.tabBars.buttons["设置"].tap()
+        app.buttons["settings.preferences"].tap()
+        let background = app.buttons["preferences.background"]
+        for _ in 0..<4 where !background.isHittable { app.swipeUp() }
+        XCTAssertTrue(background.isHittable)
+        background.tap()
+        let select = app.buttons["background.select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 4))
+        let label = select.label
+        select.tap()
+        let cancel = app.buttons["取消"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        cancel.tap()
+        XCTAssertTrue(select.waitForExistence(timeout: 4))
+        XCTAssertEqual(select.label, label)
+        XCTAssertTrue(app.tabBars.buttons["小工具"].isHittable)
+    }
+
+    @MainActor
     func testNativeTabsSettingsStructureAndConciseCopy() {
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         setReduceMotion(false, control: openMotionSettings(settings))

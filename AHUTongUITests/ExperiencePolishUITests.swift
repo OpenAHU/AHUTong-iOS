@@ -99,8 +99,8 @@ final class ExperiencePolishUITests: XCTestCase {
         app.tabBars.buttons["设置"].tap()
         app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.switches["preferences.privacy-consent"].waitForExistence(timeout: 4))
-        // Detail screens intentionally hide the tab bar; a shortcut can leave
-        // their navigation stack alive while returning to a top-level tab.
+        // A shortcut leaves the detail through a different tab. Returning to
+        // settings must still show its root, with the original container alive.
         app.open(URL(string: "ahutong://schedule")!)
         XCTAssertTrue(app.buttons["回到当前周"].waitForExistence(timeout: 4))
         app.tabBars.buttons["设置"].tap()
@@ -162,12 +162,12 @@ final class ExperiencePolishUITests: XCTestCase {
         for button in [currentWeek, settings, refresh] {
             XCTAssertTrue(button.waitForExistence(timeout: 4))
             XCTAssertTrue(button.isHittable)
-            XCTAssertGreaterThanOrEqual(button.frame.width, 44)
-            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertTrue(app.navigationBars.buttons[button.identifier].exists)
         }
-        // Native ControlGroup keeps 8-point gaps inside the shared surface.
-        XCTAssertLessThanOrEqual(settings.frame.minX - currentWeek.frame.maxX, 8)
-        XCTAssertLessThanOrEqual(refresh.frame.minX - settings.frame.maxX, 8)
+        // UIKit owns bar-item hit areas and shared glass spacing. The week
+        // selector must still show the same four complete week circles.
+        XCTAssertTrue(app.buttons["schedule.week.4"].isHittable)
+        XCTAssertFalse(app.buttons["更多"].exists)
         capture(app, "schedule-native-header-buttons")
         app.buttons["schedule.week.2"].tap()
         currentWeek.tap()

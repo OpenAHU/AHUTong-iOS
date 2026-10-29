@@ -9,7 +9,7 @@ enum ToolItem: String, CaseIterable, Identifiable, Sendable {
     case grade, exam, schoolCalendar = "school-calendar", programCompletion = "program-completion"
     case freeClassroom = "free-classroom", attendance
     case lostFound = "lost-found", weather, studentMail = "student-mail", phoneBook = "phone-book"
-    case canteen, cardBilling = "card-billing", studyRepository = "study-repository"
+    case canteen, cardBilling = "card-billing", identityCode = "identity-code", studyRepository = "study-repository"
 
     var id: String { rawValue }
     // Keep identifiers already stored in home.widget-layout.v2.
@@ -38,6 +38,7 @@ enum ToolItem: String, CaseIterable, Identifiable, Sendable {
         case .lostFound: ("失物招领", AndroidParitySymbol.lostAndFoundBag, .blue, .campus)
         case .weather: ("天气", "sun.max.fill", .orange, .campus)
         case .cardBilling: ("校园卡账单", "list.bullet.rectangle", .teal, .campus)
+        case .identityCode: ("身份码", "qrcode", .orange, .campus)
         case .studyRepository: ("学习资料", "doc.on.doc", .brown, .learning)
         }
     }
@@ -52,8 +53,9 @@ struct ToolDestination: View {
             .navigationTitle(tool.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.visible, for: .navigationBar)
-            .toolbar(.hidden, for: .tabBar)
+            .toolbar(.visible, for: .tabBar)
             .background(NativeNavigationGestureBridge())
+            .appBackground()
     }
 
     @ViewBuilder
@@ -74,6 +76,7 @@ struct ToolDestination: View {
         case .phoneBook: PhoneBookView()
         case .canteen: CanteenRankingView(appModel: appModel).id(accountID)
         case .cardBilling: CardBillingView(appModel: appModel)
+        case .identityCode: IdentityCodeView()
         case .studyRepository: StudyRepositoryView()
         }
     }

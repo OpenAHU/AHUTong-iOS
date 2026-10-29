@@ -4,10 +4,10 @@ import XCTest
 final class ToolsUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
-    private func launch(openTools: Bool = true) -> XCUIApplication {
+    private func launch(openTools: Bool = true, arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
-        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launchArguments = ["--demo-consent", "--demo-session"] + arguments
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["小工具"].waitForExistence(timeout: 8))
         if openTools {
@@ -60,6 +60,36 @@ final class ToolsUITests: XCTestCase {
         XCTAssertTrue(mail.waitForExistence(timeout: 3))
     }
 
+    func testTabsStayVisibleInDetailAndToolsReturnsToRoot() {
+        let app = launch()
+        defer { app.terminate() }
+        app.buttons["tools.bathroom"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["payment.bathroom.screen"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["主页"].isHittable)
+        XCTAssertTrue(app.tabBars.buttons["课表"].isHittable)
+        XCTAssertTrue(app.tabBars.buttons["设置"].isHittable)
+        app.tabBars.buttons["设置"].tap()
+        XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 4))
+        app.tabBars.buttons["小工具"].tap()
+        XCTAssertTrue(app.searchFields["搜索小工具"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["tools.bathroom"].isHittable)
+    }
+
+    func testReturningToToolsClearsNativeSearch() {
+        let app = launch()
+        defer { app.terminate() }
+        let search = app.searchFields["搜索小工具"]
+        search.tap()
+        search.typeText("校园邮箱")
+        XCTAssertTrue(app.buttons["tools.student-mail"].waitForExistence(timeout: 3))
+        app.buttons["tools.student-mail"].tap()
+        XCTAssertTrue(app.switches["mail.unread-only"].waitForExistence(timeout: 4))
+        app.tabBars.buttons["设置"].tap()
+        app.tabBars.buttons["小工具"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["tools.bathroom"].waitForExistence(timeout: 3))
+    }
+
     func testUnknownSearchShowsSystemEmptyState() {
         let app = launch()
         defer { app.terminate() }
@@ -68,7 +98,7 @@ final class ToolsUITests: XCTestCase {
         search.typeText("不存在的工具")
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "不存在的工具")).firstMatch.waitForExistence(timeout: 3))
         XCTAssertEqual(app.buttons.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ AND identifier != %@", "tools.", "tools.edit-home"
+            format: "identifier BEGINSWITH %@ AND identifier != %@ AND identifier != %@", "tools.", "tools.edit-home", "tools.scan"
         )).count, 0)
     }
 
@@ -79,8 +109,8 @@ final class ToolsUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["home.widget-library"].waitForExistence(timeout: 4))
         let available = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.widget-add."))
         let pinned = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.widget-remove."))
-        XCTAssertEqual(available.count + pinned.count, 16)
-        for id in ["network_recharge", "program_completion", "attendance", "student_mail", "canteen", "card_billing"] {
+        XCTAssertEqual(available.count + pinned.count, 17)
+        for id in ["network_recharge", "program_completion", "attendance", "student_mail", "canteen", "card_billing", "identity_code"] {
             XCTAssertTrue(app.buttons["home.widget-add.\(id)"].exists || app.buttons["home.widget-remove.\(id)"].exists,
                           "Missing home tool: \(id)")
         }
@@ -206,6 +236,35 @@ final class ToolsUITests: XCTestCase {
         XCTAssertTrue(app.buttons[identifier].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons[identifier].isHittable)
         app.buttons["home.widget-edit.done"].tap()
+    }
+
+    func testScannerUnavailableOnSimulatorClosesWithoutLosingTools() {
+        let app = launch()
+        defer { app.terminate() }
+        app.buttons["tools.scan"].tap()
+        XCTAssertTrue(app.navigationBars["扫一扫"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["暂时无法扫码"].waitForExistence(timeout: 4))
+        capture(app, name: "native-scanner-unavailable")
+        app.buttons["关闭"].tap()
+        XCTAssertTrue(app.buttons["tools.edit-home"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.tabBars.buttons["设置"].isHittable)
+    }
+
+    func testWeatherForecastAndSettingsUseNativeNavigation() {
+        let app = launch(arguments: [#"--demo-endpoint-weather={"city":"合肥市","weather":"多云","temperature":23,"feels_like":24,"humidity":68,"wind_power":"2级","visibility":12,"temp_max":26,"temp_min":18,"aqi":36,"aqi_category":"优","report_time":"10分钟前更新","forecast":[{"date":"2026-10-30","week":"周五","temp_max":25,"temp_min":17,"weather_day":"晴"}],"hourly_forecast":[{"time":"2026-10-29 21:00:00","temperature":22,"weather":"多云"}]}"#])
+        defer { app.terminate() }
+        app.revealTool("tools.weather").tap()
+        XCTAssertTrue(app.descendants(matching: .any)["weather.current"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["最高 26°   最低 18°"].exists)
+        XCTAssertTrue(app.tabBars.buttons["小工具"].isHittable)
+        capture(app, name: "weather-native-current")
+        app.buttons["天气设置"].tap()
+        XCTAssertTrue(app.navigationBars["天气设置"].waitForExistence(timeout: 4))
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.buttons["刷新天气"].waitForExistence(timeout: 4))
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["空气质量"].waitForExistence(timeout: 4))
+        capture(app, name: "weather-native-forecast")
     }
 
     private func openHomeEditor(_ app: XCUIApplication) {

@@ -1,6 +1,10 @@
 import AppIntents
 import SwiftUI
 
+private enum SettingsRoute: Hashable {
+    case preferences, licenses, contributors
+}
+
 struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
@@ -19,18 +23,16 @@ struct SettingsView: View {
             Section { appCard.listRowInsets(EdgeInsets()) }
             Section("账户信息") { accountCard }
             Section {
-                NavigationLink {
-                    AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
-                } label: { Label("偏好设置", systemImage: "slider.horizontal.3") }
+                NavigationLink(value: SettingsRoute.preferences) { Label("偏好设置", systemImage: "slider.horizontal.3") }
                 .buttonStyle(PressFeedbackStyle())
                 .accessibilityIdentifier("settings.preferences")
             }
             Section("关于") {
-                NavigationLink { ThirdPartyLicensesView().androidDetailScreen() } label: {
+                NavigationLink(value: SettingsRoute.licenses) {
                     Label("开源协议", systemImage: "doc.text")
                 }
                 .buttonStyle(PressFeedbackStyle())
-                NavigationLink { ContributorsView().androidDetailScreen() } label: {
+                NavigationLink(value: SettingsRoute.contributors) {
                     Label("贡献名单", systemImage: "person.2")
                 }
                 .buttonStyle(PressFeedbackStyle())
@@ -63,9 +65,18 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.update-notes")
             }
         }
+        .appBackground()
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.large)
         .toolbar(.visible, for: .navigationBar)
+        .navigationDestination(for: SettingsRoute.self) { route in
+            switch route {
+            case .preferences:
+                AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
+            case .licenses: ThirdPartyLicensesView().androidDetailScreen()
+            case .contributors: ContributorsView().androidDetailScreen()
+            }
+        }
         .confirmationDialog("清除本机数据？", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("清除", role: .destructive) {
                 Task {
@@ -427,6 +438,14 @@ private struct AndroidPreferencesView: View {
                 }
             }
 
+            Section {
+                NavigationLink { BackgroundSettingsView() } label: {
+                    Label("背景", systemImage: "photo")
+                }
+                .buttonStyle(PressFeedbackStyle())
+                .accessibilityIdentifier("preferences.background")
+            }
+
             Section("主题颜色") {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 16) {
@@ -439,6 +458,7 @@ private struct AndroidPreferencesView: View {
                 }
             }
         }
+        .appBackground()
         .navigationTitle("偏好设置")
         .navigationBarTitleDisplayMode(.inline)
         .alert("无法更新提醒", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {

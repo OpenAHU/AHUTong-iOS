@@ -316,7 +316,7 @@ struct HomeView: View {
                         if effectiveShowWeatherOnHome,
                            effectiveWeatherHomeMode == .detailed,
                            case let .loaded(snapshot) = weatherModel.state {
-                            NavigationLink { WeatherView().androidDetailScreen() } label: {
+                            NavigationLink(value: ToolItem.weather) {
                                 HomeWeatherCard(weather: snapshot.response, configuration: weatherHomeConfiguration)
                             }
                             .buttonStyle(.plain)
@@ -403,9 +403,7 @@ struct HomeView: View {
                 if effectiveShowWeatherOnHome,
                    effectiveWeatherHomeMode == .compact,
                    case let .loaded(snapshot) = weatherModel.state {
-                    NavigationLink {
-                        WeatherView().androidDetailScreen()
-                    } label: {
+                    NavigationLink(value: ToolItem.weather) {
                         CompactHomeWeatherCard(weather: snapshot.response)
                     }
                     .buttonStyle(.plain)
@@ -569,9 +567,7 @@ struct HomeView: View {
     private func homeToolCard(_ tool: ToolItem, height: CGFloat) -> some View {
         // Cancellation animates back to this source. Keep its identity stable
         // when a long press enters editing while the system is lifting it.
-        NavigationLink {
-            ToolDestination(tool: tool, appModel: appModel)
-        } label: {
+        NavigationLink(value: tool) {
             HomeTextWidgetCard(title: tool.title, isEditing: isEditing)
         }
         .buttonStyle(PressFeedbackStyle(cornerRadius: 24))

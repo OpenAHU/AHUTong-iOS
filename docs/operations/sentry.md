@@ -1,5 +1,7 @@
 # iOS Sentry 诊断
 
+2026-10-29 已按最新 Android 源码复核两端采集范围、用途和包体成本，见[专项审计](2026-10-29-size-sentry-audit.md)。本轮按用户选择不查询线上事件，不能将本文历史收件记录当作当前生产数量；采集配置未改动。
+
 项目为 [ratatoskr / ahutong-ios](https://ratatoskr.sentry.io/settings/projects/ahutong-ios/)。用户指定名称为 AHUTong-iOS，Sentry 自动将项目 slug 规范为小写。SDK 固定为官方 `sentry-apple-binaries` 9.31.0，由 `project.yml` 管理，不手工改生成的 Xcode 工程。
 
 App 使用 `Sentry-Static`：SDK 代码静态链接到主程序，包内 `Sentry.framework` 保留资源/隐私清单及 Xcode 生成的占位二进制。该资源框架也需要先完整签署再签主 App；2026-10-25 已在本地修正 #145 漏签内嵌框架的问题，并补逐个签名检查。安装完整性与 App Group 授权是两个独立检查项，修复资源签名不会授予共享权限；证据和真机边界见迁移路线图 E-20261025-01。

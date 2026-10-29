@@ -239,7 +239,7 @@ struct LostFoundView: View {
             .padding(.bottom, 104)
         }
         .accessibilityIdentifier("lost-found.screen")
-        .background(Color(uiColor: .systemGroupedBackground))
+        .appBackground()
         .overlay(alignment: .bottomTrailing) {
             publishButton.accessibilityIdentifier("lost-found.publish").padding(24)
         }

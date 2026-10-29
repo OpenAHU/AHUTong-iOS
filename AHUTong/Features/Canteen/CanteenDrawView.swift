@@ -62,6 +62,7 @@ struct CanteenDrawView: View {
     @StateObject private var model = CanteenRankingViewModel()
     @State private var query: CanteenQuery
     @State private var showsCanteens = false
+    @State private var selectedWindow: CanteenInsights.Window?
     @State private var drawID: UUID?
     private var isDrawing: Bool { drawID != nil }
     @State private var rolling: CanteenInsights.Window?
@@ -129,15 +130,16 @@ struct CanteenDrawView: View {
                         LabeledContent("位置", value: result.location)
                         LabeledContent("热度排名", value: result.rank.map { "第 \($0) 名" } ?? "暂无排名")
                         LabeledContent("平均消费", value: result.avgCentsPerTxn.map { ($0 / 100).formatted(.currency(code: "CNY")) } ?? "暂无均价样本")
-                        NavigationLink("查看窗口详情") { CanteenWindowDetail(window: result) }
+                        Button("查看窗口详情") { selectedWindow = result }
                             .id("canteen.draw.details")
+                            .accessibilityIdentifier("canteen.draw.details")
                     } header: { Text("这次就吃它") } footer: { Text("排名范围：\(query.title) · \(query.period.title)。平均消费按每笔交易计算。") }
-                    .accessibilityIdentifier("canteen.draw-result")
                     .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .navigationTitle("吃什么").navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showsCanteens) { CanteenSelectionSheet(options: query.campus.names, selection: $query.selectedCanteens) }
+            .sheet(item: $selectedWindow) { CanteenWindowDetail(window: $0) }
             .onChange(of: query.campus) { _, _ in query.selectedCanteens = [] }
             .task(id: query) { result = nil; rolling = nil; await load() }
             .task(id: drawID) { if let drawID { await draw(id: drawID) } }

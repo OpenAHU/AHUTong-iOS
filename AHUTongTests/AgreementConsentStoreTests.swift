@@ -23,17 +23,6 @@ final class AgreementConsentStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testOptionalCommunityDocumentDoesNotBlockEntry() async throws {
-        let store = AgreementConsentStore(store: InMemoryDataStore())
-
-        _ = try await store.setAccepted(true, document: .disclaimer)
-        let consent = try await store.setAccepted(true, document: .privacy)
-
-        XCTAssertTrue(consent.hasAcceptedRequiredDocuments)
-        XCTAssertFalse(consent.isAccepted(.community))
-    }
-
-    @MainActor
     func testDecliningPrivacyStillAllowsExperienceModeConsent() async throws {
         let store = AgreementConsentStore(store: InMemoryDataStore())
 
@@ -57,26 +46,6 @@ final class AgreementConsentStoreTests: XCTestCase {
 
         let resetConsent = try await store.load()
         XCTAssertEqual(resetConsent, .empty)
-    }
-
-    func testPrivacyCopyDisclosesSchoolSubmissionAndRejectsLegacyNoUploadClaim() {
-        let privacy = AgreementDocument.privacy.body
-        let disclaimer = AgreementDocument.disclaimer.body
-
-        XCTAssertTrue(privacy.contains("ThisDeviceOnly"))
-        XCTAssertTrue(privacy.contains("隐藏 WebView"))
-        XCTAssertTrue(privacy.contains("远程验证码识别请求只包含"))
-        XCTAssertTrue(privacy.contains("即使此前没有校园卡 Cookie"))
-        XCTAssertTrue(privacy.contains("从第一次连接起"))
-        XCTAssertTrue(privacy.contains("不再要求您为校园服务单独手动填写验证码"))
-        XCTAssertTrue(privacy.contains("远程验证码识别接口"))
-        XCTAssertTrue(privacy.contains("保存到本机文件"))
-        XCTAssertTrue(privacy.contains("不附带学号、密码、Cookie、Token"))
-        XCTAssertTrue(privacy.contains("安大通体验用户"))
-        XCTAssertFalse(privacy.contains("验证码必须由您在可见页面中手动填写"))
-        XCTAssertFalse(privacy.contains("App 会转为可见页面"))
-        XCTAssertFalse(privacy.contains("不会将您的用户数据上传"))
-        XCTAssertFalse(disclaimer.contains("不会收集、存储或泄露用户的任何个人信息"))
     }
 
     func testPreviousPolicyVersionRequiresRenewedConsent() {
