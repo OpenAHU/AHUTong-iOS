@@ -824,8 +824,6 @@ struct NetworkRechargeView: View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 24) {
-                    AndroidHeader(title: "网费充值", large: true)
-                        .accessibilityIdentifier("payment.network.screen")
 
                     switch model.state {
                     case .loading:
@@ -851,12 +849,15 @@ struct NetworkRechargeView: View {
                 .padding(.bottom, 48)
             }
             .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("payment.network.screen")
 
             if showsPasswordDialog {
                 passwordDialog
             }
         }
         .paymentKeyboardDismissal()
+        .navigationTitle("网费充值")
+        .toolbar(.visible, for: .navigationBar)
         .task {
             await coordinator.resumePendingOrder()
             await model.load()

@@ -112,6 +112,7 @@ struct OnboardingView: View {
             )
             .frame(width: 320)
         }
+        .toolbar(.hidden, for: .navigationBar)
         .alert("需要你的同意", isPresented: $model.showsDeclineExplanation) {
             Button("继续查看", role: .cancel) { }
         } message: {

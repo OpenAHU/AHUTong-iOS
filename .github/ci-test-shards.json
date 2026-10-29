@@ -1,22 +1,39 @@
 {
   "ui-navigation": [
-    "AppShellUITests/testAndroidParityPrimaryScreens",
+    "AppShellUITests/testOnboardingPrivacyDisclaimerAndCommunityReachHome",
+    "AppShellUITests/testSchoolCalendarFromTools",
+    "AppShellUITests/testStudyRepositoryFromTools",
+    "AppShellUITests/testGradesFromTools",
+    "AppShellUITests/testExamsFromTools",
+    "AppShellUITests/testFreeClassroomsFromTools",
+    "AppShellUITests/testLostFoundDetailFromTools",
+    "AppShellUITests/testLostFoundPublishFromTools",
     "AppShellUITests/testScheduleSupportsHorizontalWeekPaging",
     "AppShellUITests/testDeclinedPrivacyUsesScheduleOnlyExperienceAccount",
     "AppShellUITests/testNativeNavigationBarEdgeAndContentPopGestures",
-    "AppShellUITests/testCompactHomeWeatherOpensWeatherInsteadOfSchedule"
+    "AppShellUITests/testCompactHomeWeatherOpensWeatherInsteadOfSchedule",
+    "ToolsUITests"
   ],
   "ui-services": [
     "StudentMailUITests",
     "AppShellUITests/testAndroidParityLoginAndReminderSystemStates",
-    "AppShellUITests/testAndroidParityLoadingEmptyAndErrorStates",
+    "AppShellUITests/testScheduleLoadingEmptyAndErrorStates",
+    "AppShellUITests/testGradesLoadingEmptyAndErrorStates",
+    "AppShellUITests/testExamsLoadingEmptyAndErrorStates",
+    "AppShellUITests/testFreeClassroomsLoadingEmptyAndErrorStates",
+    "AppShellUITests/testLostFoundLoadingEmptyAndErrorStates",
     "AppShellUITests/testNetworkRechargeAndCMBPreference",
     "PhoneBookUITests",
     "ExperiencePolishUITests/testDeveloperPopoverDismissalResumesItsRowAndDoubleTapOpensQQ",
-    "ExperiencePolishUITests/testWidgetInstallationGuideCanBeReadAndDismissed"
+    "ExperiencePolishUITests/testWidgetInstallationGuideCanBeReadAndDismissed",
+    "CampusLifeUITests"
   ],
   "ui-payments": [
-    "AppShellUITests/testAndroidParityPaymentsAndOperations",
+    "AppShellUITests/testCMBOneTimeAndDefaultChoices",
+    "AppShellUITests/testCampusCardDemoPaymentConfirmation",
+    "AppShellUITests/testBathroomDemoPaymentConfirmation",
+    "AppShellUITests/testElectricityDemoPaymentConfirmation",
+    "AppShellUITests/testSettingsHasNoHiddenDebugEntry",
     "PaymentLocalParityUITests",
     "CampusCardPriorityUITests",
     "ReadOnlyServicesUITests"
@@ -34,6 +51,8 @@
     "ExperiencePolishUITests/testCourseDetailScrollsWithAccessibilityTextSize",
     "ExperiencePolishUITests/testCourseDetailShowsAllIrregularWeeksAndLongMetadata",
     "ExperiencePolishUITests/testSettingsTabReturnsToRootAfterLeavingDetailViaShortcut",
+    "ExperiencePolishUITests/testHomeRefreshPreservesCourseStatusAndNavigation",
+    "ExperiencePolishUITests/testHomeRefreshWithoutCoursesRemainsInteractive",
     "ExperiencePolishUITests/testWeekIndicatorsAreCirclesForSingleAndDoubleDigits"
   ]
 }

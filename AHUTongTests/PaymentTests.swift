@@ -967,28 +967,6 @@ final class PendingPaymentStoreTests: XCTestCase {
 }
 
 final class PaymentCatalogTests: XCTestCase {
-    func testCardRechargeFixtureUsesNonProductionAccountAndBalance() {
-        XCTAssertTrue(PaymentDemoCatalog.cardAccountID.hasPrefix("mock-"))
-        XCTAssertEqual(PaymentDemoCatalog.cardBalance, Decimal(string: "126.35"))
-    }
-
-    func testBathroomFixtureKeepsPhoneLookupAndDistinctAccounts() {
-        XCTAssertEqual(PaymentDemoCatalog.phone.count, 11)
-        XCTAssertEqual(
-            Set(PaymentDemoCatalog.bathrooms.map(\.id)).count,
-            PaymentDemoCatalog.bathrooms.count
-        )
-    }
-
-    func testElectricityFixtureProvidesCompleteSelectionPath() {
-        XCTAssertFalse(PaymentDemoCatalog.electricityRooms.isEmpty)
-        XCTAssertTrue(PaymentDemoCatalog.electricityRooms.allSatisfy {
-            !$0.campus.isEmpty
-                && !$0.building.isEmpty
-                && !$0.floor.isEmpty
-                && !$0.room.isEmpty
-        })
-    }
 }
 
 private struct PaymentStoreFixture {

@@ -79,6 +79,17 @@ final class WidgetSharingConfigurationTests: XCTestCase {
         let result = WidgetSharingResolution.resolve(configuration()) { _ in nil }
         XCTAssertEqual(result.issue, .unavailableProfiles)
         XCTAssertNil(result.group)
+        XCTAssertTrue(result.diagnosticSummary.contains("Same profile team: unknown"))
+    }
+
+    func testReportedResignedInstallationHasSpecificMissingAppGroupGuidance() throws {
+        let app = try makeProfile(groups: [])
+        let result = WidgetSharingResolution.resolve(configuration(app: app, widget: nil)) { _ in nil }
+        XCTAssertEqual(result.issue, .appGroupNotProvisioned)
+        XCTAssertNil(result.containerURL)
+        XCTAssertTrue(result.diagnosticSummary.contains("App profile groups: none"))
+        XCTAssertTrue(result.diagnosticSummary.contains("Widget profile groups: unavailable"))
+        XCTAssertTrue(result.diagnosticSummary.contains("Same profile team: unknown"))
     }
 
     func testProfileReaderIgnoresWildcardsAndUnresolvedOrMalformedGroups() throws {

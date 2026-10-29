@@ -178,7 +178,8 @@ struct CardRechargeView: View {
                     )
                     PaymentValueRow(
                         title: "账户余额",
-                        value: "￥\(account.balance.currencyText)"
+                        value: "￥\(account.balance.currencyText)",
+                        animatesNumbers: true
                     )
                 case .empty:
                     PaymentReadOnlyStateRow(
@@ -330,8 +331,6 @@ struct BathroomPaymentView: View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 24) {
-                    AndroidHeader(title: "浴室缴费", large: true)
-                        .accessibilityIdentifier("payment.bathroom.screen")
                     lookupCard
                     PaymentAmountCard(title: "缴费金额", amount: $amount, identifier: "payment.bathroom.amount")
                     PaymentStateButton(phase: coordinator.phase, identifier: "payment.bathroom.state") {
@@ -345,6 +344,7 @@ struct BathroomPaymentView: View {
                 .padding(.bottom, 48)
             }
             .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("payment.bathroom.screen")
 
             if showsPasswordDialog {
                 passwordDialog(title: "请输入校园卡密码", identifier: "payment.bathroom.password-dialog") {
@@ -352,6 +352,8 @@ struct BathroomPaymentView: View {
                 }
             }
         }
+        .navigationTitle("浴室缴费")
+        .toolbar(.visible, for: .navigationBar)
         .task {
             await coordinator.resumePendingOrder()
         }
@@ -644,8 +646,6 @@ struct ElectricityPaymentView: View {
         AndroidScreen {
             ScrollView {
                 VStack(spacing: 24) {
-                    AndroidHeader(title: "电控缴费", large: true)
-                        .accessibilityIdentifier("payment.electricity.screen")
                     locationCard
                     if let feedback = chargeHistory.feedback {
                         Text(feedback)
@@ -673,6 +673,7 @@ struct ElectricityPaymentView: View {
                 .padding(.bottom, 48)
             }
             .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("payment.electricity.screen")
 
             if showsPasswordDialog {
                 AndroidPaymentDialog(
@@ -705,6 +706,8 @@ struct ElectricityPaymentView: View {
                 }
             }
         }
+        .navigationTitle("电控缴费")
+        .toolbar(.visible, for: .navigationBar)
         .task {
             await coordinator.resumePendingOrder()
             await accountModel.load()
@@ -966,12 +969,20 @@ private struct PaymentAmountCard: View {
 private struct PaymentValueRow: View {
     let title: String
     let value: String
+    var animatesNumbers = false
 
     var body: some View {
         HStack(alignment: .top) {
             Text(title).font(.headline)
             Spacer(minLength: 16)
-            Text(value).multilineTextAlignment(.trailing)
+            Group {
+                if animatesNumbers {
+                    Text(value).nativeNumericTransition(value: value)
+                } else {
+                    Text(value)
+                }
+            }
+            .multilineTextAlignment(.trailing)
         }
         .padding(16)
     }
@@ -1004,7 +1015,6 @@ private struct PaymentMenuRow: View {
 }
 
 struct PaymentStateButton: View {
-    @Environment(\.colorScheme) private var colorScheme
     let phase: PaymentPhase
     let identifier: String
     let leadingTitle: String?
@@ -1041,10 +1051,9 @@ struct PaymentStateButton: View {
         HStack {
             if let leadingTitle, let leadingAction {
                 Button(leadingTitle, action: leadingAction)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 16)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
                     .accessibilityIdentifier(leadingIdentifier ?? "")
             }
             Spacer()
@@ -1070,29 +1079,21 @@ struct PaymentStateButton: View {
                     Label("建单待确认：\(message)", systemImage: "questionmark")
                 }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(phaseColor)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-            .background(backgroundColor, in: Capsule())
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(phaseTint)
+            .frame(minHeight: 50)
             .accessibilityIdentifier(identifier)
         }
         .padding(.horizontal, 16)
     }
 
-    private var backgroundColor: Color {
+    private var phaseTint: Color {
         switch phase {
         case .failed: .red
         case .unknown, .creationUnknown: .orange
-        case .idle: AndroidParityPalette.primaryTone90
-        default: AndroidParityPalette.primaryTone80
-        }
-    }
-
-    private var phaseColor: Color {
-        switch phase {
-        case .failed, .unknown, .creationUnknown: .white
-        default: .black
+        default: .accentColor
         }
     }
 }

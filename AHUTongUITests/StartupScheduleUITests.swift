@@ -4,6 +4,20 @@ final class StartupScheduleUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
     @MainActor
+    func testReleaseLaunchPerformance() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
+            app.launch()
+            XCTAssertTrue(app.tabBars.firstMatch.exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testScheduleHeaderStaysFixedWhileCoursesScroll() {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"

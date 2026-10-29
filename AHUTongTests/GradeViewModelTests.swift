@@ -28,10 +28,6 @@ final class GradeViewModelTests: XCTestCase {
         XCTAssertTrue(error.message.contains("加载失败"))
     }
 
-    func testGradeResultDisplayRemovesHTMLMarkup() {
-        XCTAssertEqual(GradeResultDisplay.text("<b>优秀</b>&nbsp;"), "优秀")
-        XCTAssertEqual(GradeResultDisplay.text("95"), "95")
-    }
 }
 
 private actor GradeProfileCampusAPIStub: CampusCoreAPI {

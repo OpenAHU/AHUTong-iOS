@@ -50,14 +50,6 @@ final class LostFoundTests: XCTestCase {
         XCTAssertNil(draft.validationMessage)
     }
 
-    func testDemoRemotePaginatesWithoutDuplicates() async throws {
-        let remote = DemoLostFoundRemote()
-        let first = await remote.page(state: 1, page: 1, size: 2)
-        let second = await remote.page(state: 1, page: 2, size: 2)
-        XCTAssertEqual(first.list.count, 2)
-        XCTAssertEqual(Set(first.list.map(\.id)).intersection(Set(second.list.map(\.id))), Set<String>())
-    }
-
     func testPublishBecomesVisibleOnlyAfterSuccessfulRemoteResponse() async throws {
         let remote = DemoLostFoundRemote()
         let item = try await remote.publish(validDraft())

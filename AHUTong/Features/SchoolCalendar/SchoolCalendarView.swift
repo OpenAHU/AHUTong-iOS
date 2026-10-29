@@ -70,7 +70,6 @@ final class SchoolCalendarViewModel: ObservableObject {
 }
 
 struct SchoolCalendarView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var model: SchoolCalendarViewModel
 
     init(repository: SchoolCalendarRepository = .live()) {
@@ -89,13 +88,6 @@ struct SchoolCalendarView: View {
                     .frame(maxHeight: .infinity)
                     .accessibilityIdentifier("school-calendar.demo")
 
-                HStack(spacing: 24) {
-                    Button("保存") { model.saveMessage = "演示模式不会写入系统照片" }
-                    Button("退出") { dismiss() }
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .padding(16)
             } else {
                 switch model.state {
             case .idle, .loading:
@@ -107,19 +99,6 @@ struct SchoolCalendarView: View {
                 }
             case let .loaded(snapshot):
                 SchoolCalendarZoomView(fileURL: snapshot.fileURL)
-
-                HStack(spacing: 12) {
-                    Button("保存") {
-                        Task { await model.savePhoto(at: snapshot.fileURL) }
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    Button("退出") { dismiss() }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.white)
-                }
-                .padding(16)
-                .background(Color.black.opacity(0.4))
 
                 if snapshot.source == .staleCache {
                     Text("网络不可用，正在显示已缓存校历")
@@ -151,7 +130,19 @@ struct SchoolCalendarView: View {
                 }
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("校历")
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("保存校历", systemImage: "square.and.arrow.down") {
+                    if demo { model.saveMessage = "演示模式不会写入系统照片" }
+                    else if case let .loaded(snapshot) = model.state {
+                        Task { await model.savePhoto(at: snapshot.fileURL) }
+                    }
+                }
+                .disabled(!demo && model.state.value == nil)
+            }
+        }
         .task { if !demo { await model.load() } }
         .alert("校历", isPresented: Binding(
             get: { model.saveMessage != nil },

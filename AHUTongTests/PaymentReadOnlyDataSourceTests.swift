@@ -816,6 +816,67 @@ final class PaymentReadOnlyDecoderTests: XCTestCase {
 }
 
 final class OfficialPaymentReadOnlyDataSourceTests: XCTestCase {
+    func testYCardLoginHTMLRefreshesOnceAndSecondRejectionStops() async throws {
+        for secondStatus in [200, 401] {
+            let api = YCardReadOnlyAPIStub(cookies: "[]")
+            let configuration = YCardReadOnlyClient.makeConfiguration()
+            configuration.protocolClasses = [YCardReadOnlyTestURLProtocol.self]
+            let client = YCardReadOnlyClient(
+                campusAPI: api,
+                configuration: configuration,
+                refreshCoordinator: SessionRefreshCoordinator()
+            )
+            let requestCount = YCardReadOnlyLockedBox(0)
+            YCardReadOnlyTestURLProtocol.handler = { request in
+                let count = requestCount.withValue {
+                    $0 += 1
+                    return $0
+                }
+                if count == 1 {
+                    return (
+                        HTTPURLResponse(
+                            url: request.url!,
+                            statusCode: 200,
+                            httpVersion: "HTTP/1.1",
+                            headerFields: ["Content-Type": "text/html"]
+                        )!,
+                        Data(#"<html><form id="loginForm"><input name="username"><input name="password"></form></html>"#.utf8)
+                    )
+                }
+                return (
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: secondStatus,
+                        httpVersion: "HTTP/1.1",
+                        headerFields: nil
+                    )!,
+                    Data("ok".utf8)
+                )
+            }
+
+            if secondStatus == 200 {
+                let data = try await client.request(
+                    .cardAccount,
+                    queryItems: YCardReadOnlyContract.cardAccountQuery
+                )
+                XCTAssertEqual(String(decoding: data, as: UTF8.self), "ok")
+            } else {
+                do {
+                    _ = try await client.request(
+                        .cardAccount,
+                        queryItems: YCardReadOnlyContract.cardAccountQuery
+                    )
+                    XCTFail("Expected second token rejection to stop")
+                } catch {
+                    XCTAssertEqual(error as? YCardReadOnlyError, .credentialsUnavailable)
+                }
+            }
+            XCTAssertEqual(requestCount.value, 2)
+            let refreshCount = await api.refreshCount()
+            XCTAssertEqual(refreshCount, 1)
+        }
+    }
+
     override func tearDown() {
         YCardReadOnlyTestURLProtocol.handler = nil
         super.tearDown()
@@ -1481,66 +1542,7 @@ private actor YCardReadOnlyAPIStub: CampusCoreAPI {
         return "temporary-token-\(tokenRequests)"
     }
 
-    func testYCardLoginHTMLRefreshesOnceAndSecondRejectionStops() async throws {
-        for secondStatus in [200, 401] {
-            let api = YCardReadOnlyAPIStub(cookies: "[]")
-            let configuration = YCardReadOnlyClient.makeConfiguration()
-            configuration.protocolClasses = [YCardReadOnlyTestURLProtocol.self]
-            let client = YCardReadOnlyClient(
-                campusAPI: api,
-                configuration: configuration,
-                refreshCoordinator: SessionRefreshCoordinator()
-            )
-            let requestCount = YCardReadOnlyLockedBox(0)
-            YCardReadOnlyTestURLProtocol.handler = { request in
-                let count = requestCount.withValue {
-                    $0 += 1
-                    return $0
-                }
-                if count == 1 {
-                    return (
-                        HTTPURLResponse(
-                            url: request.url!,
-                            statusCode: 200,
-                            httpVersion: "HTTP/1.1",
-                            headerFields: ["Content-Type": "text/html"]
-                        )!,
-                        Data(#"<html><form id="loginForm"><input name="username"><input name="password"></form></html>"#.utf8)
-                    )
-                }
-                return (
-                    HTTPURLResponse(
-                        url: request.url!,
-                        statusCode: secondStatus,
-                        httpVersion: "HTTP/1.1",
-                        headerFields: nil
-                    )!,
-                    Data("ok".utf8)
-                )
-            }
 
-            if secondStatus == 200 {
-                let data = try await client.request(
-                    .cardAccount,
-                    queryItems: YCardReadOnlyContract.cardAccountQuery
-                )
-                XCTAssertEqual(String(decoding: data, as: UTF8.self), "ok")
-            } else {
-                do {
-                    _ = try await client.request(
-                        .cardAccount,
-                        queryItems: YCardReadOnlyContract.cardAccountQuery
-                    )
-                    XCTFail("Expected second token rejection to stop")
-                } catch {
-                    XCTAssertEqual(error as? YCardReadOnlyError, .credentialsUnavailable)
-                }
-            }
-            XCTAssertEqual(requestCount.value, 2)
-            let refreshCount = await api.refreshCount()
-            XCTAssertEqual(refreshCount, 1)
-        }
-    }
 
     func refreshSession(scope: CampusSessionScope) {
         refreshes += 1

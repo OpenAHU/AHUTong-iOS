@@ -4,6 +4,7 @@ enum CampusCardLoginError: LocalizedError, Equatable, Sendable {
     case invalidCaptcha
     case missingSchoolSession
     case invalidResponse
+    case credentialsRejected
     case rejected(String)
 
     var errorDescription: String? {
@@ -11,6 +12,7 @@ enum CampusCardLoginError: LocalizedError, Equatable, Sendable {
         case .invalidCaptcha: "请输入四位图形验证码"
         case .missingSchoolSession: "校方验证码会话已失效，请刷新页面后重试"
         case .invalidResponse: "校方登录返回了无法识别的结果，请重试"
+        case .credentialsRejected: "账号或密码错误，请检查登录信息"
         case let .rejected(message): message.isEmpty ? "校方未接受本次登录，请检查验证码后重试" : message
         }
     }
@@ -72,6 +74,7 @@ struct CampusCardLoginClient: Sendable {
             throw CampusCardLoginError.invalidResponse
         }
         let result = try JSONDecoder().decode(LoginResponse.self, from: data)
+        if result.code == 10_012 { throw CampusCardLoginError.credentialsRejected }
         guard result.code == 10_000 else {
             throw CampusCardLoginError.rejected(
                 String((result.msg ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(240))

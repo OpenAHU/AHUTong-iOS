@@ -73,7 +73,7 @@ Apple 的[能力支持取决于平台及会员类型](https://developer.apple.co
 ## 发布前人工检查
 
 - [ ] 使用授权校园测试账号验证登录、课表和 PAY-01～05；真实支付只由测试者在明确授权的小额环境中手动确认。
-- [ ] 验证隐私 v5 接受/拒绝/撤回、可见 CAS 首登、首次及过期校园服务隐藏认证、OCR 失败重试，以及只含课表+设置的体验账户；邮箱会话应在退出/撤回后清除。
+- [ ] 验证隐私 v6 接受/拒绝/撤回、可见 CAS 首登、首次及过期校园服务隐藏认证、OCR 失败重试，以及只含课表+设置的体验账户；邮箱会话应在退出/撤回后清除，Sentry 仅在确认且同意当前政策时启动。
 - [ ] 确认 Apple target 不编译 Rust `/login` 与外部 OCR 链路；Release Archive 会拒绝包含旧 OCR 端点的二进制。
 - [x] PAY-01、PAY-03、PAY-05 的客户端签名与 PAY-02 安全键盘兼容逻辑已按 Android `2c33b0b` 隔离实现；协议常量只存在于私有支付兼容层，值不得进入日志、文档、诊断或验收记录。
 - [x] CI/自动测试通过应用级禁写开关、runner 域名阻断和 URLProtocol/Mock 禁止连接真实扣款接口。
@@ -88,13 +88,15 @@ Apple 的[能力支持取决于平台及会员类型](https://developer.apple.co
 
 构建 `iphoneos` 后，必须用打包脚本保留 App/Widget 的 App Group 声明。直接压缩完全无签名的 `.app` 会丢失二进制中的权限声明，重签工具无法从原签名得知共享需求。脚本只使用 ad-hoc 临时签名，不使用开发者证书、不添加 Team ID 或描述文件；生成的 IPA 仍需开发者重签才能安装。
 
+打包时先从内到外签署所有内嵌 `.framework` / `.dylib`，再签 Widget 和主 App。静态 SDK 的资源框架也必须完整签署：Xcode 可能为它生成最低系统版本为 `100.0` 的占位二进制，其链接器临时签名并未封装框架资源。不能只检查主 App / Widget，也不能依赖主 App 的 `codesign --deep` 检查代替逐个验证。保留 SDK 的隐私清单和资源，不给框架添加 App Group 权限。
+
 ```bash
 python3 scripts/package-resignable-ipa.py /path/to/AHUTong.app AHUTong-unsigned.ipa
 python3 scripts/verify-widget-bundle.py AHUTong-unsigned.ipa --require-entitlements
 python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
 ```
 
-检查器核对扩展、标识、版本、App Intents 元数据和双方权限声明；重签检查还要求最终签名、描述文件和团队一致。重签保留原组时使用原组；改名时只接受双方描述文件中唯一的共同组，且最终签名都必须授权该组。不会打印描述文件、设备 UDID 或证书。CI 的 IPA 工作流使用同一脚本，并强制验证权限声明，避免仅检查包结构就放行。
+检查器核对扩展、标识、版本、App Intents 元数据和双方权限声明；`--require-entitlements` 与 `--require-signature` 都逐个严格验证内嵌框架/动态库。重签检查还要求最终签名、描述文件和团队一致。重签保留原组时使用原组；改名时只接受双方描述文件中唯一的共同组，且最终签名都必须授权该组。不会打印描述文件、设备 UDID 或证书。CI 的 IPA 工作流使用同一脚本，并强制验证权限声明，避免仅检查包结构就放行。
 
 从源码使用自己团队签名时，设置 `AHUTONG_APP_GROUP` 为该团队已配置并且 App/Widget 都获授权的共享组；两份 entitlements 与两份 Info.plist 共用此变量。仅修改 Bundle ID 而丢失共享权限，会导致组件读不到课表。iOS 的 App/扩展需要共同获授权的 [App Group](https://developer.apple.com/documentation/xcode/configuring-app-groups)。
 
@@ -102,7 +104,7 @@ python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
 
 1. 从 [Sideloadly 官网](https://sideloadly.io/) 下载对应系统的版本，用数据线连接并信任 iPhone，在工具中选择该 iPhone、载入 `AHUTong-unsigned.ipa`，使用开发者账号重签安装。保留 Widget 扩展，并沿用原安装标识覆盖更新；无需卸载或清空数据。
 2. 打开 App 刷新课表，然后检查桌面组件。原共享组不能访问时，App/Widget 会尝试识别同一签名团队的唯一共同授权组；仍须通过系统 `containerURL` 检查，不会改用无法共享的私有目录。
-3. 若仍不能同步，进入“小工具 → 添加桌面课表微件 → 添加”，查看具体原因并使用“分享安装检查”。摘要只包含版本、App/Widget 标识、共享组和检查结果；不包含账号、Cookie、课表、设备标识、证书或完整描述文件，不需要导出签名 IPA。
+3. 若仍不能同步，进入“小工具 → 添加课表小组件”，查看具体原因并使用“分享安装检查”。摘要只包含版本、App/Widget 标识、共享组和检查结果；不包含账号、Cookie、课表、设备标识、证书或完整描述文件，不需要导出签名 IPA。
 4. `noCommonGroup` 表示两份描述文件未提供共同组，`accessDenied` 表示系统未允许访问所选组。Developer Program 会员身份本身不代表本次签名已配置 App Groups。在 Apple Developer 后台为本次安装的两个实际 App ID 启用同一个、属于自己团队的 App Group，并让签名工具重新生成匹配描述文件及双方 entitlement。不要直接假定原 `group.com.openahu.ahutong.shared` 已属于自己的团队。
 5. Sideloadly 官方将“自定义 app entitlements”列为 Developer Program 账号可用的 Patreon 功能；不能把“登录 Developer 账号”当作这项签名能力已启用的证据。若当前签名流程无法保留/设置双方共享权限，可改用自己团队的 Xcode 签名或支持该配置的签名流程，不能靠 App 代码绕过系统权限。
 
@@ -114,4 +116,29 @@ python3 scripts/verify-widget-bundle.py AHUTong-resigned.ipa --require-signature
 
 2026-10-22 维护：App 和 Widget 每次访问时重新解析共享容器，不固定保存一次失败结果；快照显式设置首次解锁后可读，安装检查无论成功/失败均可分享。这些改动改善进程与锁屏状态下的恢复，不会给缺失权限的重签安装授予 App Group。
 
-2026-10-23 维护：可以添加但课程为空时，也需检查同步数据。仅有起止周范围的课程现与 App 使用同一有效周次；有效缓存会先于网络周次校准发布。“小工具 → 添加桌面课表微件 → 添加”可查看已同步周次/课程数量，并打开课表同步。分享安装检查附带快照状态及数量，不含课程名称/地点；测试课表写入独立私有目录，不覆盖真实共享快照。修复这些数据问题不代表给重签安装授予共享权限。
+2026-10-23 维护：可以添加但课程为空时，也需检查同步数据。仅有起止周范围的课程现与 App 使用同一有效周次；有效缓存会先于网络周次校准发布。“小工具 → 添加课表小组件”可查看已同步周次/课程数量，并打开课表同步。分享安装检查附带快照状态及数量，不含课程名称/地点；测试课表写入独立私有目录，不覆盖真实共享快照。修复这些数据问题不代表给重签安装授予共享权限。
+
+2026-10-23 用户安装摘要复查：主 App 描述文件没有任何 App Group，Widget 描述文件不可读，系统容器不可访问。v2 检查将其明确归类为 `appGroupNotProvisioned`；描述文件不齐时团队比较为 `unknown`，不能误判为团队不同。此安装必须在签名阶段补齐共享授权，重复打包未签名 IPA 不会修复已安装的描述文件。
+
+### Sentry 诊断与调试符号
+
+SDK 9.31.0 已连接 `ratatoskr / ahutong-ios`。当前隐私 v6 确认后才启用过滤后的诊断，普通测试不发事件；真实合成收件和数据边界见 [Sentry 运维说明](../operations/sentry.md)。2026-10-24 用户已授权创建 CI 令牌并保存为仓库 `SENTRY_AUTH_TOKEN`；IPA 与 Archive 的 App / Widget dSYM 自动上传及服务端处理均通过，项目页面可见对应 Debug ID。历史合成 Debug 事件未上传其对应 Debug dSYM，不将 Release 上传成功当作该历史事件已完成源码定位。
+
+### 2026-10-25 本地体积与性能候选
+
+Release 从 Archive 生成 IPA，关闭覆盖率与插桩，启用发布后处理和符号裁剪，独立保留 dSYM；Debug 测试覆盖率不受影响。打包及两条发布工作流增加 `--require-release` 检查，拒绝覆盖率、嵌入调试段、未裁剪本地符号和模拟器执行文件。内嵌资源框架先逐个签名和校验，再签 Widget 与 App。普通开发证书导出仍需有效的账号、App/Widget 描述文件及共同 App Group；本地临时签名不能代替这些授权。
+
+App/Widget 版本统一为 1.0.4 (7)。校园码最终加载失败上报及旧离线队列已移除，未启用活跃统计。体积、Release 对比与测试证据见迁移路线图 E-20261025-02。按用户要求本轮不推送、不触发 Actions；本地新 dSYM 独立保留，未上传。最终验收必须在用户连接的测试 iPhone 上覆盖安装并验证，不以模拟器通过替代。
+
+
+2026-10-26 本地候选为 **1.0.4 (8)**：原生小工具列表/搜索/引导与测试清理已整合，IPA 6,180,767 bytes，另存 App/Widget dSYM；产物及验收证据见 E-20261026-01。Swift 单测上限 500，UI/Python/Rust 不计入。此候选没有触发 Actions、推送或上传符号；仍为待开发者重签的设备包，Widget 需要正式 App 和扩展具有共同 App Group 授权。本轮仅使用 iPhone 17 Pro Simulator 做同源码可视预览，保留真机验收边界。
+
+2026-10-26 后续最终候选 **1.0.4 (9)** 使用双列小工具、教务考勤、只读必吃榜及验证码有界重试，取代 build 8 的 List 试作。IPA **6,285,901 bytes**，SHA-256 `af261316b375a16582841ad3bca36899e7aa7b2a5b2cb5000b61d82ab9727d61`；Release 与内嵌代码签名门禁通过，App/Widget dSYM UUID 匹配。真实公开必吃榜已在指定模拟器运行时查询和解码；教务考勤账号和实机续期待验。包与 dSYM 仅在本地保存，未触发 Actions/推送/合并，未创建标识或共享组。证据见 E-20261026-02。
+
+此后用户提供参考图，源码工具页进一步改为四分类浅底描边卡片，并抽出共享按压反馈；同源码模拟器编译及 17 项 UI 通过，见 E-20261026-03。该 UI 切片尚未重新归档进设备 IPA，以上 UUID/哈希仍对应先前 1.0.4 (9) 候选，不能当作本次 UI 的安装包证据。
+
+2026-10-27 已补齐分类 UI 的设备归档 **1.0.4 (10)**，默认保持 OpenAHU 远端 OCR。IPA `build/deliverables/1.0.4-10-native-tools/AHUTong-1.0.4-10-resignable.ipa` 为 **6,289,426 bytes**，解压 **13,542,792 bytes**，较原始 #145 分别减少 **34.05% / 61.82%**。SHA-256 `7a4fd8db81ccb918a1cee6eb0076bd4221a724c8a970119495ab72eb3a525ce8`；Archive/Release 裁剪、版本/扩展/共享声明及逐个代码签名检查通过，dSYM 独立匹配保存。此历史候选需要开发者重签。见 E-20261027-01。
+
+2026-10-27 最新 **1.0.5 (11)** 已使用现有签名材料在测试 iPhone 覆盖安装并正常启动，设备元数据确认版本及可访问的数据容器。未卸载或清空，正式 Bundle ID 保持不变，沿用旧安装的签名标识以兼容更新。已签名 IPA 位于 `build/deliverables/1.0.5-11-device/AHUTong-1.0.5-11-device-signed.ipa`（6,319,236 bytes），匹配 dSYM 同目录独立保留。用户决定小组件下版处理：扩展保留，但 profile 和最终签名没有 App Group 权限，不能同步课表；完整 Widget 共享门禁仍待解决。业务真实账号验收未因此标记通过。Actions 未触发，符号未上传，见 E-20261027-02。
+
+随后用户恢复本次推送与 Actions 构建授权，要求云端产生替代 #145 的 1.0.5 IPA。PR #12 更新完整当前实现，云端重新归档、从内到外签署嵌套代码并检查 Release 裁剪及共享声明，dSYM 与对应 Archive 独立匹配上传。推送前本地 31 项脚本测试全部通过，Swift 单测预算和 UI 分片检查通过；运行结果以该提交的 Actions 为准。云端产物仍需开发者重签，不能代替最终 App Group 授权验收，见 E-20261027-03。

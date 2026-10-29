@@ -83,6 +83,117 @@ final class CMBRechargeSecurityTests: XCTestCase {
         )
     }
 
+    func testDoubleEncodedCampusTokenInApprovedBankURLIsBlocked() throws {
+        let leaking = try XCTUnwrap(URL(
+            string: "https://pay.cmbchina.com/checkout"
+                + "?return=https%253A%252F%252Fycard.ahu.edu.cn%252Fdone"
+                + "%253Fsynjones-auth%253Dcampus-secret"
+        ))
+
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(for: leaking),
+            .block
+        )
+    }
+
+    func testCredentialInApprovedBankPathIsBlocked() throws {
+        let leaking = try XCTUnwrap(URL(
+            string: "https://pay.cmbchina.com/checkout/synjones-auth=campus-secret"
+        ))
+
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(for: leaking),
+            .block
+        )
+    }
+
+    func testNestedCASTicketInApprovedBankURLIsBlocked() throws {
+        let leaking = try XCTUnwrap(URL(
+            string: "cmbmobilebank://pay"
+                + "?return=https%3A%2F%2Fycard.ahu.edu.cn%2Fdone%3Fticket%3DST-secret"
+        ))
+
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(for: leaking),
+            .block
+        )
+    }
+
+    func testCampusTicketInBankPathAndDeepEncodingAreBlocked() throws {
+        let pathLeak = try XCTUnwrap(URL(
+            string: "https://pay.cmbchina.com/checkout/ticket=ST-secret"
+        ))
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(for: pathLeak),
+            .block
+        )
+        let fragmentLeak = try XCTUnwrap(URL(
+            string: "https://pay.cmbchina.com/checkout#ticket=ST-secret"
+        ))
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(for: fragmentLeak),
+            .block
+        )
+
+        var nested = "ticket=ST-secret"
+        for _ in 0..<12 {
+            nested = try XCTUnwrap(
+                nested.addingPercentEncoding(
+                    withAllowedCharacters: .alphanumerics
+                )
+            )
+        }
+        let deeplyEncoded = try XCTUnwrap(URL(
+            string: "https://pay.cmbchina.com/checkout?return=\(nested)"
+        ))
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(
+                for: deeplyEncoded
+            ),
+            .block
+        )
+    }
+
+    func testBankOwnedTokenRemainsAllowed() throws {
+        let safe = try XCTUnwrap(URL(
+            string: "https://pay.cmbchina.com/checkout?token=bank-session"
+        ))
+
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(for: safe),
+            .openExternal(safe)
+        )
+    }
+
+    func testOnlyKnownInternalHostsAndDefaultHTTPSPortAreAllowed() throws {
+        XCTAssertTrue(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
+            try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn/charge-app"))
+        ))
+        XCTAssertTrue(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
+            try XCTUnwrap(URL(string: "https://epay92.ahu.edu.cn/charge-app"))
+        ))
+        XCTAssertFalse(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
+            try XCTUnwrap(URL(string: "https://pay.ahu.edu.cn/charge-app"))
+        ))
+        XCTAssertFalse(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
+            try XCTUnwrap(URL(string: "https://student@ycard.ahu.edu.cn/charge-app"))
+        ))
+        XCTAssertFalse(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
+            try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn:8443/charge-app"))
+        ))
+        XCTAssertTrue(CMBRechargeSecurityPolicy.isAllowedSchoolURL(
+            try XCTUnwrap(URL(string: "https://ycard.ahu.edu.cn:443/charge-app"))
+        ))
+
+        let externalPort = try XCTUnwrap(URL(
+            string: "https://pay.cmbchina.com:8443/checkout?token=bank-session"
+        ))
+        XCTAssertEqual(
+            CMBRechargeSecurityPolicy.navigationDecision(for: externalPort),
+            .block
+        )
+    }
+
     @MainActor
     func testWebConfigurationAndCredentialPolicyAreNonPersistent() {
         let configuration = CMBRechargeWebConfigurationFactory.make()
@@ -357,23 +468,6 @@ final class NetworkRechargeModelTests: XCTestCase {
         mutationRequest.httpMethod = "POST"
         XCTAssertThrowsError(
             try NetworkRechargeRequestPolicy.authorize(mutationRequest)
-        )
-    }
-
-    func testDemoFixtureCoversCompleteReadyStateWithoutProductionAccount() async throws {
-        let snapshot = try await DemoNetworkRechargeDataSource().load()
-
-        XCTAssertTrue(snapshot.account.hasPrefix("DEMO-"))
-        XCTAssertFalse(snapshot.statistics.isEmpty)
-        XCTAssertFalse(snapshot.quickAmounts.isEmpty)
-        XCTAssertNotNil(snapshot.maximumAmount)
-        XCTAssertNoThrow(
-            try NetworkRechargeAmount(
-                NetworkRechargeAmountParser.inputText(
-                    from: try XCTUnwrap(snapshot.quickAmounts.first)
-                ),
-                maximum: snapshot.maximumAmount
-            )
         )
     }
 

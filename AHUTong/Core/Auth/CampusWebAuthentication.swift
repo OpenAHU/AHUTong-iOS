@@ -336,7 +336,7 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
             webView.load(request)
             if !mode.isVisible {
-                let timeout: Duration = .seconds(30)
+                let timeout: Duration = mode.scope == .campusCard ? .seconds(90) : .seconds(30)
                 timeoutTask = Task { [weak self] in
                     try? await Task.sleep(for: timeout)
                     guard !Task.isCancelled else { return }
@@ -750,43 +750,9 @@ final class CampusWebLoginEngine: NSObject, ObservableObject, WKNavigationDelega
             }
             let cookies = await currentCampusCardCookies()
             guard !completed, !Task.isCancelled else { return }
-            let captchaImage: CampusCardCaptchaImage
-            do {
-                captchaImage = try await captchaClient.fetch(cookies: cookies)
-            } catch let reason as CampusCardCaptchaFetchError {
-                throw CampusWebAuthenticationError.campusCardCaptchaRequestFailed(reason)
-            } catch {
-                throw CampusWebAuthenticationError.campusCardCaptchaRequestFailed(.network)
-            }
-            let code: String
-            do {
-                code = try await captchaRecognizer.recognize(captchaImage.data)
-            } catch let reason as CampusCaptchaRecognitionError {
-                throw CampusWebAuthenticationError.campusCardOCRFailed(reason)
-            } catch {
-                throw CampusWebAuthenticationError.campusCardOCRFailed(.network)
-            }
-            guard !completed, !Task.isCancelled else { return }
-            let authenticatedCookies: [CampusCookie]
-            do {
-                authenticatedCookies = try await cardLoginClient.login(
-                    credentials: credentials,
-                    captcha: code,
-                    cookies: captchaImage.cookies
-                )
-            } catch CampusCardLoginError.missingSchoolSession {
-                throw CampusWebAuthenticationError.campusCardSchoolSessionMissing
-            } catch CampusCardLoginError.invalidCaptcha {
-                throw CampusWebAuthenticationError.campusCardOCRFailed(.invalidCode)
-            } catch CampusCardLoginError.invalidResponse {
-                throw CampusWebAuthenticationError.campusCardLoginResponseInvalid
-            } catch CampusCardLoginError.rejected(let message) {
-                throw message.contains("验证码")
-                    ? CampusWebAuthenticationError.campusCardCaptchaRejected
-                    : CampusWebAuthenticationError.campusCardSchoolRejected
-            } catch {
-                throw CampusWebAuthenticationError.campusCardLoginResponseInvalid
-            }
+            let authenticatedCookies = try await CampusCardLoginFlow(
+                captchaClient: captchaClient, recognizer: captchaRecognizer, loginClient: cardLoginClient
+            ).login(credentials: credentials, cookies: cookies)
             guard !completed, !Task.isCancelled else { return }
             submittedCredentials.capture(credentials)
             finish(returning: CampusWebAuthenticationResult(

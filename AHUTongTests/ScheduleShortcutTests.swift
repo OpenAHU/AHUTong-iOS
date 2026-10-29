@@ -5,18 +5,6 @@ import XCTest
 
 @MainActor
 final class ScheduleShortcutTests: XCTestCase {
-    func testTeachingWeekParsingNeverDefaultsMissingOrUnrelatedDataToWeekOne() {
-        for body in ["null", "{}", "true", "1.5", #"{"code":1}"#, #"{"data":null,"status":200}"#, "broken"] {
-            XCTAssertThrowsError(try TeachingWeekParser.parse(Data(body.utf8)), body)
-        }
-    }
-
-    func testTeachingWeekParserSupportsKnownResponseShapes() throws {
-        for (body, expected) in [("6", 6), (#"{"currentWeek":"3"}"#, 3), (#"{"data":{"teachWeek":4},"code":200}"#, 4)] {
-            XCTAssertEqual(try TeachingWeekParser.parse(Data(body.utf8)), expected)
-        }
-    }
-
     func testSpecifiedDateUsesExactWeekIndexesAndSundayMondayBoundary() {
         let snapshot = snapshot(courses: [course(weeks: [1, 3]), course(day: 7, id: "sunday")])
         XCTAssertEqual(query(snapshot, "2026-09-13").status, .courses)

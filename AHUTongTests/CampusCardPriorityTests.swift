@@ -78,7 +78,7 @@ final class CampusCardPriorityTests: XCTestCase {
 
     func testExpiredPrefetchGetsANewCodeInsteadOfShowingOldPayload() async {
         let api = DeferredCampusCardAPI()
-        let clock = CardTestClock()
+        let clock = MutableTestClock()
         let defaults = makeDefaults()
         defer { defaults.0.removePersistentDomain(forName: defaults.1) }
         let model = CampusCardViewModel(api: api, userID: "qr-fixture", defaults: defaults.0,
@@ -172,17 +172,49 @@ final class CampusCardPriorityTests: XCTestCase {
         XCTAssertEqual(events, ["qr", "qr", "balance"])
     }
 
+    func testAutomaticBalanceRefreshDoesNotCancelSlowRequest() async {
+        let api = DeferredCampusCardAPI(suspendFirstBalance: true)
+        let clock = MutableTestClock()
+        let defaults = makeDefaults()
+        defer { defaults.0.removePersistentDomain(forName: defaults.1) }
+        let model = CampusCardViewModel(api: api, userID: "slow-refresh", defaults: defaults.0, now: { clock.now() })
+        let initialLoad = Task { await model.refreshBalanceIfNeeded(demo: false) }
+        await api.waitForBalance()
+
+        clock.advance(seconds: 30)
+        await model.refreshBalanceIfNeeded(demo: false)
+        let waitingEvents = await api.events()
+        XCTAssertEqual(waitingEvents, ["balance"])
+        await api.releaseBalance()
+        await initialLoad.value
+        XCTAssertEqual(model.balanceState, .loaded(42))
+
+        await model.refreshBalanceIfNeeded(demo: false)
+        XCTAssertEqual(model.balanceState, .loaded(84))
+    }
+
+    func testCancelledBalanceCanRecoverWhenForegroundQRCodeFails() async {
+        let api = DeferredCampusCardAPI(suspendFirstBalance: true, failsQR: true)
+        let defaults = makeDefaults()
+        defer { defaults.0.removePersistentDomain(forName: defaults.1) }
+        let model = CampusCardViewModel(api: api, userID: "cancel-recovery", defaults: defaults.0)
+        let initialLoad = Task { await model.load(demo: false) }
+        await api.waitForBalance()
+
+        model.invalidateQRCode()
+        XCTAssertEqual(model.balanceState, .idle)
+        await model.resumeAfterForeground(demo: false)
+        XCTAssertEqual(model.balanceState, .loaded(84))
+
+        await api.releaseBalance()
+        await initialLoad.value
+        XCTAssertEqual(model.balanceState, .loaded(84))
+    }
+
     private func makeDefaults() -> (UserDefaults, String) {
         let suite = "campus-card-priority-\(UUID().uuidString)"
         return (UserDefaults(suiteName: suite)!, suite)
     }
-}
-
-private final class CardTestClock: @unchecked Sendable {
-    private let lock = NSLock()
-    private var date = Date(timeIntervalSince1970: 1_800_000_000)
-    func now() -> Date { lock.withLock { date } }
-    func advance(seconds: TimeInterval) { lock.withLock { date.addTimeInterval(seconds) } }
 }
 
 private actor DeferredCampusCardAPI: CampusCoreAPI {

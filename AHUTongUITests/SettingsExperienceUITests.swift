@@ -66,8 +66,7 @@ final class SettingsExperienceUITests: XCTestCase {
         app.alerts.buttons["确定"].tap()
 
         bar.buttons["小工具"].tap()
-        let add = app.buttons["tools.widget-add"]
-        if !add.isHittable { app.swipeUp() }
+        let add = app.revealTool("tools.widget-add")
         XCTAssertTrue(add.waitForExistence(timeout: 3))
         add.tap()
         XCTAssertTrue(app.buttons["tools.widget-guide.done"].waitForExistence(timeout: 3))

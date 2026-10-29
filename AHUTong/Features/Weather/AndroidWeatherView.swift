@@ -11,54 +11,25 @@ struct WeatherView: View {
     }
 
     var body: some View {
-        AndroidScreen {
-            VStack(spacing: 0) {
-                weatherHeader
-                stateContent
-            }
-        }
-        .sheet(isPresented: $showSettings) {
-            AndroidWeatherSettings(model: model)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        .task { await model.start(autoLocate: !AppRuntime.isDemoSession) }
-    }
-
-    @ViewBuilder
-    private var weatherHeader: some View {
-        if isSearchActive {
-            HStack(spacing: 0) {
-                AndroidIconButton(systemName: "arrow.left", accessibilityLabel: "关闭搜索") {
-                    isSearchActive = false
-                    cityQuery = ""
-                }
-                AndroidSearchField(
-                    text: $cityQuery,
-                    prompt: "输入城市名，如 合肥",
-                    onSubmit: search
-                )
-                AndroidIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索") {
-                    search()
+        VStack(spacing: 0) { stateContent }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle(locationTitle)
+            .toolbar(.visible, for: .navigationBar)
+            .searchable(text: $cityQuery, isPresented: $isSearchActive, prompt: "输入城市名，如 合肥")
+            .onSubmit(of: .search, search)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("天气设置", systemImage: "gearshape") { showSettings = true }
+                    Button("刷新天气", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
+                        .disabled(model.isRefreshing)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
-        } else {
-            AndroidHeader(title: locationTitle) {
-                HStack(spacing: 0) {
-                    AndroidIconButton(systemName: "magnifyingglass", accessibilityLabel: "搜索城市") {
-                        isSearchActive = true
-                    }
-                    AndroidIconButton(systemName: "gearshape", accessibilityLabel: "天气设置") {
-                        showSettings = true
-                    }
-                    AndroidIconButton(systemName: "arrow.clockwise", accessibilityLabel: "刷新") {
-                        Task { await model.refresh() }
-                    }
-                }
+            .sheet(isPresented: $showSettings) {
+                NavigationStack { WeatherSettingsView() }
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
-        }
+            .task { await model.start(autoLocate: !AppRuntime.isDemoSession) }
     }
 
     private var locationTitle: String {
@@ -175,11 +146,13 @@ private struct AndroidWeatherCurrentCard: View {
                 if preferences.showTemperature {
                     Text(androidTemperature(weather.temperature))
                         .font(.system(size: 64, weight: .light))
+                        .nativeNumericTransition(value: weather.temperature)
                 }
                 if preferences.showCondition {
                     Text(weather.weather ?? "").font(.headline).padding(.top, 4)
                     Text("体感 \(androidTemperature(weather.feelsLike))")
                         .font(.body)
+                        .nativeNumericTransition(value: weather.feelsLike)
                         .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
                         .padding(.top, 2)
                 }
@@ -328,8 +301,8 @@ private struct AndroidLifeIndexCard: View {
     }
 }
 
-private struct AndroidWeatherSettings: View {
-    @ObservedObject var model: WeatherViewModel
+private struct WeatherSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("weather.show-on-home") private var showOnHome = false
     @AppStorage("weather.home.mode") private var homeMode = WeatherHomeMode.detailed.rawValue
     @AppStorage("weather.home.show-location") private var homeShowsLocation = true
@@ -338,54 +311,23 @@ private struct AndroidWeatherSettings: View {
     @AppStorage("weather.home.show-air-quality") private var homeShowsAirQuality = true
 
     var body: some View {
-        AndroidScreen {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("天气设置").font(.title2).fontWeight(.bold)
-                    Text("选择首页天气样式和详细卡片信息：").font(.body).foregroundStyle(.secondary)
-                    Spacer().frame(height: 8)
-
-                    Text("首页样式")
-                        .font(.headline)
-                    HStack(spacing: 8) {
-                        ForEach(WeatherHomeMode.allCases) { mode in
-                            Button {
-                                homeMode = mode.rawValue
-                            } label: {
-                                Text(mode.title)
-                                    .foregroundStyle(.primary)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        WeatherHomeMode.resolve(homeMode) == mode
-                                            ? AndroidParityPalette.primaryTone80
-                                            : Color.secondary.opacity(0.1),
-                                        in: Capsule()
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(
-                                WeatherHomeMode.resolve(homeMode) == mode ? .isSelected : []
-                            )
-                        }
-                    }
-                    Spacer().frame(height: 8)
-
-                    Toggle("在首页显示天气", isOn: $showOnHome)
-                        .padding(.vertical, 4)
-                    Toggle("详细卡片显示城市名", isOn: $homeShowsLocation)
-                        .padding(.vertical, 4)
-                    Toggle("详细卡片显示温度", isOn: $homeShowsTemperature)
-                        .padding(.vertical, 4)
-                    Toggle("详细卡片显示天气状况", isOn: $homeShowsCondition)
-                        .padding(.vertical, 4)
-                    Toggle("详细卡片显示空气质量", isOn: $homeShowsAirQuality)
-                        .padding(.vertical, 4)
-                    Spacer().frame(height: 24)
+        Form {
+            Section("首页天气") {
+                Toggle("在首页显示天气", isOn: $showOnHome)
+                Picker("首页样式", selection: $homeMode) {
+                    ForEach(WeatherHomeMode.allCases) { Text($0.title).tag($0.rawValue) }
                 }
-                .padding(24)
+            }
+            Section("详细卡片") {
+                Toggle("显示城市名", isOn: $homeShowsLocation)
+                Toggle("显示温度", isOn: $homeShowsTemperature)
+                Toggle("显示天气状况", isOn: $homeShowsCondition)
+                Toggle("显示空气质量", isOn: $homeShowsAirQuality)
             }
         }
+        .navigationTitle("天气设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         .accessibilityIdentifier("weather.settings")
     }
 }

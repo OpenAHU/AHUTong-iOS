@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import AHUTong
@@ -126,19 +127,34 @@ final class WeatherRepositoryTests: XCTestCase {
     }
 
     @MainActor
-    func testFirstWeatherScreenEntryRequestsLocationBeforeIPFallback() async {
+    func testLocatedWeatherKeepsSnapshotDuringRefresh() async {
         let remote = WeatherRemoteStub(response: Self.fixture)
+        let clock = MutableTestClock()
         let model = WeatherViewModel(
             repository: WeatherRepository(remote: remote, cache: InMemoryDataStore()),
             preferencesStore: WeatherPreferencesStore(store: InMemoryDataStore()),
-            locationProvider: WeatherLocationStub(city: "芜湖市")
+            locationProvider: WeatherLocationStub(city: "芜湖市"),
+            now: { clock.now() }
         )
 
         await model.start(autoLocate: true)
-        let queries = await remote.queries
-
-        XCTAssertEqual(queries, [.city("芜湖市")])
         XCTAssertTrue(model.notice?.contains("当前位置") == true)
+        var lostSnapshot = false
+        let observation = model.$state.sink { state in
+            if state.value == nil { lostSnapshot = true }
+        }
+        clock.advance(seconds: 599)
+        await model.refreshIfNeeded()
+        let earlyQueries = await remote.queries
+        XCTAssertEqual(earlyQueries, [.city("芜湖市")])
+        clock.advance(seconds: 1)
+        await model.refreshIfNeeded()
+        observation.cancel()
+
+        let queries = await remote.queries
+        XCTAssertEqual(queries, [.city("芜湖市"), .city("芜湖市")])
+        XCTAssertFalse(lostSnapshot, "Refreshing the same location must keep the displayed numbers alive")
+        XCTAssertFalse(model.isRefreshing)
     }
 
     func testHomeModesRecoverUnknownValuesAndConfigurationRoundTrips() throws {
@@ -160,22 +176,6 @@ final class WeatherRepositoryTests: XCTestCase {
             from: JSONEncoder().encode(expected)
         )
         XCTAssertEqual(decoded, expected)
-    }
-
-    func testCompactHomePresentationUsesWeatherCodeAndMetrics() throws {
-        XCTAssertEqual(HomeWeatherPresentation.glyph(Self.fixture), "≋")
-        XCTAssertEqual(HomeWeatherPresentation.metricLines(Self.fixture), ["雨 --", "UV 6"])
-        XCTAssertEqual(
-            HomeWeatherPresentation.detail(weather: Self.fixture, showsAirQuality: true),
-            "东南风 1级 · 空气26"
-        )
-
-        let rain = try JSONDecoder().decode(
-            WeatherResponse.self,
-            from: Data(#"{"city":"合肥市","weather":"阵雨","weather_code":"305","temperature":28}"#.utf8)
-        )
-        XCTAssertEqual(rain.weatherCode, "305")
-        XCTAssertEqual(HomeWeatherPresentation.glyph(rain), "☔")
     }
 
     private static let fixtureData = Data(

@@ -9,6 +9,7 @@ import UIKit
 
 @MainActor
 final class CampusCardViewModel: ObservableObject {
+    static let balanceRefreshInterval: TimeInterval = 30
     enum BalanceState: Equatable {
         case idle
         case loading(Double?)
@@ -40,6 +41,7 @@ final class CampusCardViewModel: ObservableObject {
     private var balanceRequestTask: Task<Double, Error>?
     private var latestQRRequestID: UUID?
     private var latestBalanceRequestID: UUID?
+    private var lastBalanceAttempt: Date?
 
     init(
         api: any CampusCoreAPI, userID: String, defaults: UserDefaults = .standard,
@@ -73,7 +75,9 @@ final class CampusCardViewModel: ObservableObject {
 
     func load(demo: Bool, refresh: Bool = false) async {
         if case .loading = qrState { return }
+        guard balanceRequestTask == nil else { return }
         if case .loaded = balanceState, !refresh { return }
+        lastBalanceAttempt = now()
         if demo {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--demo-slow-card-balance") {
@@ -94,7 +98,6 @@ final class CampusCardViewModel: ObservableObject {
             return
         }
         let requestID = UUID()
-        balanceRequestTask?.cancel()
         latestBalanceRequestID = requestID
         let cached = cachedBalance
         balanceState = .loading(cached)
@@ -124,6 +127,12 @@ final class CampusCardViewModel: ObservableObject {
         await prefetchQRCode(demo: demo, retryFailure: true)
     }
 
+    func refreshBalanceIfNeeded(demo: Bool) async {
+        if let lastBalanceAttempt,
+           now().timeIntervalSince(lastBalanceAttempt) < Self.balanceRefreshInterval { return }
+        await load(demo: demo, refresh: true)
+    }
+
     func loadQRCode(demo: Bool, force: Bool = false, retryFailure: Bool = false) async {
         if case .loading = qrState, !force { return }
         if !force {
@@ -140,9 +149,7 @@ final class CampusCardViewModel: ObservableObject {
         }
         qrRequestTask?.cancel()
         // Opening or refreshing a payment code takes precedence over a passive balance read.
-        balanceRequestTask?.cancel()
-        balanceRequestTask = nil
-        latestBalanceRequestID = nil
+        cancelBalanceLoad()
         let requestID = UUID()
         latestQRRequestID = requestID
         qrLoadedAt = nil
@@ -188,9 +195,16 @@ final class CampusCardViewModel: ObservableObject {
         qrRequestTask = nil
         qrLoadedAt = nil
         qrState = .idle
+        cancelBalanceLoad()
+    }
+
+    private func cancelBalanceLoad() {
         latestBalanceRequestID = nil
         balanceRequestTask?.cancel()
         balanceRequestTask = nil
+        if case .loading = balanceState {
+            balanceState = cachedBalance.map(BalanceState.loaded) ?? .idle
+        }
     }
 
     func refreshQRCodeAndBalance(demo: Bool) async {
@@ -251,6 +265,15 @@ struct CampusCardPanel: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await model.resumeAfterForeground(demo: demo)
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(15)) }
+                catch { return }
+                if showsQRCode || showsFullQRCode {
+                    await model.loadQRCode(demo: demo)
+                } else {
+                    await model.refreshBalanceIfNeeded(demo: demo)
+                }
+            }
         }
         .task(id: paymentCodeRequestID) {
             guard paymentCodeRequestID != nil else { return }
@@ -267,14 +290,6 @@ struct CampusCardPanel: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .homeRefreshRequested)) { _ in
             Task { await model.refreshQRCodeAndBalance(demo: demo) }
-        }
-        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
-            guard scenePhase == .active, !showsQRCode, !showsFullQRCode else { return }
-            Task { await model.load(demo: demo, refresh: true) }
-        }
-        .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
-            guard scenePhase == .active, showsQRCode || showsFullQRCode else { return }
-            Task { await model.loadQRCode(demo: demo) }
         }
         .onDisappear {
             if !showsFullQRCode { model.invalidateQRCode() }
@@ -376,6 +391,7 @@ struct CampusCardPanel: View {
     private var balanceText: some View {
         if let balance = model.balance {
             Text("¥ \(balance, specifier: "%.2f")")
+                .nativeNumericTransition(value: balance)
         } else if case .loading = model.balanceState {
             ProgressView()
         } else {

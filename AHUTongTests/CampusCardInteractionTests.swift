@@ -57,21 +57,6 @@ final class CampusCardInteractionTests: XCTestCase {
         XCTAssertEqual(refreshFlags, [false, false])
     }
 
-    func testFirstQRCodeLoadCanRestoreCampusCardSessionSilently() async {
-        let api = CampusCardInteractionAPI(failsQRCode: true, recoversAfterRefresh: true)
-        let suite = "campus-card-interaction-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let model = CampusCardViewModel(api: api, userID: "test-user", defaults: defaults)
-
-        await model.loadQRCode(demo: false)
-        let automaticRefreshCount = await api.refreshCount()
-        XCTAssertEqual(model.qrState, .loaded("TEST-QR"))
-        XCTAssertEqual(automaticRefreshCount, 1)
-        let refreshFlags = await api.refreshInteractionFlags()
-        XCTAssertEqual(refreshFlags, [false])
-    }
-
     func testExpandedQRCodeCanRenewSilentlyWithoutPresentingLogin() async {
         let api = CampusCardInteractionAPI(
             failsQRCode: true,

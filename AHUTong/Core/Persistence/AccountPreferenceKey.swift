@@ -18,6 +18,7 @@ enum RetiredPreferenceCleaner {
 
     static func clean(defaults: UserDefaults = .standard) {
         let keys = defaults.dictionaryRepresentation().keys
+        // Remove legacy overrides; they no longer control any feature.
         for key in keys where key.hasPrefix("debug.mock.") || key.hasPrefix("debug.gray.")
             || retiredKeys.contains(where: { key == $0 || key.hasSuffix(".\($0)") }) {
             defaults.removeObject(forKey: key)

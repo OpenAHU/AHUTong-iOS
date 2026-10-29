@@ -7,11 +7,6 @@ enum CMBRechargeCredentialPersistence: Equatable, Sendable {
     case memoryOnly
 }
 
-enum CMBRechargeMode: Equatable, Sendable {
-    case live
-    case noDebitAcceptance
-}
-
 enum CMBRechargeURLBuilderError: LocalizedError, Equatable {
     case missingAccessToken
     case invalidEntryURL
@@ -324,21 +319,8 @@ private final class CMBRechargeWebState: ObservableObject {
 struct CMBRechargeView: View {
     @StateObject private var session: CMBRechargeSessionModel
     @StateObject private var webState = CMBRechargeWebState()
-    @StateObject private var acceptance: CMBRechargeAcceptanceModel
-    @State private var showsAcceptanceReport = false
 
-    private let mode: CMBRechargeMode
-
-    init(
-        appModel: AppModel,
-        mode: CMBRechargeMode = .live
-    ) {
-        self.mode = mode
-        _acceptance = StateObject(
-            wrappedValue: CMBRechargeAcceptanceModel(
-                service: CMBRechargeAcceptanceServiceFactory.make()
-            )
-        )
+    init(appModel: AppModel) {
         let campusAPI = appModel.campusAPI
         _session = StateObject(wrappedValue: CMBRechargeSessionModel {
             let accessToken = try await campusAPI.cardAccessToken()
@@ -364,20 +346,10 @@ struct CMBRechargeView: View {
     var body: some View {
         AndroidScreen {
             VStack(spacing: 0) {
-                AndroidHeader(
-                    title: mode == .noDebitAcceptance
-                        ? "PAY-04 无扣款探测"
-                        : "招商银行充值",
-                    large: true
-                )
+                AndroidHeader(title: "招商银行充值", large: true)
                     .accessibilityIdentifier("payment.cmb.screen")
 
-                if mode == .noDebitAcceptance {
-                    acceptanceBanner
-                }
-
-                if mode == .live,
-                   webState.progress > 0,
+                if webState.progress > 0,
                    webState.progress < 1 {
                     ProgressView(value: webState.progress)
                         .progressViewStyle(.linear)
@@ -391,21 +363,7 @@ struct CMBRechargeView: View {
                     .padding(.vertical, 8)
             }
         }
-        .task {
-            if mode == .noDebitAcceptance {
-                acceptance.reset()
-            }
-            await session.prepare()
-        }
-        .onChange(of: session.phase) { _, phase in
-            guard mode == .noDebitAcceptance else { return }
-            switch phase {
-            case .ready, .preparing:
-                break
-            case .failed:
-                acceptance.recordBootstrapFailure()
-            }
-        }
+        .task { await session.prepare() }
         .onDisappear {
             // The entry URL contains a short-lived credential. Discard both
             // the model reference and the non-persistent web view on exit.
@@ -430,10 +388,6 @@ struct CMBRechargeView: View {
         } message: {
             Text("将使用系统打开经白名单验证的招商银行页面；学校登录 Token 不会随链接带出。")
         }
-        .sheet(isPresented: $showsAcceptanceReport) {
-            CMBRechargeAcceptanceReportView(snapshot: acceptance.snapshot)
-                .presentationDetents([.medium, .large])
-        }
     }
 
     @ViewBuilder
@@ -450,121 +404,30 @@ struct CMBRechargeView: View {
             errorCard(message)
 
         case let .ready(entryURL, cookies, requestID):
-            if mode == .noDebitAcceptance {
-                acceptanceProbeCard(
+            ZStack {
+                CMBRechargeWebViewRepresentable(
                     entryURL: entryURL,
                     cookies: cookies,
-                    requestID: requestID
+                    requestID: requestID,
+                    state: webState,
+                    onSessionExpired: {
+                        Task { await session.prepare() }
+                    }
                 )
-            } else {
-                ZStack {
-                    CMBRechargeWebViewRepresentable(
-                        entryURL: entryURL,
-                        cookies: cookies,
-                        requestID: requestID,
-                        state: webState,
-                        onSessionExpired: {
-                            Task { await session.prepare() }
-                        }
-                    )
 
-                    if webState.isLoading, webState.progress == 0 {
-                        ProgressView()
-                            .controlSize(.large)
-                            .accessibilityLabel("正在加载招商银行充值页面")
-                    }
-
-                    if let errorMessage = webState.errorMessage {
-                        errorCard(errorMessage)
-                    }
+                if webState.isLoading, webState.progress == 0 {
+                    ProgressView()
+                        .controlSize(.large)
+                        .accessibilityLabel("正在加载招商银行充值页面")
                 }
-                .background(.background)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .accessibilityIdentifier("payment.cmb.web-view")
+
+                if let errorMessage = webState.errorMessage {
+                    errorCard(errorMessage)
+                }
             }
-        }
-    }
-
-    private func acceptanceProbeCard(
-        entryURL: URL,
-        cookies: [CampusCookie],
-        requestID: Int
-    ) -> some View {
-        statusCard {
-            Image(systemName: "network.badge.shield.half.filled")
-                .font(.system(size: 34))
-                .foregroundStyle(acceptanceTint)
-            Text("原生 HEAD 扣款前探测")
-                .font(.headline)
-            Text(
-                "不创建 WebView，不执行 JavaScript，不加载图片或脚本，"
-                    + "不发送请求体，也不自动跟随跳转。"
-            )
-            .font(.subheadline)
-            .multilineTextAlignment(.center)
-            .foregroundStyle(.secondary)
-            if acceptance.snapshot.completion == .running {
-                ProgressView()
-                    .accessibilityLabel("正在执行扣款前 HEAD 探测")
-            } else if acceptance.snapshot.completion == .failed {
-                Button("重新探测") {
-                    Task {
-                        await acceptance.run(
-                            entryURL: entryURL,
-                            cookies: cookies
-                        )
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("operations.cmb-acceptance.retry")
-            }
-        }
-        .accessibilityIdentifier("operations.cmb-acceptance.probe")
-        .task(id: requestID) {
-            await acceptance.run(entryURL: entryURL, cookies: cookies)
-        }
-    }
-
-    private var acceptanceBanner: some View {
-        AndroidCard(radius: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: acceptanceIcon)
-                        .foregroundStyle(acceptanceTint)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(acceptance.snapshot.completion.title)
-                            .font(.headline)
-                            .accessibilityIdentifier("operations.cmb-acceptance.status")
-                        Text("原生 HEAD 探测；不创建 WebView、不执行网页脚本、不发送请求体")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 8)
-                }
-                Button("查看并分享脱敏验收明细") {
-                    showsAcceptanceReport = true
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("operations.cmb-acceptance.report")
-            }
-            .padding(14)
-        }
-        .padding(.horizontal, 16)
-    }
-
-    private var acceptanceIcon: String {
-        switch acceptance.snapshot.completion {
-        case .running: "hourglass"
-        case .physicalDevicePassed, .simulatorPreviewPassed: "checkmark.shield.fill"
-        case .failed: "xmark.shield.fill"
-        }
-    }
-
-    private var acceptanceTint: Color {
-        switch acceptance.snapshot.completion {
-        case .running: .orange
-        case .physicalDevicePassed, .simulatorPreviewPassed: .green
-        case .failed: .red
+            .background(.background)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .accessibilityIdentifier("payment.cmb.web-view")
         }
     }
 
@@ -579,18 +442,12 @@ struct CMBRechargeView: View {
     private func errorCard(_ message: String) -> some View {
         AndroidCard(radius: 24) {
             VStack(alignment: .leading, spacing: 16) {
-                Label(
-                    mode == .noDebitAcceptance ? "探测准备失败" : "页面加载失败",
-                    systemImage: "exclamationmark.triangle"
-                )
+                Label("页面加载失败", systemImage: "exclamationmark.triangle")
                     .font(.headline)
                 Text(message)
                     .foregroundStyle(.secondary)
                 Button("重试") {
                     webState.resetForLoad()
-                    if mode == .noDebitAcceptance {
-                        acceptance.reset()
-                    }
                     Task { await session.prepare() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -602,67 +459,6 @@ struct CMBRechargeView: View {
     }
 }
 
-private struct CMBRechargeAcceptanceReportView: View {
-    let snapshot: CMBRechargeAcceptanceSnapshot
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Text(snapshot.completion.title)
-                        .font(.headline)
-                    Text("此验收只用原生 HEAD 请求检查登录凭证、内存 Cookie 与校方扣款前路由；不会创建 WebView、执行网页脚本、发送请求体或打开招商银行。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("检查项") {
-                    ForEach(snapshot.checks) { check in
-                        HStack(alignment: .top, spacing: 12) {
-                            Text(check.outcome.symbol)
-                                .font(.headline)
-                                .foregroundStyle(color(for: check.outcome))
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(check.id.title)
-                                Text(check.detail)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier(
-                            "operations.cmb-acceptance.check.\(check.id.rawValue)"
-                        )
-                    }
-                }
-
-                Section {
-                    ShareLink(item: snapshot.exportText) {
-                        Label("分享脱敏验收结果", systemImage: "square.and.arrow.up")
-                    }
-                    .accessibilityIdentifier("operations.cmb-acceptance.share")
-                } footer: {
-                    Text("报告不会包含账号、Token、Cookie 值、金额、订单号或完整查询参数。")
-                }
-            }
-            .navigationTitle("验收明细")
-            .navigationBarTitleDisplayMode(.inline)
-            .accessibilityIdentifier("operations.cmb-acceptance.report-screen")
-        }
-    }
-
-    private func color(for outcome: CMBRechargeAcceptanceOutcome) -> Color {
-        switch outcome {
-        case .pending: .secondary
-        case .passed: .green
-        case .warning: .orange
-        case .failed: .red
-        }
-    }
-}
-
-@MainActor
 private struct CMBRechargeWebViewRepresentable: UIViewRepresentable {
     let entryURL: URL
     let cookies: [CampusCookie]

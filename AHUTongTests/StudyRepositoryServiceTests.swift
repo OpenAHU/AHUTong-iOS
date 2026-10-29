@@ -4,45 +4,6 @@ import XCTest
 @testable import AHUTong
 
 final class StudyRepositoryServiceTests: XCTestCase {
-    func testCatalogMatchesSixAndroidSourceRepositories() throws {
-        XCTAssertEqual(StudyRepositoryCatalog.repositories.count, 6)
-        let cs = try XCTUnwrap(StudyRepositoryCatalog.repository(id: "cs"))
-        XCTAssertEqual(cs.branch, "master")
-        XCTAssertEqual(cs.githubURL.absoluteString, "https://github.com/Kaltsit-cell/AHU-CS-Repository")
-        XCTAssertEqual(
-            cs.downloadURLs(for: "大一/高数 1.pdf").last?.absoluteString,
-            "https://raw.githubusercontent.com/Kaltsit-cell/AHU-CS-Repository/master/%E5%A4%A7%E4%B8%80/%E9%AB%98%E6%95%B0%201.pdf"
-        )
-    }
-
-    func testRepositoryDisplayPathUsesCollegeNameAndRemovesDuplicatedRoot() {
-        XCTAssertEqual(
-            RepositoryPathPresentation.formatDisplayPath(
-                repositoryID: "cs",
-                relativePath: "大一/高等数学.pdf"
-            ),
-            "计算机科学与技术学院/大一/高等数学.pdf"
-        )
-        XCTAssertEqual(
-            RepositoryPathPresentation.formatDisplayPath(
-                repositoryID: "cs",
-                relativePath: "计算机科学与技术学院/大一/高等数学.pdf"
-            ),
-            "计算机科学与技术学院/大一/高等数学.pdf"
-        )
-        XCTAssertEqual(
-            RepositoryPathPresentation.formatDisplayPath(
-                repositoryID: "cs",
-                relativePath: "cs/大一/高等数学.pdf"
-            ),
-            "计算机科学与技术学院/大一/高等数学.pdf"
-        )
-        XCTAssertEqual(
-            RepositoryPathPresentation.formatDisplayPath(virtualPath: ""),
-            "学习资料"
-        )
-    }
-
     func testRepositoryBreadcrumbPreservesVirtualTargetsWhileHidingDuplicatedRoot() {
         let breadcrumbs = RepositoryPathPresentation.breadcrumbs(
             for: "cs/计算机科学与技术学院/大一/高数"

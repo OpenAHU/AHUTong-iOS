@@ -1,32 +1,12 @@
 import SwiftUI
 import WidgetKit
 
-struct HomeWidgetSpec: Identifiable, Codable, Equatable, Sendable {
-    let id: String
-    let title: String
-    let systemImage: String
-    let tintHex: UInt
-
-    static let all = [
-        HomeWidgetSpec(id: "bathroom", title: "浴室缴费", systemImage: "shower.fill", tintHex: 0x26A69A),
-        HomeWidgetSpec(id: "electricity", title: "电控缴费", systemImage: "bolt.fill", tintHex: 0xFFB300),
-        HomeWidgetSpec(id: "grade", title: "成绩单", systemImage: "chart.bar.doc.horizontal.fill", tintHex: 0xFFC107),
-        HomeWidgetSpec(id: "phone_book", title: "电话本", systemImage: "phone.fill", tintHex: 0x009688),
-        HomeWidgetSpec(id: "exam", title: "考场查询", systemImage: "pencil.and.list.clipboard", tintHex: 0x4CAF50),
-        HomeWidgetSpec(id: "school_calendar", title: "校历", systemImage: "calendar", tintHex: 0x9C27B0),
-        HomeWidgetSpec(id: "free_classroom", title: "空闲教室", systemImage: "building.2.fill", tintHex: 0x03A9F4),
-        HomeWidgetSpec(id: "lost_found", title: "失物招领", systemImage: "shippingbox.fill", tintHex: 0x1976D2),
-        HomeWidgetSpec(id: "weather", title: "天气", systemImage: "cloud.sun.fill", tintHex: 0xFFB300),
-        HomeWidgetSpec(id: "repository", title: "学习资料", systemImage: "folder.fill", tintHex: 0x8D6E63)
-    ]
-}
-
 struct HomeWidgetLayout: Codable, Equatable, Sendable {
     static let slotCount = 8
     private(set) var slots: [String?]
 
     init(slots: [String?] = ["bathroom", "electricity", nil, nil, nil, nil, nil, nil]) {
-        let known = Set(HomeWidgetSpec.all.map(\.id))
+        let known = Set(ToolItem.allCases.map(\.homeID))
         var seen: Set<String> = []
         self.slots = (0..<Self.slotCount).map { index in
             guard let value = slots[safe: index] ?? nil,
@@ -50,7 +30,7 @@ struct HomeWidgetLayout: Codable, Equatable, Sendable {
     }
 
     mutating func add(_ id: String) {
-        guard HomeWidgetSpec.all.contains(where: { $0.id == id }), !slots.contains(id),
+        guard ToolItem.allCases.contains(where: { $0.homeID == id }), !slots.contains(id),
               let index = slots.firstIndex(where: { $0 == nil }) else { return }
         slots[index] = id
     }
@@ -67,7 +47,7 @@ struct HomeWidgetLayout: Codable, Equatable, Sendable {
 
     mutating func place(_ id: String, at destination: Int) {
         guard slots.indices.contains(destination),
-              HomeWidgetSpec.all.contains(where: { $0.id == id }) else { return }
+              ToolItem.allCases.contains(where: { $0.homeID == id }) else { return }
         if let source = slots.firstIndex(where: { $0 == id }) {
             move(from: source, to: destination)
         } else if slots[destination] == nil {
@@ -157,13 +137,15 @@ enum HomeCourseTimeline {
 
 @MainActor
 final class HomeViewModel: ObservableObject {
+    static let automaticRefreshInterval: TimeInterval = 60
     @Published private(set) var courses: [Course] = []
     @Published private(set) var currentWeek = 1
     @Published private(set) var errorMessage: String?
     @Published private(set) var referenceDate = Date()
     private var currentWeekIsKnown = false
     private var isLoading = false
-    private var lastRefresh: Date?
+    private var lastRefreshAttempt: Date?
+    private var isDemo = false
 
     private let repository: ScheduleRepository
     private let shortcutStore: ScheduleShortcutStore
@@ -194,6 +176,8 @@ final class HomeViewModel: ObservableObject {
     func load(demo: Bool, refresh: Bool = false) async {
         guard !isLoading else { return }
         isLoading = true
+        isDemo = demo
+        lastRefreshAttempt = now()
         defer { isLoading = false }
         if demo {
             currentWeekIsKnown = true
@@ -212,7 +196,6 @@ final class HomeViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             courses = result.courses
             errorMessage = result.source == .staleCache ? "刷新失败，显示上次同步的课表" : nil
-            lastRefresh = now()
             // A valid cached week can populate the widget immediately. A slow
             // school request must not leave it empty when the app backgrounds.
             await publishWidgetIfWeekKnown()
@@ -236,9 +219,13 @@ final class HomeViewModel: ObservableObject {
 
     private func publishWidgetIfWeekKnown() async {
         guard currentWeekIsKnown else { return }
-        try? await widgetStore.save(.make(
-            courses: courses, currentWeek: currentWeek, updatedAt: referenceDate
-        ))
+        do {
+            try await widgetStore.save(.make(
+                courses: courses, currentWeek: currentWeek, updatedAt: referenceDate
+            ))
+        } catch {
+            AppDiagnostics.shared.report(.widgetWriteFailed, stage: .widgetPublish, error: error)
+        }
         if !AppRuntime.usesIsolatedUITestStorage {
             WidgetCenter.shared.reloadTimelines(ofKind: "AHUTongScheduleWidget")
         }
@@ -246,7 +233,8 @@ final class HomeViewModel: ObservableObject {
 
     func refreshOnEntry(demo: Bool) async {
         advanceDate()
-        if let lastRefresh, now().timeIntervalSince(lastRefresh) < 60 { return }
+        if let lastRefreshAttempt,
+           now().timeIntervalSince(lastRefreshAttempt) < Self.automaticRefreshInterval { return }
         await load(demo: demo, refresh: true)
     }
 
@@ -262,20 +250,26 @@ final class HomeViewModel: ObservableObject {
     }
 
     func advanceDate() {
-        guard !AppRuntime.isDemoSession, currentWeekIsKnown else { return }
-        let position = ScheduleWeekSnapshot(week: currentWeek, referenceDate: referenceDate).resolved(at: now())
-        currentWeek = position.week
-        referenceDate = position.referenceDate
+        guard !isDemo else { return }
+        let date = now()
+        if currentWeekIsKnown {
+            currentWeek = ScheduleWeekSnapshot(week: currentWeek, referenceDate: referenceDate).resolved(at: date).week
+        }
+        referenceDate = date
     }
 }
 
 struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var weatherModel = WeatherViewModel()
     @StateObject private var model: HomeViewModel
     @State private var layout: HomeWidgetLayout
     @State private var isEditing = false
+    @State private var editFeedback = 0
+    @State private var isRemoveTargeted = false
+    @State private var refreshAnimation = 0
     @AppStorage("home.request-edit") private var requestEdit = false
     @AppStorage("weather.show-on-home") private var showWeatherOnHome = false
     @AppStorage("weather.home.mode") private var weatherHomeMode = WeatherHomeMode.detailed.rawValue
@@ -288,17 +282,14 @@ struct HomeView: View {
     private let appModel: AppModel
     private let layoutStore: JSONStore<HomeWidgetLayout>
     private let onOpenSchedule: () -> Void
-    private let homeEditEnabled: Bool
     private let paymentCodeRequestID: UUID?
 
     init(
         appModel: AppModel,
-        homeEditEnabled: Bool = true,
         paymentCodeRequestID: UUID? = nil,
         onOpenSchedule: @escaping () -> Void = {}
     ) {
         self.appModel = appModel
-        self.homeEditEnabled = homeEditEnabled
         self.paymentCodeRequestID = paymentCodeRequestID
         self.onOpenSchedule = onOpenSchedule
         let userID: String
@@ -336,13 +327,14 @@ struct HomeView: View {
                     .padding(.bottom, isEditing ? 420 : 16)
                 }
                 .refreshable {
+                    refreshAnimation += 1
                     async let schedule: Void = model.load(demo: AppRuntime.isDemoSession, refresh: true)
                     async let weather: Void = weatherModel.refresh()
                     _ = await (schedule, weather)
                     NotificationCenter.default.post(name: .homeRefreshRequested, object: nil)
                 }
                 .scrollIndicators(.hidden)
-                .onLongPressGesture { if homeEditEnabled { isEditing = true } }
+                .onLongPressGesture { beginEditing() }
                 .overlay(alignment: .bottom) {
                     if isEditing { widgetLibrary }
                 }
@@ -353,6 +345,7 @@ struct HomeView: View {
                 }
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(isPresented: $showsCardRecharge) {
             if prefersCMBCardRecharge {
                 CMBRechargeView(appModel: appModel).androidDetailScreen()
@@ -369,22 +362,39 @@ struct HomeView: View {
         .onChange(of: layout) { _, newValue in
             Task { try? await layoutStore.save(newValue) }
         }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refreshOnEntry(demo: AppRuntime.isDemoSession) } }
-        }
-        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
-            model.advanceDate()
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: editFeedback)
+        .sensoryFeedback(.selection, trigger: isRemoveTargeted) { _, targeted in targeted }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                async let schedule: Void = model.refreshOnEntry(demo: AppRuntime.isDemoSession)
+                async let weather: Void = refreshHomeWeatherIfNeeded()
+                _ = await (schedule, weather)
+                do { try await Task.sleep(for: .seconds(HomeViewModel.automaticRefreshInterval)) }
+                catch { return }
+            }
         }
         .onAppear {
             Task { await model.refreshOnEntry(demo: AppRuntime.isDemoSession) }
-            if requestEdit && homeEditEnabled {
-                isEditing = true
+            if requestEdit {
+                beginEditing()
                 requestEdit = false
             }
         }
     }
 
+    private func refreshHomeWeatherIfNeeded() async {
+        if effectiveShowWeatherOnHome { await weatherModel.refreshIfNeeded() }
+    }
+
     private var atAGlance: some View {
+        TimelineView(.everyMinute) { timeline in
+            overviewContent
+                .onChange(of: timeline.date, initial: true) { _, _ in model.advanceDate() }
+        }
+    }
+
+    private var overviewContent: some View {
         VStack(alignment: .leading, spacing: 32) {
             HStack(spacing: 12) {
                 Text(Self.dateFormatter.string(from: model.referenceDate))
@@ -416,8 +426,15 @@ struct HomeView: View {
                         }
                     }
                 Text(model.summary.detail).font(.body).lineLimit(1)
+                    .nativeNumericTransition(value: model.summary.detail, countsDown: true)
+                    .accessibilityIdentifier("home.course-countdown")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .phaseAnimator([false, true], trigger: refreshAnimation) { content, contracted in
+                content.scaleEffect(reduceMotion || !contracted ? 1 : 0.95, anchor: .leading)
+            } animation: { contracted in
+                reduceMotion ? nil : .spring(response: contracted ? 0.22 : 0.4, dampingFraction: 0.75)
+            }
             .padding(.horizontal, 32)
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpenSchedule)
@@ -511,56 +528,87 @@ struct HomeView: View {
 
     @ViewBuilder
     private func homeSlot(index: Int, height: CGFloat) -> some View {
-        if let id = layout.slots[index], let spec = HomeWidgetSpec.all.first(where: { $0.id == id }) {
-            Group {
-                if spec.id == "bathroom" {
-                    NavigationLink {
-                        BathroomPaymentView(appModel: appModel).androidDetailScreen()
-                    } label: {
-                        HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("home.payment.bathroom")
-                } else if spec.id == "electricity" {
-                    NavigationLink {
-                        ElectricityPaymentView(appModel: appModel).androidDetailScreen()
-                    } label: {
-                        HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("home.payment.electricity")
-                } else {
-                    widgetDestination(spec: spec) {
-                        HomeTextWidgetCard(title: spec.title, isEditing: isEditing)
+        if let id = layout.slots[index], let tool = ToolItem.allCases.first(where: { $0.homeID == id }) {
+            homeToolCard(tool, height: height)
+                .onDrag { startDragging(tool) }
+                .dropDestination(for: String.self) { items, _ in
+                    guard let id = items.first else { return false }
+                    return placeTool(id, at: index)
+                }
+                .overlay(alignment: .topTrailing) {
+                    if isEditing {
+                        Button(role: .destructive) { removeTool(tool.homeID) } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.title2)
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .red)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("从首页移除\(tool.title)")
+                        .accessibilityIdentifier("home.widget-remove.\(tool.homeID)")
+                        .offset(x: 12, y: -14)
                     }
                 }
-            }
-            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-            .draggable(spec.id)
-            .dropDestination(for: String.self) { items, _ in
-                guard let id = items.first else { return false }
-                layout.place(id, at: index)
-                return true
-            }
-            .contextMenu {
-                if isEditing { Button("移除", role: .destructive) { layout.remove(at: index) } }
-            }
         } else if isEditing {
-            Button { isEditing = true } label: {
-                RoundedRectangle(cornerRadius: 24)
-                    .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [8, 6]))
-                    .foregroundStyle(.secondary)
-                    .overlay { Text("拖到这里").font(.caption) }
-            }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-            .dropDestination(for: String.self) { items, _ in
-                guard let id = items.first else { return false }
-                layout.place(id, at: index)
-                return true
-            }
-            .accessibilityLabel("空白小工具槽位 \(index + 1)")
+            RoundedRectangle(cornerRadius: 24)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [8, 6]))
+                .foregroundStyle(.secondary)
+                .overlay { Text("拖到这里").font(.caption) }
+                .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+                .dropDestination(for: String.self) { items, _ in
+                    guard let id = items.first else { return false }
+                    return placeTool(id, at: index)
+                }
+                .accessibilityLabel("空白小工具槽位 \(index + 1)")
+                .accessibilityIdentifier("home.widget-slot.\(index)")
         }
+    }
+
+    private func homeToolCard(_ tool: ToolItem, height: CGFloat) -> some View {
+        // Cancellation animates back to this source. Keep its identity stable
+        // when a long press enters editing while the system is lifting it.
+        NavigationLink {
+            ToolDestination(tool: tool, appModel: appModel)
+        } label: {
+            HomeTextWidgetCard(title: tool.title, isEditing: isEditing)
+        }
+        .buttonStyle(PressFeedbackStyle(cornerRadius: 24))
+        .disabled(isEditing)
+        .accessibilityIdentifier(
+            tool == .bathroom || tool == .electricity
+                ? "home.payment.\(tool.homeID)" : "home.widget.\(tool.homeID)"
+        )
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+    }
+
+    private func beginEditing() {
+        guard !isEditing else { return }
+        isEditing = true
+        editFeedback += 1
+    }
+
+    private func startDragging(_ tool: ToolItem) -> NSItemProvider {
+        isEditing = true
+        editFeedback += 1
+        return NSItemProvider(object: tool.homeID as NSString)
+    }
+
+    private func placeTool(_ id: String, at index: Int) -> Bool {
+        let previous = layout
+        layout.place(id, at: index)
+        guard layout != previous else { return false }
+        editFeedback += 1
+        return true
+    }
+
+    @discardableResult
+    private func removeTool(_ id: String) -> Bool {
+        guard let index = layout.slots.firstIndex(of: id) else { return false }
+        layout.remove(at: index)
+        editFeedback += 1
+        return true
     }
 
     private var userID: String {
@@ -602,18 +650,40 @@ struct HomeView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("添加小工具").font(.title3.bold())
-                    Text("此操作仅隐藏图标，您随时可以从小工具中重新添加。")
+                        .accessibilityIdentifier("home.widget-library")
+                    Text("拖动排序，点减号或拖到移除区即可移除。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("完成") { isEditing = false }
+                    .accessibilityIdentifier("home.widget-edit.done")
             }
+            Label("拖到这里移除", systemImage: "trash")
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .foregroundStyle(isRemoveTargeted ? .white : .red)
+                .background(isRemoveTargeted ? Color.red : Color.red.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: 14))
+                .contentShape(RoundedRectangle(cornerRadius: 14))
+                .dropDestination(for: String.self) { items, _ in
+                    guard let id = items.first else { return false }
+                    return removeTool(id)
+                } isTargeted: { isRemoveTargeted = $0 }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("home.widget-remove-target")
+                .accessibilityHint("仅从首页移除，小工具页仍可使用")
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
-                    ForEach(HomeWidgetSpec.all.filter { !layout.slots.contains($0.id) }) { spec in
-                        Button { layout.add(spec.id) } label: { HomeWidgetCard(spec: spec, compact: true) }
-                            .buttonStyle(.plain)
-                            .draggable(spec.id)
+                    ForEach(ToolItem.allCases.filter { !layout.slots.contains($0.homeID) }) { tool in
+                        Button {
+                            layout.add(tool.homeID)
+                            editFeedback += 1
+                        } label: { HomeWidgetCard(tool: tool) }
+                            .buttonStyle(PressFeedbackStyle(cornerRadius: 18))
+                            .onDrag { startDragging(tool) }
+                            .disabled(!layout.slots.contains(nil))
+                            .accessibilityLabel("添加\(tool.title)")
+                            .accessibilityIdentifier("home.widget-add.\(tool.homeID)")
                     }
                 }
             }
@@ -623,25 +693,6 @@ struct HomeView: View {
         .background(AndroidParityPalette.raisedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 32))
         .padding(.horizontal, 12)
         .padding(.bottom, 88)
-        .accessibilityIdentifier("home.widget-library")
-    }
-
-    @ViewBuilder
-    private func widgetDestination<Label: View>(spec: HomeWidgetSpec, @ViewBuilder label: () -> Label) -> some View {
-        Group {
-            switch spec.id {
-            case "grade": NavigationLink { GradeView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "exam": NavigationLink { ExamView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "phone_book": NavigationLink { PhoneBookView() } label: { label() }.buttonStyle(.plain)
-            case "school_calendar": NavigationLink { SchoolCalendarView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "weather": NavigationLink { WeatherView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "repository": NavigationLink { StudyRepositoryView().androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "free_classroom": NavigationLink { FreeClassroomView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            case "lost_found": NavigationLink { LostFoundView(appModel: appModel).androidDetailScreen() } label: { label() }.buttonStyle(.plain)
-            default: label()
-            }
-        }
-        .accessibilityIdentifier("home.widget.\(spec.id)")
     }
 
     private func loadLayout() async {
@@ -698,19 +749,16 @@ private struct HomeCourseTimelineIndicator: View {
 }
 
 private struct HomeWidgetCard: View {
-    let spec: HomeWidgetSpec
-    var isEditing = false
-    var compact = false
+    let tool: ToolItem
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: spec.systemImage).font(.system(size: compact ? 28 : 34)).foregroundStyle(Color(hex: spec.tintHex))
-            Text(spec.title).font(.headline).lineLimit(1)
+            ToolIcon(tool: tool).font(.system(size: 28))
+            Text(tool.title).font(.footnote.weight(.medium)).multilineTextAlignment(.center)
         }
-        .frame(width: compact ? 88 : nil, height: compact ? 88 : 112)
-        .frame(maxWidth: compact ? nil : .infinity)
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: compact ? 18 : 24))
-        .rotationEffect(.degrees(isEditing ? -0.7 : 0))
+        .padding(8)
+        .frame(width: 96, height: 88)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 18))
     }
 }
 
@@ -746,6 +794,7 @@ private struct HomeWeatherCard: View {
                         if configuration.showTemperature {
                             Text(weather.temperature.map { "\(Int($0.rounded()))°" } ?? "--")
                                 .font(.system(size: 32, weight: .light))
+                                .nativeNumericTransition(value: weather.temperature)
                         }
                         if configuration.showCondition {
                             Text(weather.weather ?? "").font(.body)
@@ -776,6 +825,7 @@ private struct CompactHomeWeatherCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(weather.temperature.map { "\(Int($0.rounded()))°" } ?? "--°")
                     .font(.system(size: 17, weight: .bold))
+                    .nativeNumericTransition(value: weather.temperature)
                 Text(weather.weather ?? "天气")
                     .font(.caption2)
                     .lineLimit(1)

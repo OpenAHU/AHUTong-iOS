@@ -65,7 +65,7 @@ final class StudentMailUITests: XCTestCase {
     func testToolsBackHistoryNamesItsRoot() {
         let app = launch([#"--demo-endpoint-weather={"city":"合肥市","weather":"晴","temperature":28}"#])
         app.tabBars.buttons["小工具"].tap()
-        app.buttons["tools.weather"].tap()
+        app.revealTool("tools.weather").tap()
         XCTAssertTrue(app.buttons["天气设置"].waitForExistence(timeout: 5))
         let back = app.navigationBars.buttons.element(boundBy: 0)
         XCTAssertEqual(back.label, "小工具")
@@ -75,7 +75,8 @@ final class StudentMailUITests: XCTestCase {
         XCTAssertTrue(root.isHittable)
         capture(app, "tools-native-back-history-root")
         root.tap()
-        XCTAssertTrue(app.buttons["tools.weather"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.scrollViews["tools.grid"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["天气设置"].exists)
     }
 
     func testToolsAndSettingsReturnToRootAfterExternalNavigationAndForegroundReturn() {
@@ -90,7 +91,8 @@ final class StudentMailUITests: XCTestCase {
         app.open(URL(string: "ahutong://schedule")!)
         XCTAssertTrue(app.tabBars.buttons["小工具"].waitForExistence(timeout: 5))
         app.tabBars.buttons["小工具"].tap()
-        XCTAssertTrue(app.buttons["tools.weather"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.scrollViews["tools.grid"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["天气设置"].exists)
         capture(app, "tools-returned-to-root")
         app.tabBars.buttons["设置"].tap()
         app.buttons["settings.preferences"].tap()

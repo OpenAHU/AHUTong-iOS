@@ -71,6 +71,7 @@ struct WidgetSharingConfiguration: Sendable {
 struct WidgetSharingResolution: Sendable {
     enum Issue: String, Sendable {
         case missingWidget, mismatchedConfiguration, unavailableProfiles, mismatchedTeams
+        case appGroupNotProvisioned
         case noCommonGroup, ambiguousGroups, accessDenied
 
         var guidance: String {
@@ -78,6 +79,7 @@ struct WidgetSharingResolution: Sendable {
             case .missingWidget: "安装包未保留课表小组件，请在重签时保留扩展。"
             case .mismatchedConfiguration: "App 与小组件的共享组配置不一致，请重新打包。"
             case .unavailableProfiles: "无法确认安装的共享权限，请在签名时为 App 和课表小组件启用同一 App Group。"
+            case .appGroupNotProvisioned: "当前 App 的签名未授权共享组，请为 App 和小组件启用同一 App Group 后重新签名。"
             case .mismatchedTeams: "App 与小组件未使用同一签名团队，请重新签名。"
             case .noCommonGroup: "App 与课表小组件没有共同的 App Group，请在签名时为两者启用同一共享组。"
             case .ambiguousGroups: "安装中存在多个共同共享组，请在打包时明确指定课表使用的 App Group。"
@@ -105,6 +107,9 @@ struct WidgetSharingResolution: Sendable {
         guard let app = configuration.appProfile, let widget = configuration.widgetProfile else {
             if let url = container(configuration.configuredGroup) {
                 return result(configuration.configuredGroup, url)
+            }
+            if configuration.appProfile?.groups.isEmpty == true {
+                return result(issue: .appGroupNotProvisioned)
             }
             return result(issue: .unavailableProfiles)
         }
@@ -134,7 +139,7 @@ struct WidgetSharingResolution: Sendable {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         return """
-        AHUTong Widget sharing check v1
+        AHUTong Widget sharing check v2
         App version: \(version) (\(build))
         App bundle ID: \(configuration.appBundleID ?? "unavailable")
         Widget bundle ID: \(configuration.widgetBundleID ?? "unavailable")
@@ -143,10 +148,17 @@ struct WidgetSharingResolution: Sendable {
         Widget configured group: \(configuration.widgetGroup ?? "missing")
         App profile groups: \(groupNames(configuration.appProfile))
         Widget profile groups: \(groupNames(configuration.widgetProfile))
-        Same profile team: \(configuration.appProfile != nil && configuration.widgetProfile != nil && configuration.appProfile?.team == configuration.widgetProfile?.team)
+        Same profile team: \(sameProfileTeamSummary)
         Resolved group: \(group ?? "none")
         Container available: \(containerURL != nil)
         Result: \(issue?.rawValue ?? "ready")
         """
+    }
+
+    private var sameProfileTeamSummary: String {
+        guard let app = configuration.appProfile, let widget = configuration.widgetProfile else {
+            return "unknown"
+        }
+        return String(app.team == widget.team)
     }
 }

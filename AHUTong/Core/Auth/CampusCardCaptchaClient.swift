@@ -52,6 +52,10 @@ struct CampusCardCaptchaClient: Sendable {
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch {
             throw CampusCardCaptchaFetchError.network
         }

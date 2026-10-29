@@ -20,6 +20,8 @@ jobs:
     name: Build unsigned device IPA
     runs-on: macos-26
     timeout-minutes: 30
+    env:
+      SENTRY_TOKEN_CONFIGURED: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
 
     steps:
       - name: Check out repository
@@ -48,7 +50,12 @@ jobs:
           xcodegen --version
           xcodegen generate --spec project.yml
 
-      - name: Build unsigned app for iPhone
+      - name: Configure required canteen contribution
+        env:
+          CANTEEN_WRITE_KEY: ${{ secrets.CANTEEN_WRITE_KEY }}
+        run: python3 scripts/configure-canteen-key.py "$RUNNER_TEMP/Canteen.xcconfig.local" --require-key
+
+      - name: Build unsigned Release archive for iPhone
         shell: bash
         run: |
           set -euo pipefail
@@ -57,13 +64,21 @@ jobs:
             -project AHUTong.xcodeproj \
             -scheme AHUTong \
             -configuration Release \
+            -xcconfig "$RUNNER_TEMP/Canteen.xcconfig.local" \
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -archivePath "$RUNNER_TEMP/AHUTong.xcarchive" \
+            ENABLE_CODE_COVERAGE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean build
+            clean archive
+
+      - name: Verify built contribution configuration
+        env:
+          CANTEEN_WRITE_KEY: ${{ secrets.CANTEEN_WRITE_KEY }}
+        run: python3 scripts/configure-canteen-key.py "$RUNNER_TEMP/AHUTong.xcarchive/Products/Applications/AHUTong.app" --verify-app --require-key
 
       - name: Package unsigned IPA
         id: package
@@ -71,22 +86,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          products_dir="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos"
-          app_path="$(find "$products_dir" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          app_path="$RUNNER_TEMP/AHUTong.xcarchive/Products/Applications/AHUTong.app"
 
-          if [[ -z "$app_path" ]]; then
-            echo "No .app bundle was produced in $products_dir" >&2
+          if [[ ! -d "$app_path" ]]; then
+            echo "No .app bundle was produced at $app_path" >&2
             exit 1
           fi
 
           ipa_path="$RUNNER_TEMP/AHUTong-unsigned.ipa"
           checksum_path="$RUNNER_TEMP/AHUTong-unsigned.ipa.sha256"
 
-          python3 scripts/package-resignable-ipa.py "$app_path" "$ipa_path"
+          python3 scripts/package-resignable-ipa.py "$app_path" "$ipa_path" --require-release
 
           shasum -a 256 "$ipa_path" > "$checksum_path"
           unzip -t "$ipa_path"
-          python3 scripts/verify-widget-bundle.py "$ipa_path" --require-entitlements
+          python3 scripts/verify-widget-bundle.py "$ipa_path" --require-entitlements --require-release
           unzip -l "$ipa_path"
 
           echo "ipa_path=$ipa_path" >> "$GITHUB_OUTPUT"
@@ -101,3 +115,20 @@ jobs:
             ${{ steps.package.outputs.checksum_path }}
           if-no-files-found: error
           retention-days: 7
+
+      - name: Preserve matching debug symbols
+        uses: actions/upload-artifact@v6
+        with:
+          name: AHUTong-dSYMs-${{ github.run_number }}
+          path: ${{ runner.temp }}/AHUTong.xcarchive/dSYMs/*.dSYM
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Install official Sentry CLI
+        if: env.SENTRY_TOKEN_CONFIGURED == 'true'
+        run: brew install getsentry/tools/sentry-cli
+
+      - name: Upload matching debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: bash scripts/upload-sentry-symbols.sh "$RUNNER_TEMP/AHUTong.xcarchive/dSYMs"
