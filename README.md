@@ -31,7 +31,7 @@ open AHUTong.xcodeproj
 
 在 Xcode 中选择 `AHUTong` scheme 和 iPhone Simulator，运行或测试。`project.yml` 是工程配置来源，生成的 Xcode 工程不提交。
 
-Swift 单元测试上限为 500，运行 `python3 scripts/check-swift-test-budget.py`；UI、Python 和 Rust 不计入。测试按风险保留独立场景，具体规则见 [AGENTS.md](AGENTS.md)。本机预览使用 iPhone 17 Pro；Xcode 27 的设备窗口位于 Device Hub。IPA 是真机包，模拟器须构建同源码的 Simulator App。
+Swift 单元测试上限为 600，运行 `python3 scripts/check-swift-test-budget.py`；UI、Python 和 Rust 不计入。测试按风险保留独立场景，具体规则见 [AGENTS.md](AGENTS.md)。本机预览使用 iPhone 17 Pro；Xcode 27 的设备窗口位于 Device Hub。IPA 是真机包，模拟器须构建同源码的 Simulator App。
 
 [最新 Android 差距审计](docs/migration/2026-10-26-android-gap-audit.md) · [考勤、必吃榜与续期记录](docs/migration/2026-10-26-campus-services.md) · [测试清理依据](docs/migration/2026-10-26-test-audit.md)
 

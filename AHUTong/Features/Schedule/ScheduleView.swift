@@ -204,7 +204,7 @@ final class ScheduleViewModel: ObservableObject {
             return
         } catch {
             guard requestID == id, !Task.isCancelled else { return }
-            state = .failed(AppErrorState(message: error.localizedDescription))
+            state = .failed(AppErrorState(error: error, route: "scheduleview"))
             if !previewNext { await publishWidget(.unavailable(.expired)) }
         }
     }

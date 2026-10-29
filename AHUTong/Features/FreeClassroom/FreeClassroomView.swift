@@ -32,7 +32,7 @@ final class FreeClassroomViewModel: ObservableObject {
             buildings = try await remote.buildings(campusID: selectedCampusID)
         } catch {
             buildings = []
-            rooms = .failed(AppErrorState(message: error.localizedDescription))
+            rooms = .failed(AppErrorState(error: error, route: "freeclassroomview"))
         }
         buildingsLoading = false
     }
@@ -99,7 +99,7 @@ final class FreeClassroomViewModel: ObservableObject {
             )
             rooms = result.isEmpty ? .empty : .loaded(result)
         } catch {
-            rooms = .failed(AppErrorState(message: error.localizedDescription))
+            rooms = .failed(AppErrorState(error: error, route: "freeclassroomview"))
         }
     }
 }

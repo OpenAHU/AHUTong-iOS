@@ -2,7 +2,7 @@ import AppIntents
 import SwiftUI
 
 private enum SettingsRoute: Hashable {
-    case preferences, licenses, contributors
+    case preferences, licenses, contributors, feedback
 }
 
 struct SettingsView: View {
@@ -15,7 +15,6 @@ struct SettingsView: View {
     @State private var showUpdateLog = false
     @State private var updateResult: AppUpdateResult?
     @State private var isCheckingUpdate = false
-    @State private var feedbackMessage: String?
     @State private var showsPrivacyConsent = false
 
     var body: some View {
@@ -37,12 +36,9 @@ struct SettingsView: View {
                 }
                 .buttonStyle(PressFeedbackStyle())
                 .accessibilityIdentifier("settings.contributors")
-                settingsButton("意见反馈", systemImage: AndroidParitySymbol.feedback) {
-                    openURL(AgreementDocument.communityQQGroupURL) { accepted in
-                        if !accepted { feedbackMessage = "请安装 QQ 后重试，或手动加入反馈群：1006203134" }
-                    }
-                }
-                .accessibilityIdentifier("settings.feedback")
+                NavigationLink(value: SettingsRoute.feedback) { Label("意见反馈", systemImage: AndroidParitySymbol.feedback) }
+                    .buttonStyle(PressFeedbackStyle())
+                    .accessibilityIdentifier("settings.feedback")
                 settingsButton("清除本机数据", systemImage: "line.3.horizontal.decrease.circle") {
                     showClearConfirmation = true
                 }
@@ -75,6 +71,7 @@ struct SettingsView: View {
                 AndroidPreferencesView(onboardingModel: onboardingModel, appModel: appModel).androidDetailScreen()
             case .licenses: ThirdPartyLicensesView().androidDetailScreen()
             case .contributors: ContributorsView().androidDetailScreen()
+            case .feedback: FeedbackView().androidDetailScreen()
             }
         }
         .confirmationDialog("清除本机数据？", isPresented: $showClearConfirmation, titleVisibility: .visible) {
@@ -92,7 +89,7 @@ struct SettingsView: View {
         .alert("更新说明", isPresented: $showUpdateLog) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("优化校园码、课表周指示器和贡献名单，完善 Siri 引导与课程倒计时。")
+            Text("1.0.7\n\n• 新增照片背景、扫一扫和菜鸟身份码。\n• 优化课表顶栏、天气及必吃榜详情。\n• 新增问题反馈与加密日志导出。\n• 新测试包可用时提醒一次。")
         }
         .alert("检查更新", isPresented: Binding(
             get: { updateResult != nil },
@@ -103,12 +100,6 @@ struct SettingsView: View {
             }
             Button("知道了", role: .cancel) { updateResult = nil }
         } message: { Text(updateResult?.message ?? "") }
-        .alert("意见反馈", isPresented: Binding(
-            get: { feedbackMessage != nil },
-            set: { if !$0 { feedbackMessage = nil } }
-        )) {
-            Button("知道了", role: .cancel) { feedbackMessage = nil }
-        } message: { Text(feedbackMessage ?? "") }
         .sheet(isPresented: $showsPrivacyConsent) {
             PrivacyConsentSheet(
                 accept: onboardingModel.consent.privacyDecision == .accepted ? nil : {

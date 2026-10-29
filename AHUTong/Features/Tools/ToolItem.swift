@@ -45,6 +45,7 @@ enum ToolItem: String, CaseIterable, Identifiable, Sendable {
 }
 
 struct ToolDestination: View {
+    @Environment(\.colorScheme) private var colorScheme
     let tool: ToolItem
     let appModel: AppModel
 
@@ -56,6 +57,7 @@ struct ToolDestination: View {
             .toolbar(.visible, for: .tabBar)
             .background(NativeNavigationGestureBridge())
             .appBackground()
+            .onAppear { AppDiagnostics.shared.page("tools.\(tool.rawValue)", dark: colorScheme == .dark, wallpaper: AppBackgroundStore.shared.image != nil) }
     }
 
     @ViewBuilder

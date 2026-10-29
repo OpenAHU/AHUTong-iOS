@@ -95,7 +95,7 @@ final class GradeViewModel: ObservableObject {
             apply(fresh)
         } catch {
             if cached == nil {
-                state = .failed(AppErrorState(message: error.localizedDescription))
+                state = .failed(AppErrorState(error: error, route: "gradeview"))
             } else {
                 refreshMessage = "刷新失败，当前显示上次保存的成绩。\(error.localizedDescription)"
             }

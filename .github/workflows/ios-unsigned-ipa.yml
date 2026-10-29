@@ -21,6 +21,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     env:
+      AHUTONG_ACTIONS_RUN_NUMBER: ${{ github.run_number }}
       SENTRY_TOKEN_CONFIGURED: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
 
     steps:
@@ -69,6 +70,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -archivePath "$RUNNER_TEMP/AHUTong.xcarchive" \
+            AHUTONG_ACTIONS_RUN_NUMBER="$AHUTONG_ACTIONS_RUN_NUMBER" \
             ENABLE_CODE_COVERAGE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \

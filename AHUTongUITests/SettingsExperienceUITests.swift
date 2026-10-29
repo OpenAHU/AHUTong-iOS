@@ -4,6 +4,29 @@ final class SettingsExperienceUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
     @MainActor
+    func testFeedbackRequiresPreviewAndNetworkDetailsAreOptIn() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 8))
+        app.tabBars.buttons["设置"].tap()
+        let feedback = app.buttons["settings.feedback"]
+        for _ in 0..<3 where !feedback.isHittable { app.swipeUp() }
+        feedback.tap()
+        app.buttons["feedback.compose"].tap()
+        XCTAssertEqual(app.switches["feedback.category.network"].value as? String, "0")
+        XCTAssertFalse(app.buttons["feedback.preview"].isEnabled)
+        let message = app.textViews["feedback.message"].exists ? app.textViews["feedback.message"] : app.textFields["feedback.message"]
+        message.tap(); message.typeText("Testing feedback preview")
+        app.buttons["feedback.preview"].tap()
+        XCTAssertTrue(app.navigationBars["确认反馈"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["feedback.send"].isEnabled)
+        XCTAssertTrue(app.staticTexts["演示模式不发送反馈。"].exists)
+    }
+
+    @MainActor
     func testBackgroundPhotoPickerCancellationPreservesSelection() {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"

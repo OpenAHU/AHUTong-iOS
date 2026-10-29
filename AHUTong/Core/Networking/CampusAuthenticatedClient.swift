@@ -309,7 +309,7 @@ actor CampusAuthenticatedClient {
         if !header.isEmpty { request.setValue(header, forHTTPHeaderField: "Cookie") }
 
         let redirectDelegate = followsRedirects ? nil : CampusRedirectBlockingDelegate()
-        let (data, response) = try await session.data(for: request, delegate: redirectDelegate)
+        let (data, response) = try await session.diagnosticData(for: request, delegate: redirectDelegate)
         guard let response = response as? HTTPURLResponse else { throw CampusWebError.invalidResponse }
         try await persistResponseCookies(response, for: response.url ?? url, existing: cookies)
         let responseHeaders = response.allHeaderFields.reduce(into: [String: String]()) { result, item in

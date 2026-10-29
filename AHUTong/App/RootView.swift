@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("theme.color", store: AppRuntime.sessionDefaults) private var themeColor = AndroidThemeColor.defaultValue
@@ -19,6 +21,8 @@ struct RootView: View {
     @State private var scheduleHeaderAction: ScheduleHeaderAction?
     @State private var showsScanner = false
     @State private var paymentCodeRequestID: UUID?
+    @StateObject private var updateMonitor = AppUpdateMonitor()
+    @State private var updatePrompt: ActionsUpdate?
 
     init(
         consentStore: any AgreementConsentStoring = AgreementConsentStore(
@@ -97,6 +101,21 @@ struct RootView: View {
             )
             await restoreForCurrentConsent()
         }
+        .task(id: canPresentUpdate) {
+            guard canPresentUpdate else { return }
+            await updateMonitor.check()
+            guard canPresentUpdate, !Task.isCancelled, let update = updateMonitor.available else { return }
+            updatePrompt = update
+            updateMonitor.markPresented(update)
+        }
+        .alert("有可用更新", isPresented: Binding(
+            get: { updatePrompt != nil }, set: { if !$0 { updatePrompt = nil } }
+        )) {
+            if let update = updatePrompt {
+                Button("查看下载") { openURL(update.destination) }
+            }
+            Button("稍后", role: .cancel) { updatePrompt = nil }
+        } message: { Text(updatePrompt?.message ?? "") }
         .onChange(of: onboardingModel.consent) { _, consent in
             AppDiagnostics.shared.updateConsent(consent)
             Task {
@@ -115,7 +134,8 @@ struct RootView: View {
             }
         }
         .tint(themeTint)
-        .onChange(of: selectedTab) { previous, _ in
+        .onChange(of: selectedTab) { previous, current in
+            AppDiagnostics.shared.page(current.rawValue, dark: colorScheme == .dark, wallpaper: AppBackgroundStore.shared.image != nil)
             // Discard a departing utility/settings stack even when selection
             // changes through a deep link instead of the system tab binding.
             if previous == .tools || previous == .settings { resetNavigationRoot(previous) }
@@ -159,12 +179,25 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             Task {
                 if phase == .active {
+                    AppDiagnostics.shared.foreground()
                     await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: true)
                     await rescheduleCourseRemindersIfNeeded()
                 } else if phase == .background {
+                    AppDiagnostics.shared.log(.runtime, "app.background")
                     await SystemCourseLiveActivityManager.shared.sceneChanged(isActive: false)
                 }
             }
+        }
+    }
+
+    private var canPresentUpdate: Bool {
+        guard !AppRuntime.usesIsolatedUITestStorage, onboardingModel.consent.isComplete,
+              scenePhase == .active, !showsScanner, shortcutNavigation.pendingRequest == nil,
+              paymentCodeRequestID == nil, homePath.isEmpty, schedulePath.isEmpty,
+              toolsPath.isEmpty, settingsPath.isEmpty else { return false }
+        switch appModel.sessionState {
+        case .authenticated, .experience: return true
+        case .loading, .signedOut: return false
         }
     }
 
