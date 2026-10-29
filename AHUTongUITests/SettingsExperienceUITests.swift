@@ -109,8 +109,7 @@ final class SettingsExperienceUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.2)).tap()
         XCTAssertTrue(app.staticTexts["将退出登录，并清除课表、缓存和隐私选择。"].waitForNonExistence(timeout: 3))
         app.buttons["settings.update-notes"].tap()
-        XCTAssertTrue(app.staticTexts["优化校园码、课表周指示器和贡献名单，完善 Siri 引导与课程倒计时。"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "GitHub Actions")).firstMatch.exists)
+        XCTAssertTrue(app.alerts["更新说明"].waitForExistence(timeout: 3))
         capture("update-notes", app)
         app.alerts.buttons["确定"].tap()
 

@@ -45,6 +45,13 @@ Sentry 9.31 的反馈跳过 `beforeSend`，因此使用公开反馈序列化模�
 
 ## 测试与验收
 
-Swift 单元方法预算改为600；未扩展到UI/Rust/Python。当前526项Swift、96项UI（每项恰好归属一个CI分片）。一条旧测试仍要求诊断完全不关联标识，与安装日活的新范围冲突，已改为验证“关联安装、禁止跨App跟踪”；未删除断言或跳过规避。
+Swift 单元方法预算改为600；未扩展到UI/Rust/Python。当前526项Swift、96项UI（每项恰好归属一个CI分片）。一条旧测试仍要求诊断完全不关联标识，与安装日活的新范围冲突，已改为验证“关联安装、禁止跨App跟踪”；未删除诊断安全断言或跳过规避。另一个UI smoke写死旧更新文案，已改为验证系统“更新说明”弹窗出现及可关闭，避免文案更新引发误报；该原有设置综合UI smoke已在指定iPhone17Pro单独复验通过，结果为 `build/update-notes-1.0.7.xcresult`。
 
 本机指定iPhone17Pro/iOS26.5、Release优化下的隔离测试：`build/acceptance-1.0.7.xcresult` 共528项，527通过、1项原有线上Sentry收件opt-in跳过、0失败；其中526项Swift单元、2项原生反馈/必吃榜UI。32项Python脚本检查为31通过、1项环境条件跳过；96项UI全部恰好分片一次，本地本轮没有声称全跑96项。已确认构建元数据随App打包。最终可贡献IPA由本分支Actions使用已配置的 `CANTEEN_WRITE_KEY` 构建，工作流强制核对实际App配置并独立保留dSYM、SHA-256和签名结构验证；结果以本次PR的Checks和产物为准。本机旧xcconfig为空，未将缺少贡献配置的本地Archive作为交付包。真实贡献写入、照片视差/第三方跳转及物理机使用留待用户验收。Widget共同App Group授权仍按先前决定延期，不能把SDK或打包修正当成共享授权已解决。
+
+
+## 真机安装记录
+
+2026-10-30，Actions Archive #91（源码 `2a29b0b`）完成贡献配置核验、Release门禁和匹配符号上传。由该Archive沿用现有证书/描述文件生成1.0.7（16）设备签名包，6557251 bytes，SHA-256 `320134c85fd78b9e1ea8495b749592579912dbd6a9bcca8abe969a2934dcaf5c`。通过已配对USB安装服务执行upgrade，返回InstallComplete；重新读取目标应用列表确认从1.0.5（14）升至1.0.7（16），未卸载/清空。功能验收由用户继续进行。
+
+Archive App/Widget UUID分别为 `5255D79E-F8CE-3FE2-BDEA-CEC75FFA5FA9` / `FBA7FD30-6407-30FD-A1BE-88ED94DFE2E4`，与本次dSYM逐一匹配。现有授权不含AppGroup，Widget共享仍延期。独立IPA工作流#148也成功产出1.0.7（16），6527603 bytes，SHA-256 `b93a682ae4d0fa793f7ce5a8a9b24a943645d142602c91990e877e3841dfed8c`；内嵌Actions运行号148已验证。两份来自相同功能源码，符号按各自构建保存。
