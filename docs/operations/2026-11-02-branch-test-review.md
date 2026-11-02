@@ -23,7 +23,9 @@
 
 1. CI [#188](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/40915426807) 的 settings 分片实际为19项：18通过，启动性能测量1项失败。两次尝试均为 XCTest 指标缺失（第4/第3次迭代为0个指标），不是首页断言失败或性能超过阈值。原测试在测量块中立即 terminate，可能过早结束响应指标采集；改为只测 launch，待 XCTest 收集后检查首页。保留5次迭代和 waitUntilResponsive，不跳过、不放宽断言、不减少采样次数。下一次 launch 自身会先结束旧进程。名称改为 testLaunchPerformance，不把默认 Debug CI 测量误称为 Release。
 2. 原 Settings 综合测试串联 Tab 顺序、隐藏 Debug、偏好位置、清数据、更新说明和小组件引导，故障定位困难且覆盖重复。拆成 Tab、账户/隐私位置、取消清数据、关闭更新说明四项；隐藏 Debug 和小组件引导保留既有专用回归，避免重复操作。未将独立场景塞进更大的方法。
-3. 原 CI 对 codex 分支的 push 与开放 PR 同时触发，产生重复完整测试。日常 CI 改为 main/develop push、面向这两者的 PR 及手动运行。IPA/Archive 对纯文档/测试改动增加路径过滤，打包流程自身改动仍触发；手动构建保留。
+3. 原 CI 对 codex 分支的 push 与开放 PR 同时触发，产生重复完整测试。日常 CI 改为 main/develop push、面向这两者的 PR 及手动运行。IPA/Archive 自动构建改为develop push，配合feature到develop的集成流程；对纯文档/测试改动增加路径过滤，打包流程自身改动仍触发，其他分支可手动构建。IPA上传与其他步骤统一为upload-artifact@v6，移除v4的Node20弃用警告。
+4. CI [#189](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/41399624353) 的导航分片未通过：拖动换位两次尝试均出现位置断言失败。截图显示编辑浮层遮挡下方卡片，测试仍直接拖向该卡片中心；本机同源码两项复验通过，不能据此忽略CI失败。测试改为从卡片露出的上部拖放，避开浮层边缘及右上移除按钮，等待两次换位的实际坐标；保留2点误差及双向交换断言。返回按钮按浴室导航栏及系统BackButton明确定位，等待表单可交互后点击，避免只凭页面容器存在就执行返回。
+5. #189实时活动分片最终通过，但首次出现fixture空标签及后台进程清理失败。改为匹配“已创建”终态；清理先恢复前台、重新启动清理夹具并等待“已清理”，不拿初始空标签代替完成。课前显示、开始上课后消失及原生倒计时语义不变。
 
 启动测量依据：[Apple XCTApplicationLaunchMetric](https://developer.apple.com/documentation/xctest/xctapplicationlaunchmetric)。Actions 路径与分支过滤同时满足才触发，见[官方 workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)。
 
@@ -34,12 +36,14 @@
 - 部分测试较长是同一笔订单的请求链验证，不能仅因行数删除。固定枚举/协议输入的表格循环合理；与用户界面文案无关的稳定契约断言继续保留。
 - SessionRefreshCoordinatorTests 仍用50ms制造并发重叠，另有少量等待 WebKit/系统动画的固定延迟。这是后续稳定性改进项；本轮不向业务接口添加专用观测参数，也不把所有异步等待盲目替换为 sleep。UI关键就绪大多通过 waitForExistence 或谓词等待。
 - CI现有UI失败重试会保留两次证据，settings 的旧失败实际重跑了整个分片。绿色但需要重试不能等同首次稳定通过；有重试应查看日志警告和xcresult，而不是持续增加次数。
-- 现有 opt-in Sentry smoke 默认跳过是为了禁止普通测试发送生产事件；其非空event ID仅证明SDK接受提交，不能证明后端收到。离线封包与真实收件必须分开报告。没有本轮生产事件查询，不用历史事件代替当前问题清单。
+- 现有 opt-in Sentry smoke 默认跳过是为了禁止普通测试发送生产事件；其非空event ID仅证明SDK接受提交，不能证明后端收到。离线封包与真实收件必须分开报告。后续按用户单独授权进行了只读线上审查，临时令牌已撤销；生产事件明细仅留在本机忽略目录，不纳入公开仓库。
 - 现有性能测试收集指标但没有设备校准基线，不能声称已建立启动速度回归阈值。App Group的真机授权、小组件共享、Siri真实语音、第三方扫码协议和真实贡献须独立验收；模拟器通过不能替代这些项目。
 
 ## 验证证据
 
-- Python脚本：本地32项，31通过、1项环境条件跳过，见 `build/audit-20261102/python-tests.log`。
+- Python脚本：显式指定Xcode后完整38项全部通过、无跳过，见 `build/audit-20261102/python-tests-xcode.log`。首次默认Command Line Tools导致签名夹具的整个setUpClass跳过，原记录“31通过、1项跳过”误把类级跳过当作一个方法，已补跑并更正。
 - Swift预算、99项UI分片覆盖、三个修改工作流的YAML解析与 `git diff --check` 通过。
 - 指定 iPhone 17 Pro / iOS26.5，Release优化并开启隔离测试fixture；启动/课表及拆分设置9项全部通过、无跳过、无重试，见 `build/audit-20261102/launch-settings.xcresult`。启动响应5次均收到指标：1.4661、1.3604、1.3495、1.2932、1.3435秒；无校准基线，不代表真机耗时。
+- #189的Swift单元阶段通过，服务30项、支付9项首次通过；设置22项和实时活动10项需要一次重试才通过；导航最终27/28通过，不能作为合并绿灯。后续测试修正的本机结果与新CI分别记录，不覆盖这次失败证据。
+- 指定iPhone17Pro/iOS26.5的Debug复验中，实时活动5项及工具15项首次通过，见 `build/audit-20261102/tools-live-hardened.xcresult`；初次尝试额外滚动后，换位用例未取得可交互卡片，1项失败的证据保留。撤回该滚动，改用浮层上方实际露出的卡片上部拖放，专项连续3次通过、无失败重试，见 `build/audit-20261102/drag-visible-target.xcresult`。连同前述9项，共30项受影响UI完成本机验证；未改业务布局或降低换位断言。
 - 先复验本地变更，再以PR #13最新完整CI为合并门禁；最终状态与合并提交以PR页面为准。业务源码和1.0.7（16）版本号不因本次测试治理改变。

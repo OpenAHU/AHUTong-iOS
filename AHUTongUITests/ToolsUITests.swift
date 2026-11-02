@@ -39,7 +39,10 @@ final class ToolsUITests: XCTestCase {
         XCTAssertTrue(bathroom.isHittable)
         bathroom.tap()
         XCTAssertTrue(app.descendants(matching: .any)["payment.bathroom.screen"].waitForExistence(timeout: 5))
-        app.navigationBars.buttons.firstMatch.tap()
+        let back = app.navigationBars["浴室缴费"].buttons["BackButton"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["payment.bathroom.phone"].isHittable)
+        back.tap()
         XCTAssertTrue(bathroom.waitForExistence(timeout: 3))
         XCTAssertTrue(app.tabBars.buttons["小工具"].isSelected)
     }
@@ -169,13 +172,24 @@ final class ToolsUITests: XCTestCase {
         }
         let source = app.descendants(matching: .any)["home.payment.bathroom"].firstMatch
         let destination = app.descendants(matching: .any)["home.payment.electricity"].firstMatch
+        XCTAssertTrue(source.exists && destination.exists)
         let sourceY = source.frame.midY, destinationY = destination.frame.midY
-        source.press(forDuration: 0.8, thenDragTo: destination)
+        // The library can cover the lower card's center. Grab and drop on the
+        // visible upper portion, away from its top-right removal button.
+        let grabOffset = CGVector(dx: 0.5, dy: 0.2)
+        source.coordinate(withNormalizedOffset: grabOffset).press(
+            forDuration: 0.8, thenDragTo: destination.coordinate(withNormalizedOffset: grabOffset)
+        )
+        waitForSwap(source: source, destination: destination, sourceY: destinationY, destinationY: sourceY)
         XCTAssertEqual(source.frame.midY, destinationY, accuracy: 2)
         XCTAssertEqual(destination.frame.midY, sourceY, accuracy: 2)
         capture(app, name: "home-drag-swap")
-        source.press(forDuration: 0.8, thenDragTo: destination)
+        source.coordinate(withNormalizedOffset: grabOffset).press(
+            forDuration: 0.8, thenDragTo: destination.coordinate(withNormalizedOffset: grabOffset)
+        )
+        waitForSwap(source: source, destination: destination, sourceY: sourceY, destinationY: destinationY)
         XCTAssertEqual(source.frame.midY, sourceY, accuracy: 2)
+        XCTAssertEqual(destination.frame.midY, destinationY, accuracy: 2)
     }
 
     func testHomeWidgetCancelledDragFromBrowsingKeepsAppUsable() {
@@ -270,6 +284,14 @@ final class ToolsUITests: XCTestCase {
     private func openHomeEditor(_ app: XCUIApplication) {
         app.buttons["tools.edit-home"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["home.widget-library"].waitForExistence(timeout: 4))
+    }
+
+    private func waitForSwap(source: XCUIElement, destination: XCUIElement, sourceY: CGFloat, destinationY: CGFloat) {
+        let swapped = NSPredicate { _, _ in
+            abs(source.frame.midY - sourceY) <= 2 && abs(destination.frame.midY - destinationY) <= 2
+        }
+        expectation(for: swapped, evaluatedWith: source)
+        waitForExpectations(timeout: 5)
     }
 
     private func capture(_ app: XCUIApplication, name: String) {

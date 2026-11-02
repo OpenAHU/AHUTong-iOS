@@ -23,16 +23,10 @@ final class CourseLiveActivityUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-session", "--demo-live-activity", "--demo-live-activity-ten-minutes"]
         app.launch()
-        defer {
-            app.terminate()
-            app.launchArguments.append("--demo-live-activity-clear")
-            app.launch()
-            _ = app.staticTexts["live-activity.fixture.status"].waitForExistence(timeout: 5)
-            app.terminate()
-        }
-        let status = app.staticTexts["live-activity.fixture.status"]
-        XCTAssertTrue(status.waitForExistence(timeout: 15))
-        XCTAssertEqual(status.label, "已创建")
+        defer { clearFixture(app) }
+        let status = app.staticTexts.matching(identifier: "live-activity.fixture.status")
+            .matching(NSPredicate(format: "label == %@", "已创建")).firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 30))
         let screen = app.frame
         XCUIDevice.shared.press(.home)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -105,17 +99,11 @@ final class CourseLiveActivityUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--reset-onboarding", "--demo-consent", "--demo-session", "--demo-live-activity"]
         app.launch()
-        defer {
-            app.terminate()
-            app.launchArguments.append("--demo-live-activity-clear")
-            app.launch()
-            _ = app.staticTexts["live-activity.fixture.status"].waitForExistence(timeout: 5)
-            app.terminate()
-        }
+        defer { clearFixture(app) }
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 15))
-        let status = app.staticTexts["live-activity.fixture.status"]
-        XCTAssertTrue(status.waitForExistence(timeout: 8))
-        XCTAssertEqual(status.label, "已创建")
+        let status = app.staticTexts.matching(identifier: "live-activity.fixture.status")
+            .matching(NSPredicate(format: "label == %@", "已创建")).firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 30))
         let screenFrame = app.frame
         XCUIDevice.shared.press(.home)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -147,13 +135,27 @@ final class CourseLiveActivityUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         let status = app.staticTexts["live-activity.fixture.status"]
-        XCTAssertTrue(status.waitForExistence(timeout: 15))
-        XCTAssertEqual(status.label, "已创建")
+        let created = app.staticTexts.matching(identifier: "live-activity.fixture.status")
+            .matching(NSPredicate(format: "label == %@", "已创建")).firstMatch
+        XCTAssertTrue(created.waitForExistence(timeout: 30))
         expectation(for: NSPredicate(format: "label == %@", "已结束"), evaluatedWith: status)
         waitForExpectations(timeout: 110)
         capture("live-activity-ended-system-state", springboard: app)
         XCUIDevice.shared.press(.home)
         capture("live-activity-absent-after-class-start", springboard: XCUIApplication(bundleIdentifier: "com.apple.springboard"))
+    }
+
+    @MainActor
+    private func clearFixture(_ app: XCUIApplication) {
+        // Resume a backgrounded app before relaunching; its cached process ID
+        // can be zero after SpringBoard has suspended or terminated it.
+        app.activate()
+        app.launchArguments.append("--demo-live-activity-clear")
+        app.launch()
+        let cleared = app.staticTexts.matching(identifier: "live-activity.fixture.status")
+            .matching(NSPredicate(format: "label == %@", "已清理")).firstMatch
+        XCTAssertTrue(cleared.waitForExistence(timeout: 15))
+        app.terminate()
     }
 
     @MainActor

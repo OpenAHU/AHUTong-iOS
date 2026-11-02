@@ -3,7 +3,7 @@ name: Release readiness archive
 on:
   push:
     branches:
-      - "codex/**"
+      - develop
     paths-ignore:
       - "**/*.md"
       - "AHUTongTests/**"

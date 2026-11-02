@@ -5,7 +5,7 @@ run-name: "Unsigned IPA #${{ github.run_number }}"
 on:
   push:
     branches:
-      - "codex/**"
+      - develop
     paths-ignore:
       - "**/*.md"
       - "AHUTongTests/**"
@@ -116,7 +116,7 @@ jobs:
           echo "checksum_path=$checksum_path" >> "$GITHUB_OUTPUT"
 
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: AHUTong-unsigned-ipa-${{ github.run_number }}
           path: |

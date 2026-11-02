@@ -4,7 +4,7 @@
 
 ## 下载与使用
 
-1. 登录 GitHub，进入 [Build unsigned IPA](https://github.com/OpenAHU/AHUTong-iOS/actions/workflows/ios-unsigned-ipa.yml)，打开最近一次成功的运行。
+1. 登录 GitHub，进入 [Build unsigned IPA](https://github.com/OpenAHU/AHUTong-iOS/actions/workflows/ios-unsigned-ipa.yml)，打开最近一次成功的运行。`develop` 合入应用或构建改动后自动打包，其他分支可手动构建；纯文档或测试改动不重复打包。
 2. 在 **Artifacts** 下载 `AHUTong-unsigned-ipa` 压缩包，解压得到 `AHUTong-unsigned.ipa`。构建产物保留 7 天。
 3. 使用 Sideloadly 或 AltStore 在自己的电脑上重签并安装，保留内嵌 Widget 扩展。安装后打开安大通，按首启流程完成登录。
 
