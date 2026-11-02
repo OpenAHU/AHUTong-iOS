@@ -283,14 +283,20 @@ struct HomeView: View {
     private let layoutStore: JSONStore<HomeWidgetLayout>
     private let onOpenSchedule: () -> Void
     private let paymentCodeRequestID: UUID?
+    @Binding private var showsFullQRCode: Bool
+    private let onFullQRCodeDismiss: () -> Void
 
     init(
         appModel: AppModel,
         paymentCodeRequestID: UUID? = nil,
+        showsFullQRCode: Binding<Bool>,
+        onFullQRCodeDismiss: @escaping () -> Void,
         onOpenSchedule: @escaping () -> Void = {}
     ) {
         self.appModel = appModel
         self.paymentCodeRequestID = paymentCodeRequestID
+        _showsFullQRCode = showsFullQRCode
+        self.onFullQRCodeDismiss = onFullQRCodeDismiss
         self.onOpenSchedule = onOpenSchedule
         let userID: String
         if case let .authenticated(user) = appModel.sessionState { userID = user.studentID } else { userID = "guest" }
@@ -497,7 +503,9 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: 16) {
                 CampusCardPanel(
                     api: appModel.campusAPI, userID: userID, demo: demo,
-                    paymentCodeRequestID: paymentCodeRequestID
+                    paymentCodeRequestID: paymentCodeRequestID,
+                    showsFullQRCode: $showsFullQRCode,
+                    onFullQRCodeDismiss: onFullQRCodeDismiss
                 ) {
                     showsCardRecharge = true
                 }

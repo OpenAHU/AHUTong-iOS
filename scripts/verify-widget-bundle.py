@@ -137,7 +137,7 @@ def verify(app, require_signature, require_entitlements=False, require_release=F
     if not group or "$(" in group or group != widget_info.get("AHUTongAppGroupIdentifier"):
         raise ValueError("App and Widget must declare the same resolved App Group identifier")
     app_actions = json.loads((app / "Metadata.appintents/extract.actionsdata").read_text()).get("actions", {})
-    if not {"OpenPaymentCodeIntent", "QueryScheduleIntent"}.issubset(app_actions):
+    if not {"OpenPaymentCodeIntent", "OpenScannerIntent", "QueryScheduleIntent"}.issubset(app_actions):
         raise ValueError("App is missing its Siri/Shortcuts action metadata")
     widget_metadata = json.loads((widget / "Metadata.appintents/extract.actionsdata").read_text())
     configuration = widget_metadata.get("actions", {}).get("ScheduleWidgetConfiguration", {})

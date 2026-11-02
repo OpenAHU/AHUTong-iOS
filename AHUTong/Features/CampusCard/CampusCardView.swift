@@ -224,19 +224,23 @@ struct CampusCardPanel: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model: CampusCardViewModel
     @State private var showsQRCode = false
-    @State private var showsFullQRCode = false
+    @Binding private var showsFullQRCode: Bool
     @State private var previousBrightness: CGFloat?
     @State private var expandedHeight: CGFloat = 280
     private let demo: Bool
     private let paymentCodeRequestID: UUID?
+    private let onFullQRCodeDismiss: () -> Void
     private let onRecharge: () -> Void
 
     init(
         api: any CampusCoreAPI, userID: String, demo: Bool,
-        paymentCodeRequestID: UUID? = nil, onRecharge: @escaping () -> Void
+        paymentCodeRequestID: UUID? = nil, showsFullQRCode: Binding<Bool>,
+        onFullQRCodeDismiss: @escaping () -> Void, onRecharge: @escaping () -> Void
     ) {
         self.demo = demo
         self.paymentCodeRequestID = paymentCodeRequestID
+        _showsFullQRCode = showsFullQRCode
+        self.onFullQRCodeDismiss = onFullQRCodeDismiss
         self.onRecharge = onRecharge
         _model = StateObject(wrappedValue: CampusCardViewModel(api: api, userID: userID))
     }
@@ -268,7 +272,8 @@ struct CampusCardPanel: View {
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(15)) }
                 catch { return }
-                if showsQRCode || showsFullQRCode {
+                if showsFullQRCode { continue } // The full-screen view owns its refresh lifetime.
+                if showsQRCode {
                     await model.loadQRCode(demo: demo)
                 } else {
                     await model.refreshBalanceIfNeeded(demo: demo)
@@ -276,8 +281,9 @@ struct CampusCardPanel: View {
             }
         }
         .task(id: paymentCodeRequestID) {
-            guard paymentCodeRequestID != nil else { return }
+            guard paymentCodeRequestID != nil, !Task.isCancelled else { return }
             showsQRCode = true
+            showsFullQRCode = true
             guard scenePhase == .active else { return }
             // A new shortcut rebuilds the home stack. Join its initial read
             // instead of cancelling an in-flight request or silent renewal.
@@ -294,22 +300,57 @@ struct CampusCardPanel: View {
         .onDisappear {
             if !showsFullQRCode { model.invalidateQRCode() }
         }
-        .fullScreenCover(isPresented: $showsFullQRCode) {
-            ZStack {
-                Color.black.opacity(0.82).ignoresSafeArea()
-                    .onTapGesture { showsFullQRCode = false }
-                qrImage(size: 320)
-                    .padding(20)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .fullScreenCover(isPresented: $showsFullQRCode, onDismiss: onFullQRCodeDismiss) {
+            NavigationStack {
+                GeometryReader { geometry in
+                    ZStack {
+                        Color.black.ignoresSafeArea()
+                            .onTapGesture { showsFullQRCode = false }
+                        qrImage(size: max(0, min(400, min(geometry.size.width, geometry.size.height) - 64)), fullScreen: true)
+                            .padding(20)
+                            .background(.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            .environment(\.colorScheme, .light)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .navigationTitle("付款码")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("关闭", systemImage: "xmark") { showsFullQRCode = false }
+                            .labelStyle(.iconOnly)
+                            .accessibilityIdentifier("campus-card.qr-fullscreen-close")
+                    }
+                }
+                .toolbarBackground(.hidden, for: .navigationBar)
             }
-            .onAppear {
-                previousBrightness = UIScreen.main.brightness
-                UIScreen.main.brightness = 1
+            .preferredColorScheme(.dark)
+            .tint(.white)
+            .onAppear { updateBrightness(boost: scenePhase == .active) }
+            .onChange(of: scenePhase) { _, phase in
+                updateBrightness(boost: phase == .active)
+                if phase == .background { model.invalidateQRCode() }
             }
-            .onDisappear {
-                if let previousBrightness { UIScreen.main.brightness = previousBrightness }
-                previousBrightness = nil
+            .onDisappear { updateBrightness(boost: false) }
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                await model.loadQRCode(demo: demo, retryFailure: true)
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(15)) }
+                    catch { return }
+                    await model.loadQRCode(demo: demo)
+                }
             }
+        }
+    }
+
+    private func updateBrightness(boost: Bool) {
+        if boost {
+            if previousBrightness == nil { previousBrightness = UIScreen.main.brightness }
+            UIScreen.main.brightness = 1
+        } else if let previousBrightness {
+            UIScreen.main.brightness = previousBrightness
+            self.previousBrightness = nil
         }
     }
 
@@ -400,7 +441,8 @@ struct CampusCardPanel: View {
     }
 
     @ViewBuilder
-    private func qrImage(size: CGFloat) -> some View {
+    private func qrImage(size: CGFloat, fullScreen: Bool = false) -> some View {
+        let prefix = fullScreen ? "campus-card.fullscreen" : "campus-card"
         switch model.qrState {
         case let .loaded(payload):
             Button {
@@ -412,27 +454,27 @@ struct CampusCardPanel: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("校园卡付款码，点按刷新")
-            .accessibilityIdentifier("campus-card.qr-refresh")
+            .accessibilityIdentifier("\(prefix).qr-refresh")
         case .loading:
             ProgressView().frame(width: size, height: size)
-                .accessibilityIdentifier("campus-card.qr-loading")
+                .accessibilityIdentifier("\(prefix).qr-loading")
         case let .failed(message):
             Button {
                 Task { await model.refreshQRCodeAndBalance(demo: demo) }
             } label: {
                 Text("加载失败\n\(message)\n点此重试")
-                    .font(.caption2)
+                    .font(fullScreen ? .body : .caption2)
                     .multilineTextAlignment(.center)
                     .frame(width: size, height: size)
             }
-            .accessibilityIdentifier("campus-card.qr-retry")
+            .accessibilityIdentifier("\(prefix).qr-retry")
         case .idle:
             Button("获取付款码") {
                 Task { await model.refreshQRCodeAndBalance(demo: demo) }
             }
-            .font(.caption)
+            .font(fullScreen ? .headline : .caption)
             .frame(width: size, height: size)
-            .accessibilityIdentifier("campus-card.qr-load")
+            .accessibilityIdentifier("\(prefix).qr-load")
         }
     }
 }

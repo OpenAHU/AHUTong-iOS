@@ -99,7 +99,9 @@ final class StudentMailUITests: XCTestCase {
         XCTAssertTrue(app.buttons["preferences.shortcuts"].waitForExistence(timeout: 4))
         XCUIDevice.shared.press(.home)
         app.open(URL(string: "ahutong://payment-code")!)
-        XCTAssertTrue(app.buttons["campus-card.qr-collapse"].waitForExistence(timeout: 6))
+        let closeCode = app.buttons["campus-card.qr-fullscreen-close"]
+        XCTAssertTrue(closeCode.waitForExistence(timeout: 6))
+        closeCode.tap()
         app.tabBars.buttons["设置"].tap()
         XCTAssertTrue(app.buttons["settings.preferences"].waitForExistence(timeout: 4))
         app.tabBars.buttons["设置"].tap()

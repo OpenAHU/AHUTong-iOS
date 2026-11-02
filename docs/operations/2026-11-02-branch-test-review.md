@@ -47,3 +47,9 @@
 - #189的Swift单元阶段通过，服务30项、支付9项首次通过；设置22项和实时活动10项需要一次重试才通过；导航最终27/28通过，不能作为合并绿灯。后续测试修正的本机结果与新CI分别记录，不覆盖这次失败证据。
 - 指定iPhone17Pro/iOS26.5的Debug复验中，实时活动5项及工具15项首次通过，见 `build/audit-20261102/tools-live-hardened.xcresult`；初次尝试额外滚动后，换位用例未取得可交互卡片，1项失败的证据保留。撤回该滚动，改用浮层上方实际露出的卡片上部拖放，专项连续3次通过、无失败重试，见 `build/audit-20261102/drag-visible-target.xcresult`。连同前述9项，共30项受影响UI完成本机验证；未改业务布局或降低换位断言。
 - 先复验本地变更，再以PR #13最新完整CI为合并门禁；最终状态与合并提交以PR页面为准。业务源码和1.0.7（16）版本号不因本次测试治理改变。
+
+## 收口结果
+
+2026-11-02完整[CI #190](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/41405654435)通过：Swift525通过、1项原有生产收件opt-in跳过，99项UI最终通过。导航分片的工具库取消拖动、换位用例发生过单次重试，其余四个UI分片没有重试警告；仍保留原始日志，不把绿色写成全部首次通过。
+
+PR #13已使用merge commit合入develop，提交134377c；本地develop已快进同步，main和AIO gitlink未修改。合并后的[IPA #150](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/41474375917)与[Archive](https://github.com/OpenAHU/AHUTong-iOS/actions/runs/41474375926)成功。后续扫码/快捷指令从最新develop建立独立feature分支，不继续堆叠旧codex分支。

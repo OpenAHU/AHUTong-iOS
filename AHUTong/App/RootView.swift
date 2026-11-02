@@ -20,6 +20,7 @@ struct RootView: View {
     @State private var toolsSearchPresented = false
     @State private var scheduleHeaderAction: ScheduleHeaderAction?
     @State private var showsScanner = false
+    @State private var showsFullQRCode = false
     @State private var paymentCodeRequestID: UUID?
     @StateObject private var updateMonitor = AppUpdateMonitor()
     @State private var updatePrompt: ActionsUpdate?
@@ -84,10 +85,10 @@ struct RootView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AndroidParityRootBackground())
-                .sheet(isPresented: $showsScanner) { ScanView() }
             }
         }
         .environmentObject(toastCenter)
+        .fullScreenCover(isPresented: $showsScanner, onDismiss: handleShortcutRequest) { ScanView() }
         .defaultAppStorage(AppRuntime.sessionDefaults)
         .overlay { AppToastOverlay(center: toastCenter) }
         .task {
@@ -145,6 +146,7 @@ struct RootView: View {
             case .authenticated: break
             default:
                 paymentCodeRequestID = nil
+                showsFullQRCode = false
                 homePath = NavigationPath()
                 schedulePath = NavigationPath()
                 resetNavigationRoot(.tools)
@@ -192,7 +194,7 @@ struct RootView: View {
 
     private var canPresentUpdate: Bool {
         guard !AppRuntime.usesIsolatedUITestStorage, onboardingModel.consent.isComplete,
-              scenePhase == .active, !showsScanner, shortcutNavigation.pendingRequest == nil,
+              scenePhase == .active, !showsScanner, !showsFullQRCode, shortcutNavigation.pendingRequest == nil,
               paymentCodeRequestID == nil, homePath.isEmpty, schedulePath.isEmpty,
               toolsPath.isEmpty, settingsPath.isEmpty else { return false }
         switch appModel.sessionState {
@@ -263,7 +265,12 @@ struct RootView: View {
         case .home:
             HomeView(
                 appModel: appModel,
-                paymentCodeRequestID: paymentCodeRequestID
+                paymentCodeRequestID: paymentCodeRequestID,
+                showsFullQRCode: $showsFullQRCode,
+                onFullQRCodeDismiss: {
+                    paymentCodeRequestID = nil
+                    handleShortcutRequest()
+                }
             ) {
                 selectedTab = .schedule
             }
@@ -281,6 +288,26 @@ struct RootView: View {
     private func handleShortcutRequest() {
         guard onboardingModel.consent.isComplete,
               let request = shortcutNavigation.pendingRequest else { return }
+        if request.destination == .scanner {
+            guard appModel.sessionState != .loading else { return }
+            guard onboardingModel.consent.privacyDecision == .accepted else {
+                toastCenter.show("请先在偏好设置中同意隐私政策，再使用扫一扫")
+                shortcutNavigation.consume(request)
+                return
+            }
+            paymentCodeRequestID = nil
+            if showsFullQRCode {
+                showsFullQRCode = false
+                return // Present after the existing cover has finished dismissing.
+            }
+            showsScanner = true
+            shortcutNavigation.consume(request)
+            return
+        }
+        if showsScanner {
+            showsScanner = false
+            return
+        }
         switch appModel.sessionState {
         case .loading, .signedOut:
             // Keep a cold-start request until setup and a real login finish.
