@@ -64,7 +64,7 @@ struct CampusCardLoginClient: Sendable {
             forHTTPHeaderField: "Cookie"
         )
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.diagnosticData(for: request)
         guard let response = response as? HTTPURLResponse,
               response.url?.scheme == "https",
               response.url?.host?.lowercased() == "adwmh.ahu.edu.cn",

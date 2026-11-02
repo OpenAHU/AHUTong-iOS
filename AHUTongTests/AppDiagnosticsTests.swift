@@ -24,30 +24,34 @@ final class AppDiagnosticsTests: XCTestCase {
         XCTAssertFalse(DiagnosticsConsentPolicy.allowsReporting(consent, isolated: false))
     }
 
-    func testAutomaticContentAndIdentityCollectionAreDisabled() {
+    func testParityDiagnosticsKeepAutomaticContentCollectionDisabled() {
         let options = SentryConfiguration.options()
         XCTAssertNotNil(options.dsn)
         XCTAssertFalse(options.debug)
         XCTAssertFalse(options.sendDefaultPii)
-        XCTAssertFalse(options.enableAutoSessionTracking)
-        XCTAssertFalse(options.enableSwizzling)
+        XCTAssertTrue(options.enableAutoSessionTracking)
+        XCTAssertTrue(options.enableSwizzling)
         XCTAssertFalse(options.enableAutoBreadcrumbTracking)
         XCTAssertFalse(options.enableNetworkBreadcrumbs)
         XCTAssertFalse(options.enableCaptureFailedRequests)
-        XCTAssertFalse(options.enableAutoPerformanceTracing)
+        XCTAssertTrue(options.enableAutoPerformanceTracing)
         XCTAssertFalse(options.enableNetworkTracking)
         XCTAssertFalse(options.enableLogs)
         XCTAssertFalse(options.enableMetrics)
         XCTAssertFalse(options.sendClientReports)
-        XCTAssertFalse(options.enableMetricKit)
-        XCTAssertFalse(options.enableMetricKitRawPayload)
+        XCTAssertTrue(options.enableMetricKit)
+        XCTAssertTrue(options.enableMetricKitRawPayload)
         XCTAssertFalse(options.enableMemoryIntrospection)
         XCTAssertFalse(options.attachScreenshot)
         XCTAssertFalse(options.attachViewHierarchy)
-        XCTAssertEqual(options.tracesSampleRate, 0)
+        #if DEBUG
+        XCTAssertEqual(options.tracesSampleRate, 1)
+        #else
+        XCTAssertEqual(options.tracesSampleRate, 0.1)
+        #endif
         XCTAssertEqual(options.sessionReplay.sessionSampleRate, 0)
         XCTAssertEqual(options.sessionReplay.onErrorSampleRate, 0)
-        XCTAssertEqual(options.maxBreadcrumbs, 0)
+        XCTAssertEqual(options.maxBreadcrumbs, 100)
     }
 
     func testSensitiveEventFieldsAreRemovedAndStackAddressesRemain() throws {

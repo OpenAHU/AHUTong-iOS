@@ -5,7 +5,14 @@ run-name: "Unsigned IPA #${{ github.run_number }}"
 on:
   push:
     branches:
-      - "codex/**"
+      - develop
+    paths-ignore:
+      - "**/*.md"
+      - "AHUTongTests/**"
+      - "AHUTongUITests/**"
+      - "scripts/tests/**"
+      - ".github/ci-test-shards.json"
+      - ".github/workflows/ios-ci.yml"
   workflow_dispatch:
 
 permissions:
@@ -21,6 +28,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     env:
+      AHUTONG_ACTIONS_RUN_NUMBER: ${{ github.run_number }}
       SENTRY_TOKEN_CONFIGURED: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
 
     steps:
@@ -69,6 +77,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -archivePath "$RUNNER_TEMP/AHUTong.xcarchive" \
+            AHUTONG_ACTIONS_RUN_NUMBER="$AHUTONG_ACTIONS_RUN_NUMBER" \
             ENABLE_CODE_COVERAGE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -107,7 +116,7 @@ jobs:
           echo "checksum_path=$checksum_path" >> "$GITHUB_OUTPUT"
 
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: AHUTong-unsigned-ipa-${{ github.run_number }}
           path: |

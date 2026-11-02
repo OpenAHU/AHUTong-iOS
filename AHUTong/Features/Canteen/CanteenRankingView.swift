@@ -4,6 +4,7 @@ import SwiftUI
 struct CanteenRankingView: View {
     let appModel: AppModel
     @State private var showsCanteens = false
+    @State private var selectedWindow: CanteenInsights.Window?
     @StateObject private var model = CanteenRankingViewModel()
     @State private var query = CanteenQuery()
     var body: some View {
@@ -27,7 +28,7 @@ struct CanteenRankingView: View {
                 let data = saved.value
                 Section {
                     ForEach(Array((data.ranking ?? []).enumerated()), id: \.offset) { _, window in
-                        NavigationLink { CanteenWindowDetail(window: window) } label: {
+                        Button { selectedWindow = window } label: {
                             HStack(alignment: .top, spacing: 12) {
                                 Text(window.rank.map(String.init) ?? "—").font(.title3.bold()).monospacedDigit()
                                     .foregroundStyle(window.rank.map { $0 <= 3 } == true ? Color.orange : Color.secondary).frame(minWidth: 24)
@@ -38,7 +39,7 @@ struct CanteenRankingView: View {
                                 Spacer(minLength: 8)
                                 Text("\(window.txns) 人次").font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
                             }.padding(.vertical, 4)
-                        }
+                        }.tint(.primary)
                     }
                     if data.ranking?.isEmpty != false {
                         ContentUnavailableView("暂无榜单", systemImage: "fork.knife", description: Text("所选范围内的样本还不足以生成排行"))
@@ -95,6 +96,7 @@ struct CanteenRankingView: View {
         .navigationTitle("必吃榜")
         .accessibilityIdentifier("canteen.screen")
         .sheet(isPresented: $showsCanteens) { CanteenSelectionSheet(options: query.campus.names, selection: $query.selectedCanteens) }
+        .sheet(item: $selectedWindow) { CanteenWindowDetail(window: $0) }
         .onChange(of: query.campus) { _, _ in query.selectedCanteens = [] }
         .task(id: query) { await load() }
         .refreshable { await load(refresh: true) }
@@ -119,7 +121,10 @@ struct CanteenRankingView: View {
     }
     private func load(refresh: Bool = false) async { await model.load(query, refresh: refresh, demo: AppRuntime.isDemoSession) }
     @ViewBuilder private func highlight(_ title: String, _ window: CanteenInsights.Window?) -> some View {
-        if let window { NavigationLink { CanteenWindowDetail(window: window) } label: { LabeledContent(title, value: window.title) } }
+        if let window {
+            Button { selectedWindow = window } label: { LabeledContent(title, value: window.title) }
+                .tint(.primary)
+        }
     }
     private func segmentTitle(_ value: String) -> String {
         switch value { case "breakfast": "早餐"; case "lunch": "午餐"; case "dinner": "晚餐"; default: value }
@@ -127,16 +132,35 @@ struct CanteenRankingView: View {
 }
 
 struct CanteenWindowDetail: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let window: CanteenInsights.Window
     var body: some View {
-        Form {
-            LabeledContent("窗口", value: window.title)
-            if !window.location.isEmpty { LabeledContent("位置", value: window.location) }
-            if let rank = window.rank { LabeledContent("热度排名", value: "第 \(rank) 名") }
-            LabeledContent("消费人次", value: String(window.txns))
-            if let share = window.share { LabeledContent("样本占比", value: share.formatted(.percent.precision(.fractionLength(1)))) }
-            if let average = window.avgCentsPerTxn { LabeledContent("平均每笔", value: (average / 100).formatted(.currency(code: "CNY"))) }
-            LabeledContent("终端编号", value: window.terminal).font(.footnote).foregroundStyle(.secondary)
-        }.navigationTitle("窗口详情").accessibilityIdentifier("canteen.window")
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent("窗口", value: window.title)
+                    if !window.location.isEmpty { LabeledContent("位置", value: window.location) }
+                    if let rank = window.rank { LabeledContent("热度排名", value: "第 \(rank) 名") }
+                    LabeledContent("消费人次", value: String(window.txns))
+                    if let share = window.share { LabeledContent("样本占比", value: share.formatted(.percent.precision(.fractionLength(1)))) }
+                    if let average = window.avgCentsPerTxn { LabeledContent("平均每笔", value: (average / 100).formatted(.currency(code: "CNY"))) }
+                    LabeledContent("终端编号", value: window.terminal).font(.footnote).foregroundStyle(.secondary)
+                }.listRowBackground(Color.clear)
+            }
+            .scrollContentBackground(.hidden)
+            .navigationTitle("窗口详情")
+            .navigationBarTitleDisplayMode(.inline)
+            .accessibilityIdentifier("canteen.window")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成", systemImage: "checkmark") { dismiss() }
+                        .labelStyle(.iconOnly)
+                        .accessibilityIdentifier("canteen.window.done")
+                }
+            }
+        }
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }

@@ -12,7 +12,7 @@ struct WeatherView: View {
 
     var body: some View {
         VStack(spacing: 0) { stateContent }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .appBackground()
             .navigationTitle(locationTitle)
             .toolbar(.visible, for: .navigationBar)
             .searchable(text: $cityQuery, isPresented: $isSearchActive, prompt: "输入城市名，如 合肥")
@@ -72,14 +72,14 @@ struct WeatherView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                AndroidWeatherCurrentCard(weather: snapshot.response, preferences: model.preferences)
+                WeatherCurrentCard(weather: snapshot.response, preferences: model.preferences)
 
                 if let forecast = snapshot.response.forecast, !forecast.isEmpty {
                     VStack(spacing: 0) {
                         AndroidSectionTitle(title: "未来预报")
                         ScrollView(.horizontal) {
                             HStack(spacing: 8) {
-                                ForEach(forecast) { AndroidForecastCard(day: $0) }
+                                ForEach(forecast) { WeatherForecastCard(day: $0) }
                             }
                         }
                         .scrollIndicators(.hidden)
@@ -87,10 +87,10 @@ struct WeatherView: View {
                 }
 
                 if model.preferences.showAirQuality, snapshot.response.aqi != nil {
-                    AndroidAirQualityCard(weather: snapshot.response)
+                    WeatherAirQualityCard(weather: snapshot.response)
                 }
 
-                AndroidUmbrellaCard(weather: snapshot.response)
+                WeatherUmbrellaCard(weather: snapshot.response)
 
                 if model.preferences.showHourlyForecast,
                    let hourly = snapshot.response.hourlyForecast,
@@ -99,7 +99,7 @@ struct WeatherView: View {
                         AndroidSectionTitle(title: "逐小时预报")
                         ScrollView(.horizontal) {
                             HStack(spacing: 8) {
-                                ForEach(Array(hourly.prefix(12))) { AndroidHourlyCard(hour: $0) }
+                                ForEach(Array(hourly.prefix(12))) { WeatherHourlyCard(hour: $0) }
                             }
                         }
                         .scrollIndicators(.hidden)
@@ -131,120 +131,138 @@ struct WeatherView: View {
     }
 }
 
-private struct AndroidWeatherCurrentCard: View {
-    @Environment(\.colorScheme) private var colorScheme
+private struct WeatherCurrentCard: View {
     let weather: WeatherResponse
     let preferences: WeatherDisplayPreferences
 
     var body: some View {
-        AndroidCard(radius: 12, background: AndroidParityPalette.primaryContainer(colorScheme)) {
-            VStack(spacing: 0) {
-                if preferences.showLocation {
-                    Text(weather.locationName).font(.headline)
-                    Spacer().frame(height: 8)
-                }
-                if preferences.showTemperature {
-                    Text(androidTemperature(weather.temperature))
-                        .font(.system(size: 64, weight: .light))
-                        .nativeNumericTransition(value: weather.temperature)
-                }
-                if preferences.showCondition {
-                    Text(weather.weather ?? "").font(.headline).padding(.top, 4)
-                    Text("体感 \(androidTemperature(weather.feelsLike))")
-                        .font(.body)
-                        .nativeNumericTransition(value: weather.feelsLike)
-                        .foregroundStyle(AndroidParityPalette.secondaryText(colorScheme))
-                        .padding(.top, 2)
-                }
-                Spacer().frame(height: 16)
-                HStack {
-                    AndroidWeatherMetric(label: "湿度", value: weather.humidity.map { "\($0)%" } ?? "--")
-                    AndroidWeatherMetric(label: "风力", value: weather.windPower ?? "--")
-                    AndroidWeatherMetric(label: "能见度", value: weather.visibility.map { "\(Int($0))km" } ?? "--km")
-                }
+        VStack(spacing: 12) {
+            if preferences.showLocation { Text(weather.locationName).font(.title2.weight(.medium)) }
+            Image(systemName: weatherSymbol(weather.weather))
+                .symbolRenderingMode(.multicolor)
+                .font(.system(size: 56))
+                .padding(.top, 4)
+                .accessibilityHidden(true)
+            if preferences.showTemperature {
+                Text(androidTemperature(weather.temperature))
+                    .font(.system(size: 88, weight: .thin, design: .rounded))
+                    .nativeNumericTransition(value: weather.temperature)
+                    .minimumScaleFactor(0.6).lineLimit(1)
             }
-            .frame(maxWidth: .infinity)
-            .padding(20)
+            if preferences.showCondition {
+                Text(weather.weather ?? "").font(.title3.weight(.medium))
+                Text("体感 \(androidTemperature(weather.feelsLike))")
+                    .nativeNumericTransition(value: weather.feelsLike)
+                    .foregroundStyle(.secondary)
+            }
+            if weather.tempMax != nil || weather.tempMin != nil {
+                Text("最高 \(androidTemperature(weather.tempMax))   最低 \(androidTemperature(weather.tempMin))")
+                    .font(.subheadline.weight(.medium))
+            }
+            Divider().padding(.vertical, 6)
+            HStack(alignment: .top, spacing: 8) {
+                WeatherMetric(label: "湿度", symbol: "humidity", value: weather.humidity.map { "\($0)%" } ?? "--")
+                WeatherMetric(label: "风力", symbol: "wind", value: weather.windPower ?? "--")
+                WeatherMetric(label: "能见度", symbol: "eye", value: weather.visibility.map { "\(Int($0)) km" } ?? "--")
+            }
+            if let report = weather.reportTime, !report.isEmpty {
+                Text(report).font(.caption).foregroundStyle(.secondary).padding(.top, 4)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(LinearGradient(colors: [.blue.opacity(0.2), .cyan.opacity(0.06), .clear],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
         }
         .accessibilityIdentifier("weather.current")
     }
 }
 
-private struct AndroidWeatherMetric: View {
+private struct WeatherMetric: View {
     let label: String
+    let symbol: String
     let value: String
 
     var body: some View {
-        VStack(spacing: 3) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.body).fontWeight(.medium).lineLimit(1)
+        VStack(spacing: 6) {
+            Label(label, systemImage: symbol).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 
-private struct AndroidForecastCard: View {
-    @Environment(\.colorScheme) private var colorScheme
+private struct WeatherForecastCard: View {
     let day: WeatherForecastDay
 
     var body: some View {
-        AndroidCard(radius: 12) {
-            VStack(spacing: 2) {
-                Text(day.week ?? "").font(.caption)
-                Text(androidTemperature(day.tempMax)).font(.system(size: 18, weight: .bold))
-                Text(androidTemperature(day.tempMin)).font(.system(size: 14)).foregroundStyle(.secondary)
-                Spacer().frame(height: 4)
-                Text(day.weatherDay ?? "").androidScaledFont(size: 12, relativeTo: .caption).lineLimit(1)
+        VStack(spacing: 10) {
+            Text(day.week ?? "").font(.subheadline.weight(.medium))
+            Image(systemName: weatherSymbol(day.weatherDay)).symbolRenderingMode(.multicolor)
+                .font(.title2).frame(height: 30).accessibilityHidden(true)
+            Text(day.weatherDay ?? "").font(.caption).foregroundStyle(.secondary)
+            VStack(spacing: 3) {
+                Text(androidTemperature(day.tempMax)).font(.title3.weight(.medium))
+                Text(androidTemperature(day.tempMin)).font(.subheadline).foregroundStyle(.secondary)
             }
-            .frame(width: 76)
-            .padding(12)
         }
-        .frame(width: 100)
+        .padding(.vertical, 16).frame(width: 104)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
     }
 }
 
-private struct AndroidAirQualityCard: View {
+private struct WeatherAirQualityCard: View {
     let weather: WeatherResponse
 
     var body: some View {
-        AndroidCard {
-            HStack(spacing: 12) {
-                Text(weather.aqi.map(String.init) ?? "--")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
-                    .background(androidAQIColor(weather.aqiLevel), in: RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("空气\(weather.aqiCategory ?? "")").fontWeight(.bold)
-                    Text("主要污染物：\(weather.aqiPrimary ?? "无")").font(.caption).foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            Label("空气质量", systemImage: "aqi.medium").font(.subheadline).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text(weather.aqi.map(String.init) ?? "--").font(.title.weight(.medium))
+                Text(weather.aqiCategory ?? "").font(.headline)
                 Spacer()
             }
-            .padding(16)
+            Gauge(value: Double(min(500, max(0, weather.aqi ?? 0))), in: 0...500) { EmptyView() }
+                .gaugeStyle(.linearCapacity)
+                .tint(Gradient(colors: [.green, .yellow, .orange, .red, .purple]))
+                .accessibilityLabel("空气质量指数")
+                .accessibilityValue(weather.aqi.map(String.init) ?? "未知")
+            if let primary = weather.aqiPrimary, !primary.isEmpty {
+                Text("主要污染物：\(primary)").font(.caption).foregroundStyle(.secondary)
+            }
         }
+        .padding(20)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 24))
     }
 }
 
-private struct AndroidUmbrellaCard: View {
+private struct WeatherUmbrellaCard: View {
     let weather: WeatherResponse
 
     var body: some View {
-        AndroidCard(background: (needsUmbrella ? Color.blue : AndroidParityPalette.success).opacity(0.15)) {
-            HStack(spacing: 12) {
-                Text(needsUmbrella ? "☔" : "☀️").font(.system(size: 28))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 16, weight: .bold))
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
+        HStack(spacing: 16) {
+            Image(systemName: needsUmbrella ? "umbrella.fill" : "sun.max.fill")
+                .symbolRenderingMode(.multicolor).font(.largeTitle).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
             }
-            .padding(16)
+            Spacer(minLength: 0)
         }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 24))
     }
 
-    private var nextSix: [WeatherHourlyForecast] {
-        Array((weather.hourlyForecast ?? []).prefix(6))
-    }
+    private var nextSix: [WeatherHourlyForecast] { Array((weather.hourlyForecast ?? []).prefix(6)) }
     private var maxProbability: Int { nextSix.compactMap(\.probabilityOfPrecipitation).max() ?? 0 }
     private var needsUmbrella: Bool {
         let values = [weather.weather, weather.forecast?.first?.weatherDay, weather.forecast?.first?.weatherNight] + nextSix.map(\.weather)
@@ -252,10 +270,10 @@ private struct AndroidUmbrellaCard: View {
     }
     private var title: String {
         if !needsUmbrella { return "无需雨伞" }
-        if maxProbability >= 60 { return "务必带伞 ☔" }
-        if maxProbability >= 40 { return "建议带伞 ☔" }
-        if maxProbability > 0 { return "可能降雨 ☔" }
-        return "建议带伞 ☔"
+        if maxProbability >= 60 { return "务必带伞" }
+        if maxProbability >= 40 { return "建议带伞" }
+        if maxProbability > 0 { return "可能降雨" }
+        return "建议带伞"
     }
     private var subtitle: String {
         if !needsUmbrella { return "当前及短期预报无降水" }
@@ -264,23 +282,35 @@ private struct AndroidUmbrellaCard: View {
     }
 }
 
-private struct AndroidHourlyCard: View {
+private struct WeatherHourlyCard: View {
     let hour: WeatherHourlyForecast
 
     var body: some View {
-        AndroidCard {
-            VStack(spacing: 2) {
-                Text(androidHourLabel(hour.time)).androidScaledFont(size: 11, relativeTo: .caption2).foregroundStyle(.secondary).lineLimit(1)
-                Spacer().frame(height: 4)
-                Text(androidTemperature(hour.temperature)).font(.system(size: 15, weight: .bold))
-                Spacer().frame(height: 2)
-                Text(hour.weather ?? "").androidScaledFont(size: 11, relativeTo: .caption2).lineLimit(1)
-            }
-            .frame(width: 72)
-            .padding(8)
+        VStack(spacing: 10) {
+            Text(androidHourLabel(hour.time)).font(.caption).foregroundStyle(.secondary)
+            Image(systemName: weatherSymbol(hour.weather)).symbolRenderingMode(.multicolor)
+                .font(.title2).frame(height: 28).accessibilityHidden(true)
+            Text(androidTemperature(hour.temperature)).font(.title3.weight(.medium))
+                .nativeNumericTransition(value: hour.temperature)
+            Text(hour.weather ?? "").font(.caption).foregroundStyle(.secondary)
         }
-        .frame(width: 88)
+        .padding(.vertical, 16).frame(width: 88)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
     }
+}
+
+private func weatherSymbol(_ condition: String?) -> String {
+    let value = condition ?? ""
+    if value.contains("雷") { return "cloud.bolt.rain.fill" }
+    if value.contains("雪") { return "cloud.snow.fill" }
+    if value.contains("雹") { return "cloud.hail.fill" }
+    if value.contains("雨") { return "cloud.rain.fill" }
+    if value.contains("雾") || value.contains("霾") { return "cloud.fog.fill" }
+    if value.contains("多云") { return "cloud.sun.fill" }
+    if value.contains("云") || value.contains("阴") { return "cloud.fill" }
+    if value.contains("晴") { return "sun.max.fill" }
+    return "thermometer.medium"
 }
 
 private struct AndroidLifeIndexCard: View {
@@ -339,19 +369,6 @@ private func androidTemperature(_ value: Double?) -> String {
 private func androidHourLabel(_ raw: String?) -> String {
     guard let raw else { return "--" }
     let separator = raw.contains("T") ? "T" : " "
-    let date = raw.split(separator: "-").dropFirst().joined(separator: "-").prefix(5)
     let hour = raw.components(separatedBy: separator).last.map { String($0.prefix(2)) } ?? ""
-    return date.count == 5 && hour.count == 2 ? "\(date)日\(hour)时" : raw
-}
-
-private func androidAQIColor(_ level: Int?) -> Color {
-    switch level {
-    case 1: AndroidParityPalette.success
-    case 2: .yellow
-    case 3: .orange
-    case 4: Color(red: 1, green: 87 / 255, blue: 34 / 255)
-    case 5: .purple
-    case 6: .brown
-    default: .gray
-    }
+    return hour.count == 2 ? "\(hour)时" : raw
 }

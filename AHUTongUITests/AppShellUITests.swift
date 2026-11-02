@@ -357,7 +357,7 @@ final class AppShellUITests: XCTestCase {
             XCTAssertTrue(app.searchFields["搜索电话或部门"].waitForExistence(timeout: 4))
             XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 3))
             XCTAssertTrue(app.navigationBars.buttons.firstMatch.exists)
-            XCTAssertFalse(app.tabBars.firstMatch.isHittable)
+            XCTAssertTrue(app.tabBars.firstMatch.isHittable)
         }
 
         openPhoneBook()

@@ -79,7 +79,7 @@ final class ExamViewModel: ObservableObject {
             state = exams.isEmpty ? .empty : .loaded(exams)
         } catch {
             if cached == nil {
-                state = .failed(AppErrorState(message: error.localizedDescription))
+                state = .failed(AppErrorState(error: error, route: "examview"))
             } else {
                 refreshMessage = "刷新失败，当前显示上次保存的考试安排。\(error.localizedDescription)"
             }

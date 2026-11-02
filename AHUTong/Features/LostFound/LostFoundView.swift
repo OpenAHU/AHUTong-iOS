@@ -90,7 +90,7 @@ final class LostFoundViewModel: ObservableObject {
             needsCampusLogin = false
         } catch {
             recordAuthorizationFailure(error)
-            if cachedItems == nil { state = .failed(AppErrorState(message: error.localizedDescription)) }
+            if cachedItems == nil { state = .failed(AppErrorState(error: error, route: "lostfoundview")) }
         }
     }
 
@@ -144,7 +144,7 @@ final class LostFoundViewModel: ObservableObject {
             myPostsState = items.isEmpty ? .empty : .loaded(items)
         } catch {
             recordAuthorizationFailure(error)
-            myPostsState = .failed(AppErrorState(message: error.localizedDescription))
+            myPostsState = .failed(AppErrorState(error: error, route: "lostfoundview"))
         }
     }
 
@@ -239,7 +239,7 @@ struct LostFoundView: View {
             .padding(.bottom, 104)
         }
         .accessibilityIdentifier("lost-found.screen")
-        .background(Color(uiColor: .systemGroupedBackground))
+        .appBackground()
         .overlay(alignment: .bottomTrailing) {
             publishButton.accessibilityIdentifier("lost-found.publish").padding(24)
         }

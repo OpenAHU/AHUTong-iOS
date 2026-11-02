@@ -11,6 +11,7 @@ struct RedactingLogger: Sendable {
     func notice(_ message: String) {
         let sanitized = Self.sanitize(message)
         logger.notice("\(sanitized, privacy: .public)")
+        AppDiagnostics.shared.log(.runtime, sanitized)
     }
 
     static func sanitize(_ message: String) -> String {

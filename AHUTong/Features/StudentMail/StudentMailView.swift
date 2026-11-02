@@ -181,7 +181,7 @@ struct StudentMailView: View {
         .navigationTitle("校园邮箱")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(.visible, for: .tabBar)
         .searchable(text: $query, prompt: "筛选已加载邮件")
         .refreshable { await model.load() }
         .toolbar {

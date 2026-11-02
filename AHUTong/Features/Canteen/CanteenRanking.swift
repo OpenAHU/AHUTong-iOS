@@ -105,7 +105,7 @@ struct OfficialCanteenRankingRemote: CanteenRankingRemote {
     func load(_ query: CanteenQuery) async throws -> CanteenInsights {
         var request = URLRequest(url: query.url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.timeoutInterval = 20; request.httpShouldHandleCookies = false
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.diagnosticData(for: request)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200,
               response.url == query.url, data.count <= 2_000_000 else { throw CampusWebError.server("榜单加载失败，请稍后重试") }
         return try JSONDecoder().decode(CanteenInsights.self, from: data)

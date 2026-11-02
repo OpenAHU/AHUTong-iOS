@@ -37,7 +37,7 @@ struct OfficialCanteenCommunityRemote: CanteenCommunityRemote {
     }
     func windowNames() async throws -> [String: String] {
         let url = URL(string: "https://inchangejiang.cn/api/canteen/window-map")!
-        let (data, response) = try await session.data(for: request(url))
+        let (data, response) = try await session.diagnosticData(for: request(url))
         guard let response = response as? HTTPURLResponse, response.url == url,
               response.statusCode == 200, data.count <= 2_000_000 else { throw CampusWebError.invalidResponse }
         struct Mapping: Decodable { let entries: [Entry] }
@@ -78,7 +78,7 @@ struct OfficialCanteenCommunityRemote: CanteenCommunityRemote {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(writeKey, forHTTPHeaderField: "X-Api-Key")
         request.httpBody = try JSONEncoder().encode(body)
-        let (_, response) = try await session.data(for: request)
+        let (_, response) = try await session.diagnosticData(for: request)
         guard let response = response as? HTTPURLResponse, response.url == url else { throw CampusWebError.invalidResponse }
         switch response.statusCode {
         case 204: return

@@ -19,7 +19,7 @@ struct StudentMailWebView: View {
         }
         .navigationTitle("邮箱网页版")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(.visible, for: .tabBar)
         .overlay(alignment: .bottom) {
             if context != nil, let error {
                 Text(error).font(.footnote).padding().background(.regularMaterial)

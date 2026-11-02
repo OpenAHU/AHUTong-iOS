@@ -2,9 +2,9 @@ import SwiftUI
 
 struct ToolsView: View {
     @ObservedObject var appModel: AppModel
+    @Binding var searchText: String
+    @Binding var searchPresented: Bool
     var onOpenSchedule: () -> Void = {}
-    var onEditHome: () -> Void = {}
-    @State private var searchText = ""
     @State private var showsWidgetGuide = false
     @State private var widgetSnapshot: ScheduleWidgetSnapshot?
 
@@ -27,7 +27,7 @@ struct ToolsView: View {
                                 .accessibilityAddTraits(.isHeader)
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 10) {
                                 ForEach(tools) { tool in
-                                    NavigationLink { ToolDestination(tool: tool, appModel: appModel) } label: { card(for: tool) }
+                                    NavigationLink(value: tool) { card(for: tool) }
                                         .buttonStyle(PressFeedbackStyle(cornerRadius: 18))
                                         .accessibilityLabel(tool.title)
                                         .accessibilityIdentifier("tools.\(tool.id)")
@@ -52,21 +52,15 @@ struct ToolsView: View {
             }
             .padding(16)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .appBackground()
         .accessibilityIdentifier("tools.grid")
         .overlay {
             if matchingTools.isEmpty { ContentUnavailableView.search(text: query) }
         }
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索小工具")
+        .searchable(text: $searchText, isPresented: $searchPresented, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索小工具")
         .navigationTitle("小工具")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("编辑首页", systemImage: "square.grid.2x2") { onEditHome() }
-                    .accessibilityIdentifier("tools.edit-home")
-            }
-        }
         .sheet(isPresented: $showsWidgetGuide) { widgetGuide }
     }
 

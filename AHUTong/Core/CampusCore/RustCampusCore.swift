@@ -462,7 +462,7 @@ actor RustCampusCoreAPI: CampusCoreAPI {
         request.setValue(service.token, forHTTPHeaderField: "X-AHUTONG-TOKEN")
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.diagnosticData(for: request)
         guard let response = response as? HTTPURLResponse else {
             throw CampusCoreError.invalidResponse
         }

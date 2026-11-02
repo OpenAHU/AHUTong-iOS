@@ -156,7 +156,7 @@ actor OfficialAttendanceRemote: AttendanceRemote {
             request.setValue("bearer " + token, forHTTPHeaderField: "synjones-auth")
             // School service credential, identical to the public Android client.
             request.setValue("Basic YWN0aXZpdHk6YWN0aXZpdHlfc2VjcmV0", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await session.diagnosticData(for: request)
             try Task.checkCancellation()
             guard let response = response as? HTTPURLResponse else { throw CampusWebError.invalidResponse }
             if response.statusCode == 401, attempt == 0 { cachedToken = nil; continue }
@@ -194,7 +194,7 @@ actor OfficialAttendanceRemote: AttendanceRemote {
                     var request = URLRequest(url: url)
                     request.timeoutInterval = 30; request.httpShouldHandleCookies = false
                     request.setValue(cookies.filter { $0.matches(url) }.map { "\($0.name)=\($0.value)" }.joined(separator: "; "), forHTTPHeaderField: "Cookie")
-                    let (data, response) = try await session.data(for: request)
+                    let (data, response) = try await session.diagnosticData(for: request)
                     try Task.checkCancellation()
                     guard let response = response as? HTTPURLResponse, response.url == url else { throw CampusWebError.invalidResponse }
                     let fields = response.allHeaderFields.reduce(into: [String: String]()) { $0[String(describing: $1.key)] = String(describing: $1.value) }
