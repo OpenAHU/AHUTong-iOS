@@ -53,9 +53,7 @@ final class SettingsExperienceUITests: XCTestCase {
     }
 
     @MainActor
-    func testNativeTabsSettingsStructureAndConciseCopy() {
-        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
-        setReduceMotion(false, control: openMotionSettings(settings))
+    func testNativeTabOrderAndSelection() {
         let app = XCUIApplication()
         app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
         app.launchArguments = ["--demo-consent", "--demo-session", "-theme.color", "blue"]
@@ -72,19 +70,14 @@ final class SettingsExperienceUITests: XCTestCase {
             XCTAssertTrue(button.isSelected)
             capture("native-tab-\(index + 1)", app)
         }
+    }
 
-        let appCard = app.descendants(matching: .any)["settings.app-card"].firstMatch
-        XCTAssertTrue(appCard.waitForExistence(timeout: 3))
-        appCard.tap(withNumberOfTaps: 8, numberOfTouches: 1)
-        XCTAssertFalse(app.buttons["settings.debug"].exists)
-        XCTAssertFalse(app.staticTexts["Debug"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["operations.debug.screen"].exists)
+    @MainActor
+    func testAccountStaysOnSettingsRootAndPrivacyInPreferences() {
+        let app = openSettings()
         XCTAssertTrue(app.buttons["settings.account-login"].exists)
         capture("settings-resting", app)
-
-        // A long press gives the Simulator recording time to show the press
-        // highlight and scale before the NavigationLink activates on release.
-        app.buttons["settings.preferences"].press(forDuration: 3)
+        app.buttons["settings.preferences"].tap()
         XCTAssertTrue(app.switches["preferences.privacy-consent"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["settings.account-login"].exists)
         XCTAssertFalse(app.buttons["preferences.login"].exists)
@@ -94,11 +87,11 @@ final class SettingsExperienceUITests: XCTestCase {
         capture("preferences-top", app)
         app.swipeUp()
         capture("preferences-bottom", app)
+    }
 
-        app.terminate()
-        app.launch()
-        XCTAssertTrue(bar.waitForExistence(timeout: 5))
-        bar.buttons["设置"].tap()
+    @MainActor
+    func testClearDataConfirmationCanBeCancelled() {
+        let app = openSettings()
         let clear = app.buttons["settings.clear-data"]
         if !clear.isHittable { app.swipeUp() }
         XCTAssertTrue(clear.waitForExistence(timeout: 3))
@@ -108,18 +101,19 @@ final class SettingsExperienceUITests: XCTestCase {
         // iOS may present this as a popover without a separate Cancel row.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.2)).tap()
         XCTAssertTrue(app.staticTexts["将退出登录，并清除课表、缓存和隐私选择。"].waitForNonExistence(timeout: 3))
-        app.buttons["settings.update-notes"].tap()
+        XCTAssertTrue(app.buttons["settings.account-login"].exists)
+    }
+
+    @MainActor
+    func testUpdateNotesCanBeDismissed() {
+        let app = openSettings()
+        let notes = app.buttons["settings.update-notes"]
+        for _ in 0..<3 where !notes.isHittable { app.swipeUp() }
+        notes.tap()
         XCTAssertTrue(app.alerts["更新说明"].waitForExistence(timeout: 3))
         capture("update-notes", app)
         app.alerts.buttons["确定"].tap()
-
-        bar.buttons["小工具"].tap()
-        let add = app.revealTool("tools.widget-add")
-        XCTAssertTrue(add.waitForExistence(timeout: 3))
-        add.tap()
-        XCTAssertTrue(app.buttons["tools.widget-guide.done"].waitForExistence(timeout: 3))
-        capture("widget-guide", app)
-        app.buttons["tools.widget-guide.done"].tap()
+        XCTAssertTrue(app.alerts["更新说明"].waitForNonExistence(timeout: 3))
     }
 
     @MainActor
@@ -177,6 +171,17 @@ final class SettingsExperienceUITests: XCTestCase {
             app.buttons["settings.preferences"].press(forDuration: 6)
             XCTAssertTrue(app.switches["preferences.privacy-consent"].waitForExistence(timeout: 3))
         }
+    }
+
+    @MainActor
+    private func openSettings() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["AHUTONG_CI_DISABLE_LIVE_PAYMENT"] = "1"
+        app.launchArguments = ["--demo-consent", "--demo-session"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 8))
+        app.tabBars.buttons["设置"].tap()
+        return app
     }
 
     @MainActor

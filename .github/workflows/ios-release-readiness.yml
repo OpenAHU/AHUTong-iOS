@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - "codex/**"
+    paths-ignore:
+      - "**/*.md"
+      - "AHUTongTests/**"
+      - "AHUTongUITests/**"
+      - "scripts/tests/**"
+      - ".github/ci-test-shards.json"
+      - ".github/workflows/ios-ci.yml"
   workflow_dispatch:
 
 permissions:

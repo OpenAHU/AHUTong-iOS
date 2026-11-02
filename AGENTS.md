@@ -2,9 +2,10 @@
 
 ## 开发与分支
 
-1. 不直接在 `main` 上开发；每个明确目标使用独立功能分支。
+1. 遵循 Gitflow：日常功能从 `develop` 建立 `feature/<目标>` 分支，PR 合入 `develop`；现有 `codex/*` 功能分支通过原 PR 收口，不为改名重建历史。`main` 保留稳定基线，仅在明确的 release/hotfix 流程中接收合并，不把功能分支直接合入 `main`。
 2. 提交信息遵循 Conventional Commits，避免混入无关重构、格式化或本地文件。
 3. 开始修改前检查工作区状态，保留其他人的未提交改动。
+4. 当前 iOS 维护按用户在2026-11-02重申的要求，直接使用AIO主工作区的 `iOS` 子仓（本机为 `/Users/himekawa/Projects/AHUTong/iOS`）。这是本任务对AIO worktree通则的明确例外；未经用户要求，不自行迁回worktree。功能分支规范仍然适用。
 
 ## 工程与代码
 
