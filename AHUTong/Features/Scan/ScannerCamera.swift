@@ -9,10 +9,12 @@ struct ScannerCamera: UIViewControllerRepresentable {
     let onFailure: @MainActor @Sendable (String) -> Void
 
     func makeUIViewController(context: Context) -> ScannerCameraController {
-        ScannerCameraController(onCode: onCode, onTorchState: onTorchState, onFailure: onFailure)
+        ScannerCameraController(receiver: ScannerCodeReceiver(onCode: onCode),
+                                onTorchState: onTorchState, onFailure: onFailure)
     }
 
     func updateUIViewController(_ controller: ScannerCameraController, context: Context) {
+        controller.updateCallbacks(onCode: onCode, onTorchState: onTorchState, onFailure: onFailure)
         controller.update(running: isRunning, torch: torchOn)
     }
 
@@ -24,17 +26,19 @@ struct ScannerCamera: UIViewControllerRepresentable {
 @MainActor
 final class ScannerCameraController: UIViewController {
     private let camera: ScannerCapture
+    private let receiver: ScannerCodeReceiver
     private let preview = AVCaptureVideoPreviewLayer()
-    private let onTorchState: @MainActor @Sendable (Bool, Bool) -> Void
-    private let onFailure: @MainActor @Sendable (String) -> Void
+    private var onTorchState: @MainActor @Sendable (Bool, Bool) -> Void
+    private var onFailure: @MainActor @Sendable (String) -> Void
     private var command: (running: Bool, torch: Bool)?
     private var revision = 0
     private var torchObservation: NSKeyValueObservation?
 
-    init(onCode: @escaping @MainActor @Sendable (String) -> Void,
+    init(receiver: ScannerCodeReceiver,
          onTorchState: @escaping @MainActor @Sendable (Bool, Bool) -> Void,
          onFailure: @escaping @MainActor @Sendable (String) -> Void) {
-        camera = ScannerCapture(onCode: onCode)
+        self.receiver = receiver
+        camera = ScannerCapture(receiver: receiver)
         self.onTorchState = onTorchState
         self.onFailure = onFailure
         super.init(nibName: nil, bundle: nil)
@@ -68,6 +72,7 @@ final class ScannerCameraController: UIViewController {
     }
 
     func update(running: Bool, torch: Bool) {
+        receiver.isRunning = running
         guard command?.running != running || command?.torch != torch else { return }
         command = (running, torch)
         revision += 1
@@ -102,6 +107,16 @@ final class ScannerCameraController: UIViewController {
         }
     }
 
+    func updateCallbacks(onCode: @escaping @MainActor @Sendable (String) -> Void,
+                         onTorchState: @escaping @MainActor @Sendable (Bool, Bool) -> Void,
+                         onFailure: @escaping @MainActor @Sendable (String) -> Void) {
+        // SwiftUI replaces value-type views as scene/permission state changes.
+        // A callback captured during camera startup can still hold an inactive scene.
+        receiver.onCode = onCode
+        self.onTorchState = onTorchState
+        self.onFailure = onFailure
+    }
+
     @objc private func zoom(_ gesture: UIPinchGestureRecognizer) {
         let scale = gesture.scale
         gesture.scale = 1
@@ -134,8 +149,8 @@ private actor ScannerCapture {
     private var revision = -1
     private let receiver: ScannerCodeReceiver
 
-    init(onCode: @escaping @MainActor @Sendable (String) -> Void) {
-        receiver = ScannerCodeReceiver(onCode: onCode)
+    init(receiver: ScannerCodeReceiver) {
+        self.receiver = receiver
     }
 
     func update(running: Bool, torch: Bool, revision: Int) throws -> ScannerPreviewSource? {
@@ -204,11 +219,20 @@ private actor ScannerCapture {
     private enum CameraError: Error { case unavailable }
 }
 
-private final class ScannerCodeReceiver: NSObject, AVCaptureMetadataOutputObjectsDelegate {
-    let onCode: @MainActor @Sendable (String) -> Void
+@MainActor
+final class ScannerCodeReceiver: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+    var onCode: @MainActor @Sendable (String) -> Void
+    var isRunning = false
+
     init(onCode: @escaping @MainActor @Sendable (String) -> Void) { self.onCode = onCode }
-    func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput objects: [AVMetadataObject], from connection: AVCaptureConnection) {
-        guard let code = objects.first as? AVMetadataMachineReadableCodeObject, let value = code.stringValue else { return }
-        Task { @MainActor [onCode] in onCode(value) }
+
+    nonisolated func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput objects: [AVMetadataObject], from connection: AVCaptureConnection) {
+        guard let value = objects.compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first else { return }
+        Task { @MainActor [weak self] in self?.receive(value) }
+    }
+
+    func receive(_ value: String) {
+        guard isRunning else { return }
+        onCode(value)
     }
 }

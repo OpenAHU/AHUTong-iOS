@@ -89,7 +89,7 @@ struct SettingsView: View {
         .alert("更新说明", isPresented: $showUpdateLog) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("1.0.8\n\n• 新增“打开扫一扫”快捷指令。\n• 付款码快捷指令直接全屏显示并提高亮度。\n• 扫码支持全屏取景、手电筒和双指缩放。")
+            Text("1.0.8\n\n• 新增“打开扫一扫”快捷指令。\n• 付款码快捷指令直接全屏显示并提高亮度。\n• 扫码支持全屏取景、手电筒和双指缩放。\n• 修复扫码识别与前后台恢复。")
         }
         .alert("检查更新", isPresented: Binding(
             get: { updateResult != nil },

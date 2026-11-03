@@ -94,13 +94,13 @@ struct ScanView: View {
                 Button("继续扫描", role: .cancel) { isHandling = false }
             } message: { Text("请在微信中使用“扫一扫”重新扫描，完成签到。") }
             .task { await checkCamera() }
-            .onAppear { isVisible = true }
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active { torchOn = false }
                 if phase == .active { Task { await checkCamera() } }
             }
-            .onDisappear { isVisible = false; torchOn = false }
         }
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false; torchOn = false }
         .preferredColorScheme(.dark)
         .tint(.white)
         .accessibilityIdentifier("scan.screen")
