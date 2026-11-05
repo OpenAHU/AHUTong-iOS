@@ -68,7 +68,7 @@ final class WeatherViewModel: ObservableObject {
     func useCurrentLocation() async {
         do {
             let city = try await locationProvider.requestCity()
-            notice = "已按当前位置查询：\(city)"
+            notice = "当前位置：\(city)"
             await load(query: .city(city))
         } catch {
             notice = "无法使用精确位置，已自动切换为 IP 定位。"

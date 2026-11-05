@@ -3,13 +3,18 @@ import Foundation
 
 enum ShortcutDestination: Equatable, Sendable {
     case paymentCode
+    case scanner
 
     init?(url: URL) {
         guard url.scheme?.lowercased() == "ahutong",
-              url.host?.lowercased() == "payment-code",
+              url.user == nil, url.password == nil, url.port == nil,
               url.path.isEmpty || url.path == "/",
               url.query == nil, url.fragment == nil else { return nil }
-        self = .paymentCode
+        switch url.host?.lowercased() {
+        case "payment-code": self = .paymentCode
+        case "scan": self = .scanner
+        default: return nil
+        }
     }
 }
 

@@ -204,6 +204,26 @@ final class ScheduleShortcutTests: XCTestCase {
         }
     }
 
+    func testScannerIntentReplacesAnOlderPendingPaymentRequest() async throws {
+        let navigation = ShortcutNavigation.shared
+        defer { if let request = navigation.pendingRequest { navigation.consume(request) } }
+        _ = try await OpenPaymentCodeIntent().perform()
+        let payment = try XCTUnwrap(navigation.pendingRequest)
+        _ = try await OpenScannerIntent().perform()
+        let scanner = try XCTUnwrap(navigation.pendingRequest)
+        XCTAssertEqual(scanner.destination, .scanner)
+        navigation.consume(payment)
+        XCTAssertEqual(navigation.pendingRequest, scanner)
+    }
+
+    func testScannerURLRejectsPayloadsAndUnexpectedPaths() {
+        XCTAssertEqual(ShortcutDestination(url: URL(string: "ahutong://scan")!), .scanner)
+        for value in ["ahutong://scan/other", "ahutong://scan?code=private", "ahutong://scan#code", "https://scan",
+                      "ahutong://user:password@scan", "ahutong://scan:443"] {
+            XCTAssertNil(ShortcutDestination(url: URL(string: value)!))
+        }
+    }
+
     private var semester: Semester { Semester(schoolYear: "2026-2027", term: "1")! }
 
     private func day(_ value: String) -> Date {

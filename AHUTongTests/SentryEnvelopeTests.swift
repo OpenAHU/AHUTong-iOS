@@ -34,6 +34,9 @@ final class SentryEnvelopeTests: XCTestCase {
         SentrySDK.flush(timeout: 5)
         wait(for: [received], timeout: 5)
         let body = try XCTUnwrap(EnvelopeProtocol.state.data)
+        let destination = try XCTUnwrap(EnvelopeProtocol.state.url)
+        XCTAssertEqual(destination.host, "example.invalid")
+        XCTAssertEqual(destination.path, "/api/1/envelope")
         let text = String(decoding: try ungzip(body), as: UTF8.self)
         XCTAssertTrue(text.contains("fixture-feedback-message"))
         XCTAssertTrue(text.contains("selected-network-fixture"))
@@ -111,7 +114,7 @@ private final class EnvelopeProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data("{}".utf8))
         client?.urlProtocolDidFinishLoading(self)
-        Self.state.received(data)
+        Self.state.received(data, url: request.url)
     }
     override func stopLoading() {}
 }
@@ -119,12 +122,15 @@ private final class EnvelopeProtocol: URLProtocol, @unchecked Sendable {
 private final class EnvelopeState: @unchecked Sendable {
     private let lock = NSLock()
     private var stored: Data?
+    private var destination: URL?
     private var callback: (() -> Void)?
     var data: Data? { lock.withLock { stored } }
-    func reset(_ callback: @escaping () -> Void) { lock.withLock { stored = nil; self.callback = callback } }
-    func received(_ data: Data?) {
+    var url: URL? { lock.withLock { destination } }
+    func reset(_ callback: @escaping () -> Void) { lock.withLock { stored = nil; destination = nil; self.callback = callback } }
+    func received(_ data: Data?, url: URL?) {
         let notify = lock.withLock { () -> (() -> Void)? in
             guard stored == nil else { return nil }; stored = data
+            destination = url
             defer { callback = nil }; return callback
         }
         notify?()

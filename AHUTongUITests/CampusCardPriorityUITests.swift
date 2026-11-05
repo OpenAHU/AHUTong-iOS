@@ -20,7 +20,7 @@ final class CampusCardPriorityUITests: XCTestCase {
         preview.lifetime = .keepAlways
         add(preview)
         app.buttons["campus-card.qr-expand"].tap()
-        XCTAssertTrue(app.buttons["campus-card.qr-refresh"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["campus-card.fullscreen.qr-refresh"].waitForExistence(timeout: 3))
     }
     @MainActor
     func testOpeningAndExplicitRetryRecoverFailedPrefetch() {

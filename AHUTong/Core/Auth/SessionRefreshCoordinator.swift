@@ -11,11 +11,18 @@ actor SessionRefreshCoordinator {
     }
 
     private var activeRefreshes: [CampusSessionScope: ActiveRefresh] = [:]
+    private var revisions: [CampusSessionScope: Int] = [:]
+
+    func revision(scope: CampusSessionScope = .academic) -> Int {
+        revisions[scope, default: 0]
+    }
 
     func refresh(
         scope: CampusSessionScope = .academic,
+        observedRevision: Int? = nil,
         operation: @escaping @Sendable () async throws -> Void
     ) async throws {
+        if let observedRevision, observedRevision != revision(scope: scope) { return }
         if let activeRefresh = activeRefreshes[scope] {
             return try await activeRefresh.task.value
         }
@@ -26,6 +33,7 @@ actor SessionRefreshCoordinator {
 
         do {
             try await task.value
+            revisions[scope, default: 0] += 1
             clearRefresh(id: id, scope: scope)
         } catch {
             clearRefresh(id: id, scope: scope)

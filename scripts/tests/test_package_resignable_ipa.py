@@ -62,7 +62,7 @@ class ResignableIPATests(unittest.TestCase):
             shutil.copy2(self.executable, bundle / "binary")
             (bundle / "Metadata.appintents").mkdir()
         (self.app / "Metadata.appintents/extract.actionsdata").write_text(json.dumps({
-            "actions": {"OpenPaymentCodeIntent": {}, "QueryScheduleIntent": {}}
+            "actions": {"OpenPaymentCodeIntent": {}, "OpenScannerIntent": {}, "QueryScheduleIntent": {}}
         }))
         (self.widget / "Metadata.appintents/extract.actionsdata").write_text(json.dumps({
             "actions": {"ScheduleWidgetConfiguration": {"systemProtocols": [

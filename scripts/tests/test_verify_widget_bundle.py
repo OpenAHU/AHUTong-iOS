@@ -28,7 +28,7 @@ class WidgetBundleTests(unittest.TestCase):
             (bundle / "Info.plist").write_bytes(plistlib.dumps(info))
             (bundle / "binary").write_text("synthetic fixture")
             (bundle / "Metadata.appintents").mkdir()
-        self.write_metadata(self.app, {"actions": {"OpenPaymentCodeIntent": {}, "QueryScheduleIntent": {}}})
+        self.write_metadata(self.app, {"actions": {"OpenPaymentCodeIntent": {}, "OpenScannerIntent": {}, "QueryScheduleIntent": {}}})
         self.widget_metadata = {"actions": {"ScheduleWidgetConfiguration": {"systemProtocols": ["com.apple.link.systemProtocol.WidgetConfiguration"]}}, "enums": [{"identifier": "ScheduleWidgetAppearance", "cases": [{"identifier": name} for name in ("system", "light", "dark")]}]}
         self.write_metadata(self.widget, self.widget_metadata)
 
@@ -63,6 +63,11 @@ class WidgetBundleTests(unittest.TestCase):
 
     def test_stripped_shortcut_actions_fail(self):
         self.write_metadata(self.app, {"actions": {}})
+        with self.assertRaisesRegex(ValueError, "Siri/Shortcuts"):
+            verifier.verify(self.app, False)
+
+    def test_missing_scanner_action_fails(self):
+        self.write_metadata(self.app, {"actions": {"OpenPaymentCodeIntent": {}, "QueryScheduleIntent": {}}})
         with self.assertRaisesRegex(ValueError, "Siri/Shortcuts"):
             verifier.verify(self.app, False)
 

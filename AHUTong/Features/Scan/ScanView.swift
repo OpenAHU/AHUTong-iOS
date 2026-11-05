@@ -1,6 +1,5 @@
 import AVFoundation
 import SwiftUI
-import VisionKit
 
 struct ScanView: View {
     @Environment(\.dismiss) private var dismiss
@@ -10,14 +9,37 @@ struct ScanView: View {
     @State private var isHandling = false
     @State private var message: String?
     @State private var showsWechat = false
+    @State private var torchAvailable = false
+    @State private var torchOn = false
+    @State private var isVisible = false
+
+    private var canScan: Bool {
+        isVisible && !isHandling && message == nil && !showsWechat && scenePhase == .active
+    }
+
+    private var supportsCamera: Bool {
+        #if targetEnvironment(simulator)
+        false
+        #else
+        true
+        #endif
+    }
 
     var body: some View {
         NavigationStack {
             Group {
-                if cameraAllowed && DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
-                    CameraScanner(isRunning: !isHandling && message == nil && !showsWechat && scenePhase == .active,
-                                  onCode: handle, onFailure: { message = "相机暂时不可用，请关闭后重试。" })
-                        .ignoresSafeArea(edges: .bottom)
+                if cameraAllowed && supportsCamera {
+                    ScannerCamera(isRunning: canScan, torchOn: torchOn, onCode: handle,
+                                  onTorchState: { available, enabled in torchAvailable = available; torchOn = enabled },
+                                  onFailure: { message = $0 })
+                        .ignoresSafeArea()
+                        .overlay {
+                            Image(systemName: "viewfinder")
+                                .font(.system(size: 220, weight: .ultraLight))
+                                .foregroundStyle(.white.opacity(0.75))
+                                .accessibilityHidden(true)
+                                .allowsHitTesting(false)
+                        }
                 } else if isChecking {
                     ProgressView()
                 } else {
@@ -34,13 +56,34 @@ struct ScanView: View {
             }
             .navigationTitle("扫一扫")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭", systemImage: "xmark") {
+                        isVisible = false
+                        torchOn = false
+                        dismiss()
+                    }
+                        .labelStyle(.iconOnly)
+                        .accessibilityIdentifier("scan.close")
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button(torchOn ? "关闭手电筒" : "打开手电筒", systemImage: torchOn ? "flashlight.on.fill" : "flashlight.off.fill") {
+                        torchOn.toggle()
+                    }
+                    .labelStyle(.iconOnly)
+                    .font(.title2)
+                    .tint(torchOn ? .yellow : .white)
+                    .disabled(!torchAvailable || !canScan)
+                    .accessibilityIdentifier("scan.torch")
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar, .bottomBar)
             .safeAreaInset(edge: .bottom) {
                 Text("美团单车 · 学习通 · 雨课堂")
                     .font(.footnote).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding()
-                    .background(.regularMaterial)
             }
+            .background(.black)
             .alert("扫一扫", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("继续扫描", role: .cancel) { isHandling = false }
             } message: { Text(message ?? "") }
@@ -52,9 +95,14 @@ struct ScanView: View {
             } message: { Text("请在微信中使用“扫一扫”重新扫描，完成签到。") }
             .task { await checkCamera() }
             .onChange(of: scenePhase) { _, phase in
+                if phase != .active { torchOn = false }
                 if phase == .active { Task { await checkCamera() } }
             }
         }
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false; torchOn = false }
+        .preferredColorScheme(.dark)
+        .tint(.white)
         .accessibilityIdentifier("scan.screen")
     }
 
@@ -72,7 +120,7 @@ struct ScanView: View {
     }
 
     private func handle(_ raw: String) {
-        guard !isHandling else { return }
+        guard canScan else { return }
         isHandling = true
         UISelectionFeedbackGenerator().selectionChanged()
         switch ScanRoute(raw) {
@@ -86,44 +134,5 @@ struct ScanView: View {
     private func open(_ url: URL, app: String) async {
         if await UIApplication.shared.open(url) { dismiss() }
         else { message = "无法打开\(app)，请确认已安装并更新到最新版本。" }
-    }
-}
-
-private struct CameraScanner: UIViewControllerRepresentable {
-    let isRunning: Bool
-    let onCode: (String) -> Void
-    let onFailure: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(onCode: onCode, onFailure: onFailure) }
-    func makeUIViewController(context: Context) -> DataScannerViewController {
-        let scanner = DataScannerViewController(recognizedDataTypes: [.barcode(symbologies: [.qr])],
-            qualityLevel: .balanced, recognizesMultipleItems: false,
-            isHighFrameRateTrackingEnabled: false, isPinchToZoomEnabled: true,
-            isGuidanceEnabled: true, isHighlightingEnabled: true)
-        scanner.delegate = context.coordinator
-        return scanner
-    }
-    func updateUIViewController(_ scanner: DataScannerViewController, context: Context) {
-        if isRunning && !scanner.isScanning {
-            do { try scanner.startScanning() } catch { Task { @MainActor in onFailure() } }
-        } else if !isRunning { scanner.stopScanning() }
-    }
-    static func dismantleUIViewController(_ scanner: DataScannerViewController, coordinator: Coordinator) {
-        scanner.stopScanning()
-    }
-    @MainActor final class Coordinator: NSObject, DataScannerViewControllerDelegate {
-        let onCode: (String) -> Void
-        let onFailure: () -> Void
-        init(onCode: @escaping (String) -> Void, onFailure: @escaping () -> Void) {
-            self.onCode = onCode; self.onFailure = onFailure
-        }
-        func dataScanner(_ dataScanner: DataScannerViewController, didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]) {
-            for case let .barcode(code) in addedItems {
-                if let payload = code.payloadStringValue { onCode(payload); break }
-            }
-        }
-        func dataScanner(_ dataScanner: DataScannerViewController, becameUnavailableWithError error: DataScannerViewController.ScanningUnavailable) {
-            onFailure()
-        }
     }
 }

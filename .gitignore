@@ -5,17 +5,25 @@ DerivedData/
 build/
 *.xcuserstate
 xcuserdata/
+*.ipa
+*.xcarchive/
+*.xcarchive.zip
+*.xcresult/
+*.dSYM/
+*.dSYM.zip
 
 # Generated project (project.yml is the source of truth)
 /AHUTong.xcodeproj/
 
 # Swift Package Manager
 .build/
+target/
 .swiftpm/xcode/package.xcworkspace/xcuserdata/
 
 # Local configuration and signing material
 *.mobileprovision
 *.p12
+*.p8
 *.cer
 *.key
 *.xcconfig.local

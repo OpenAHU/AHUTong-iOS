@@ -89,7 +89,7 @@ struct SettingsView: View {
         .alert("更新说明", isPresented: $showUpdateLog) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("1.0.7\n\n• 新增照片背景、扫一扫和菜鸟身份码。\n• 优化课表顶栏、天气及必吃榜详情。\n• 新增问题反馈与加密日志导出。\n• 新测试包可用时提醒一次。")
+            Text("1.0.8\n\n• 新增“打开扫一扫”快捷指令。\n• 付款码快捷指令直接全屏显示并提高亮度。\n• 扫码支持全屏取景、手电筒和双指缩放。\n• 修复扫码识别与前后台恢复。")
         }
         .alert("检查更新", isPresented: Binding(
             get: { updateResult != nil },
@@ -185,7 +185,7 @@ private struct ShortcutsGuideView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     AndroidHeader(title: "Siri 与快捷指令")
-                    Text("语音打开校园码，或查询某天的课表。")
+                    Text("打开付款码、扫一扫，或查询某天的课表。")
                         .foregroundStyle(.secondary)
                     AndroidCard {
                         VStack(alignment: .leading, spacing: 12) {
@@ -207,7 +207,12 @@ private struct ShortcutsGuideView: View {
                     guideCard(
                         "打开付款码", icon: "qrcode",
                         phrase: "“打开安大通付款”\n“打开安大通付款码”",
-                        detail: "推荐直接说完整名称。需要登录真实账号。"
+                        detail: "全屏显示并临时调亮屏幕。需要登录真实账号。"
+                    )
+                    guideCard(
+                        "打开扫一扫", icon: "qrcode.viewfinder",
+                        phrase: "“打开安大通扫一扫”\n“用安大通扫码”",
+                        detail: "添加安大通的“打开扫一扫”动作，可放到主屏幕、操作按钮或自动化中。首次使用需允许相机。"
                     )
                     guideCard(
                         "只说“打开校园码”", icon: "waveform",
