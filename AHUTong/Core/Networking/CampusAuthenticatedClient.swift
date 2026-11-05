@@ -292,6 +292,10 @@ actor CampusAuthenticatedClient {
         mayRefreshSession: Bool,
         retryPolicy: CampusRequestRetryPolicy
     ) async throws -> CampusHTTPResponse {
+        let scope: CampusSessionScope = url.host?.lowercased() == "adwmh.ahu.edu.cn"
+            ? .campusCard
+            : .academic
+        let refreshRevision = await refreshCoordinator.revision(scope: scope)
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.httpBody = body
@@ -319,10 +323,7 @@ actor CampusAuthenticatedClient {
         if CampusSessionExpiryDetector.isExpired(response: response, data: data) {
             if mayRefreshSession {
                 logger.notice("Campus web session expired; refreshing path=\(url.path)")
-                let scope: CampusSessionScope = url.host?.lowercased() == "adwmh.ahu.edu.cn"
-                    ? .campusCard
-                    : .academic
-                try await refreshCoordinator.refresh(scope: scope) { [campusAPI] in
+                try await refreshCoordinator.refresh(scope: scope, observedRevision: refreshRevision) { [campusAPI] in
                     try await campusAPI.refreshSession(scope: scope)
                 }
                 guard retryPolicy.allowsAutomaticRetry else {

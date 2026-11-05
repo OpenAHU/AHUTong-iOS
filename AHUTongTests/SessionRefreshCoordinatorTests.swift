@@ -41,6 +41,31 @@ final class SessionRefreshCoordinatorTests: XCTestCase {
         XCTAssertEqual(attemptCount, 2)
     }
 
+    func testLateUnauthorizedResponseReusesTheCompletedRefresh() async throws {
+        let coordinator = SessionRefreshCoordinator()
+        let attempts = SessionRefreshAttemptProbe()
+        let revision = await coordinator.revision()
+
+        try await coordinator.refresh(observedRevision: revision) { await attempts.record() }
+        try await coordinator.refresh(observedRevision: revision) { await attempts.record() }
+
+        let attemptCount = await attempts.count()
+        XCTAssertEqual(attemptCount, 1)
+    }
+
+    func testNewRequestCanRefreshAgainAfterACompletedRefresh() async throws {
+        let coordinator = SessionRefreshCoordinator()
+        let attempts = SessionRefreshAttemptProbe()
+        let initialRevision = await coordinator.revision()
+        try await coordinator.refresh(observedRevision: initialRevision) { await attempts.record() }
+
+        let currentRevision = await coordinator.revision()
+        try await coordinator.refresh(observedRevision: currentRevision) { await attempts.record() }
+
+        let attemptCount = await attempts.count()
+        XCTAssertEqual(attemptCount, 2)
+    }
+
     func testDifferentScopesDoNotShareTheSameRefreshTask() async throws {
         let coordinator = SessionRefreshCoordinator()
         let login = SessionRefreshLoginProbe()
