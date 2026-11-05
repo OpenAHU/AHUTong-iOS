@@ -59,7 +59,7 @@ struct CardBillingView: View {
                     Button(model.error == nil ? "加载更多" : "重试") { Task { await model.loadMore(range: range, type: type == "all" ? nil : type) } }
                         .accessibilityIdentifier("billing.load-more")
                 }
-            } footer: { Text("金额筛选仅作用于已加载记录；收支汇总涵盖所选时间范围全部类型。") }
+            } footer: { Text("") }
         }
         .navigationTitle("校园卡账单")
         .accessibilityIdentifier("billing.screen")

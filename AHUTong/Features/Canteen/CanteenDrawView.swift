@@ -95,8 +95,8 @@ struct CanteenDrawView: View {
                         Image(systemName: "fork.knife.circle.fill").font(.system(size: 44)).foregroundStyle(.orange)
                         ZStack {
                             VStack(spacing: 8) {
-                                Text(rolling?.title ?? "今天吃什么？").font(.title2.bold()).multilineTextAlignment(.center)
-                                Text(rolling?.location ?? "选好食堂，让安大通帮你挑一家")
+                                Text(rolling?.title ?? "今天吃什么").font(.title2.bold()).multilineTextAlignment(.center)
+                                Text(rolling?.location ?? "拿不定主意，让安大通帮你挑一家")
                                     .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                             }
                             .id(step)
@@ -104,7 +104,7 @@ struct CanteenDrawView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 105).clipped()
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(isDrawing ? "正在抽取" : rolling.map { "\($0.title)，\($0.location)" } ?? "今天吃什么？")
+                        .accessibilityLabel(isDrawing ? "正在抽取" : rolling.map { "\($0.title)，\($0.location)" } ?? "今天吃什么")
                         Button {
                             result = nil; drawID = UUID()
                         } label: {
@@ -114,10 +114,10 @@ struct CanteenDrawView: View {
                         .buttonStyle(.borderedProminent).controlSize(.large)
                         .disabled(isDrawing || model.isLoading || candidates.isEmpty)
                         .accessibilityIdentifier("canteen.draw-start")
-                        Text(isDrawing ? "正在挑选…" : "\(candidates.count) 个窗口可选 · 每家机会相同")
+                        Text(isDrawing ? "正在挑选…" : "\(candidates.count) 个窗口可选")
                             .font(.footnote).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity).padding(.vertical, 12)
-                } footer: { Text("从所选范围的已命名窗口中抽取。热度来自正餐消费样本，均价仅供参考。") }
+                } footer: { Text("热度来自正餐消费样本，数据仅供参考。") }
                 if model.isLoading { ProgressView("正在获取可选窗口") }
                 if let error = model.error {
                     Section { Text(error); Button("重试") { Task { await load(refresh: true) } } }
@@ -133,7 +133,7 @@ struct CanteenDrawView: View {
                         Button("查看窗口详情") { selectedWindow = result }
                             .id("canteen.draw.details")
                             .accessibilityIdentifier("canteen.draw.details")
-                    } header: { Text("这次就吃它") } footer: { Text("排名范围：\(query.title) · \(query.period.title)。平均消费按每笔交易计算。") }
+                    } header: { Text("这次就吃它") } footer: { Text("排名范围：\(query.title) · \(query.period.title)") }
                     .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
             }
